@@ -1,0 +1,80 @@
+# Glima Tracker
+
+A mobile app for tracking gym workouts and martial arts training. Named for glíma, the Norse grappling art.
+
+Full spec: [docs/BUILD_SPEC.md](docs/BUILD_SPEC.md) — that file is the source of truth. Build phases in order; do not skip ahead.
+
+---
+
+## Monorepo layout
+
+```
+/frontend   Expo RN app (Expo Router, React Query, expo-secure-store)
+/backend    Cloudflare Worker (Hono) + Hyperdrive + Drizzle schema/migrations/seed + RRULE projection
+/shared     API contract types, field_config types, pure calculators (e.g. est. 1RM)
+```
+
+Package manager: **pnpm workspaces**. Always `pnpm install` from root. Each package has its own `package.json`; `shared` is imported as `@app/shared`.
+
+---
+
+## Hard boundaries
+
+- `frontend` NEVER imports from `backend`. It only imports from `@app/shared`.
+- `backend` owns the database exclusively — Drizzle schema, migrations, seed, and RRULE projection all live here.
+- `shared` is pure TypeScript only — no platform-specific code, no runtime deps beyond what both sides can use.
+- RRULE recurrence is computed **server-side only** (in the `/calendar` endpoint). Never project dates in the app.
+- Hyperdrive binding is required in production — never call Neon directly from a Worker.
+
+---
+
+## Auth rules
+
+- Google sign-in only — no passwords, no Firebase.
+- The Worker verifies the Google ID token against Google JWKS (signature + `iss` + `aud` + `exp`). Never trust the device's claim.
+- Session JWT stored in `expo-secure-store` only — **never** AsyncStorage.
+- EAS dev builds required for device testing — Expo Go does not support `@react-native-google-signin`.
+
+---
+
+## Data rules
+
+- Every user-owned DB row is keyed by `user_id`.
+- `user_id = NULL` on `exercises` / `disciplines` = global seed data visible to everyone.
+- All `id` columns are `uuid DEFAULT gen_random_uuid()`.
+- All tables have `created_at timestamptz NOT NULL DEFAULT now()`.
+
+---
+
+## Common commands
+
+```bash
+# From repo root
+pnpm install
+
+# Backend (Wrangler dev server)
+pnpm --filter backend dev
+
+# Frontend (Metro bundler — use EAS for device)
+pnpm --filter frontend start
+
+# Database
+pnpm --filter backend db:generate   # generate Drizzle migration
+pnpm --filter backend db:migrate    # apply migrations to Neon
+pnpm --filter backend db:seed       # seed global defaults
+```
+
+---
+
+## Specialized agents (`.claude/agents/`)
+
+Invoke these for deep domain work:
+
+| Agent | Use for |
+|---|---|
+| `frontend-rn` | Expo RN screens, navigation, React Query hooks, UI components |
+| `backend-worker` | Hono routes, Cloudflare Worker config, Wrangler, Hyperdrive |
+| `database` | Drizzle schema, migrations, seed, SQL queries |
+| `auth` | Google Sign-In flow, JWT minting/verification, JWKS |
+| `calendar-recurrence` | RRULE projection, exception materialization, the three edit modes |
+| `shared-types` | API contract types, field_config schema, est. 1RM calculator |
