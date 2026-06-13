@@ -1,0 +1,13 @@
+name = "glima-api"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# Secrets (set via `wrangler secret put`):
+#   JWT_SECRET
+#   GOOGLE_CLIENT_ID
+
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "REPLACE_WITH_HYPERDRIVE_ID"
+localConnectionString = "postgresql://neondb_owner:npg_ZADy59hPbLdS@ep-super-poetry-a2l2wvue-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"

@@ -1,0 +1,9 @@
+node_modules/
+.env
+.dev.vars
+.wrangler/
+dist/
+.expo/
+ios/
+android/
+*.tsbuildinfo
