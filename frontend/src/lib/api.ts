@@ -1,7 +1,6 @@
 import { getSessionToken } from './auth';
 
-// TODO: change to production URL before deploying
-const API_BASE_URL = 'http://localhost:8787/v1';
+const API_BASE_URL = 'https://glima-api.oemerdigital.workers.dev/v1';
 
 async function buildHeaders(includeAuth: boolean): Promise<HeadersInit> {
   const headers: Record<string, string> = {
