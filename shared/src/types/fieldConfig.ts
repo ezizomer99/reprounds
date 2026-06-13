@@ -1,12 +1,15 @@
+export type FieldType = 'enum' | 'boolean' | 'number' | 'text' | 'textarea';
+
 interface BaseFieldDef {
   key: string;
   label: string;
+  required?: boolean;
 }
 
 export interface EnumFieldDef extends BaseFieldDef {
   type: 'enum';
   options: string[];
-  column?: 'gi';
+  column?: string;
 }
 
 export interface BooleanFieldDef extends BaseFieldDef {

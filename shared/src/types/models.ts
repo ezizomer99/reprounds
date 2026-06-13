@@ -104,3 +104,84 @@ export interface StrengthSet {
 export type CalendarItem =
   | { kind: 'real'; session: Session }
   | { kind: 'virtual'; date: string; scheduleRuleId: string; templateId: string };
+
+export interface ExerciseListResponse {
+  exercises: Exercise[];
+}
+
+export interface DisciplineListResponse {
+  disciplines: Discipline[];
+}
+
+export interface CreateExerciseRequest {
+  name: string;
+  type: Exclude<ActivityType, 'martial_arts'>;
+  defaultRestSeconds?: number | null;
+}
+
+export interface UpdateExerciseRequest {
+  name?: string;
+  type?: Exclude<ActivityType, 'martial_arts'>;
+  defaultRestSeconds?: number | null;
+}
+
+export interface CreateDisciplineRequest {
+  name: string;
+  category: DisciplineCat;
+  fieldConfig?: FieldConfig;
+}
+
+export interface UpdateDisciplineRequest {
+  name?: string;
+  category?: DisciplineCat;
+  fieldConfig?: FieldConfig;
+}
+
+export interface TemplateItemWithDetails extends TemplateItem {
+  exerciseName: string | null;
+  disciplineName: string | null;
+}
+
+export interface TemplateWithItems extends Template {
+  items: TemplateItemWithDetails[];
+}
+
+export interface TemplateListResponse {
+  templates: TemplateWithItems[];
+}
+
+export interface CreateTemplateItemRequest {
+  kind: EntryKind;
+  exerciseId?: string | null;
+  disciplineId?: string | null;
+  orderIndex?: number;
+  supersetGroup?: number | null;
+  defaultRestSeconds?: number | null;
+  target?: Record<string, unknown> | null;
+}
+
+export interface CreateTemplateRequest {
+  name: string;
+  dayLabel?: string | null;
+  notes?: string | null;
+  items?: CreateTemplateItemRequest[];
+}
+
+export interface UpdateTemplateRequest {
+  name?: string;
+  dayLabel?: string | null;
+  notes?: string | null;
+}
+
+export type AddTemplateItemRequest = CreateTemplateItemRequest;
+
+export interface UpdateTemplateItemRequest {
+  orderIndex?: number;
+  supersetGroup?: number | null;
+  defaultRestSeconds?: number | null;
+  target?: Record<string, unknown> | null;
+}
+
+export interface ReorderTemplateItemsRequest {
+  order: string[];
+}

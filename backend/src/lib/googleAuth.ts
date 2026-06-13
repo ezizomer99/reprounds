@@ -105,11 +105,19 @@ export async function verifyGoogleIdToken(
   if (!VALID_ISSUERS.includes(payload['iss'] as string)) {
     throw new Error('Invalid issuer');
   }
-  if (payload['aud'] !== clientId) {
+
+  const aud = payload['aud'];
+  const audList = Array.isArray(aud) ? aud : [aud];
+  if (!audList.includes(clientId)) {
     throw new Error('Invalid audience');
   }
+
   if (typeof payload['exp'] !== 'number' || Math.floor(Date.now() / 1000) > payload['exp']) {
     throw new Error('Token expired');
+  }
+
+  if (payload['email_verified'] !== true) {
+    throw new Error('Email not verified');
   }
 
   const signatureBuffer = base64UrlDecode(rawSignature);

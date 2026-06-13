@@ -3,7 +3,15 @@
   "compilerOptions": {
     "strict": true,
     "paths": {
-      "@app/shared": ["../shared/src/index.ts"]
+      "@app/shared": [
+        "../shared/src/index.ts"
+      ]
     }
-  }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
+  ]
 }

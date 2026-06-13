@@ -20,12 +20,43 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Glima</Text>
+
       {user && (
         <>
           <Text style={styles.name}>{user.name ?? user.email}</Text>
           <Text style={styles.email}>{user.email}</Text>
         </>
       )}
+
+      <View style={styles.librarySection}>
+        <Text style={styles.sectionLabel}>Library</Text>
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => router.push('/library/exercises')}
+        >
+          <Text style={styles.navItemText}>Exercise Library</Text>
+          <Text style={styles.navItemArrow}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => router.push('/library/disciplines')}
+        >
+          <Text style={styles.navItemText}>Discipline Library</Text>
+          <Text style={styles.navItemArrow}>›</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.librarySection}>
+        <Text style={styles.sectionLabel}>Training</Text>
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => router.push('/(app)/templates')}
+        >
+          <Text style={styles.navItemText}>Templates</Text>
+          <Text style={styles.navItemArrow}>›</Text>
+        </TouchableOpacity>
+      </View>
+
       <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
         <Text style={styles.signOutText}>Sign out</Text>
       </TouchableOpacity>
@@ -54,7 +85,42 @@ const styles = StyleSheet.create({
   email: {
     fontSize: 14,
     color: '#666',
-    marginBottom: 48,
+    marginBottom: 32,
+  },
+  librarySection: {
+    width: '100%',
+    marginBottom: 32,
+  },
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#9ca3af',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  navItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f9fafb',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: '#e5e7eb',
+  },
+  navItemText: {
+    fontSize: 16,
+    color: '#111827',
+    fontWeight: '500',
+  },
+  navItemArrow: {
+    fontSize: 20,
+    color: '#9ca3af',
+    lineHeight: 22,
   },
   signOutButton: {
     paddingVertical: 10,
