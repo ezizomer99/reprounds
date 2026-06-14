@@ -1,5 +1,6 @@
-import Svg, { Circle, Polyline } from 'react-native-svg';
+import { StyleSheet, View } from 'react-native';
 import { T } from '../theme/colors';
+import { withAlpha } from '../lib/color';
 
 interface SparklineProps {
   values: number[];
@@ -8,45 +9,53 @@ interface SparklineProps {
   color?: string;
 }
 
-export function Sparkline({ values, width = 300, height = 60, color = T.primary }: SparklineProps) {
+// Bar-chart sparkline — no native SVG needed.
+// Each value becomes a vertical bar scaled to the min/max range.
+export function Sparkline({ values, height = 60, color = T.primary }: SparklineProps) {
   if (values.length < 2) return null;
 
-  const pad = 8;
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
-
-  const points = values.map((v, i) => {
-    const x = pad + (i / (values.length - 1)) * (width - pad * 2);
-    const y = pad + (1 - (v - min) / range) * (height - pad * 2);
-    return `${x},${y}`;
-  });
-
-  const ptStr = points.join(' ');
+  const barH = height - 8; // leave 4px top + 4px bottom padding
 
   return (
-    <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-      <Polyline
-        points={ptStr}
-        fill="none"
-        stroke={color}
-        strokeWidth={2.5}
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      {points.map((p, i) => {
-        const [x, y] = p.split(',');
+    <View style={[styles.container, { height }]}>
+      {values.map((v, i) => {
+        const fillRatio = (v - min) / range;
+        const h = Math.max(4, Math.round(fillRatio * barH));
         const isLast = i === values.length - 1;
         return (
-          <Circle
-            key={i}
-            cx={parseFloat(x)}
-            cy={parseFloat(y)}
-            r={isLast ? 3.5 : 2.5}
-            fill={isLast ? T.gold : color}
-          />
+          <View key={i} style={[styles.barWrap, { height: barH }]}>
+            <View
+              style={[
+                styles.bar,
+                {
+                  height: h,
+                  backgroundColor: isLast ? T.gold : withAlpha(color, 0.75),
+                  width: isLast ? 5 : 3,
+                  borderRadius: 2,
+                },
+              ]}
+            />
+          </View>
         );
       })}
-    </Svg>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 3,
+    paddingHorizontal: 4,
+  },
+  barWrap: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  bar: {},
+});

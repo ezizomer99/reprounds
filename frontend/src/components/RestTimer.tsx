@@ -1,9 +1,6 @@
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
 import { T, F, R } from '../theme/colors';
-
-const RADIUS = 18;
-const CIRCUM = 2 * Math.PI * RADIUS;
+import { withAlpha } from '../lib/color';
 
 interface RestTimerProps {
   seconds: number;
@@ -14,62 +11,63 @@ interface RestTimerProps {
 
 export function RestTimer({ seconds, total, onSkip, onAdd }: RestTimerProps) {
   const frac = Math.max(0, Math.min(1, seconds / total));
-  const offset = CIRCUM * (1 - frac);
   const mm = String(Math.floor(seconds / 60));
   const ss = String(seconds % 60).padStart(2, '0');
 
   return (
     <View style={styles.container}>
-      <Svg width={44} height={44} viewBox="0 0 44 44">
-        <Circle
-          cx={22} cy={22} r={RADIUS}
-          fill="none" stroke={T.borderStrong} strokeWidth={4}
-        />
-        <Circle
-          cx={22} cy={22} r={RADIUS}
-          fill="none" stroke={T.primary} strokeWidth={4}
-          strokeLinecap="round"
-          strokeDasharray={CIRCUM}
-          strokeDashoffset={offset}
-          transform="rotate(-90 22 22)"
-        />
-      </Svg>
-      <View style={styles.textCol}>
-        <Text style={styles.label}>Rest</Text>
-        <Text style={styles.time}>{mm}:{ss}</Text>
+      {/* Progress bar */}
+      <View style={styles.barTrack}>
+        <View style={[styles.barFill, { width: `${frac * 100}%` as `${number}%` }]} />
       </View>
-      <TouchableOpacity style={styles.addBtn} onPress={onAdd} activeOpacity={0.7}>
-        <Text style={styles.addBtnText}>+15s</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.skipBtn} onPress={onSkip} activeOpacity={0.7}>
-        <Text style={styles.skipBtnText}>Skip</Text>
-      </TouchableOpacity>
+
+      <View style={styles.row}>
+        <View style={styles.textCol}>
+          <Text style={styles.label}>Rest</Text>
+          <Text style={styles.time}>{mm}:{ss}</Text>
+        </View>
+        <TouchableOpacity style={styles.addBtn} onPress={onAdd} activeOpacity={0.7}>
+          <Text style={styles.addBtnText}>+15s</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.skipBtn} onPress={onSkip} activeOpacity={0.7}>
+          <Text style={styles.skipBtnText}>Skip</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    padding: 11,
-    paddingHorizontal: 14,
     backgroundColor: T.surface2,
     borderWidth: 1,
-    borderColor: 'rgba(217,119,6,0.35)',
+    borderColor: withAlpha(T.primary, 0.35),
     borderRadius: R.card,
     marginHorizontal: 18,
     marginBottom: 8,
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.35,
     shadowRadius: 15,
     elevation: 8,
   },
-  textCol: {
-    flex: 1,
+  barTrack: {
+    height: 3,
+    backgroundColor: withAlpha(T.primary, 0.15),
   },
+  barFill: {
+    height: 3,
+    backgroundColor: T.primary,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    padding: 11,
+    paddingHorizontal: 14,
+  },
+  textCol: { flex: 1 },
   label: {
     fontFamily: F.uiSemi,
     fontSize: 11,
@@ -93,11 +91,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addBtnText: {
-    fontFamily: F.uiSemi,
-    fontSize: 13,
-    color: T.text,
-  },
+  addBtnText: { fontFamily: F.uiSemi, fontSize: 13, color: T.text },
   skipBtn: {
     height: 34,
     paddingHorizontal: 14,
@@ -106,9 +100,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  skipBtnText: {
-    fontFamily: F.uiSemi,
-    fontSize: 13,
-    color: T.onPrimary,
-  },
+  skipBtnText: { fontFamily: F.uiSemi, fontSize: 13, color: T.onPrimary },
 });
