@@ -190,6 +190,7 @@ export interface ReorderTemplateItemsRequest {
 
 export interface CreateSessionRequest {
   templateId?: string | null;
+  scheduleRuleId?: string | null;
   date: string; // ISO date YYYY-MM-DD
   notes?: string | null;
 }
@@ -269,4 +270,30 @@ export interface ExercisePRsResponse {
   estimatedOneRepMax: number | null;
   bestSet: StrengthSet | null;
   totalSessions: number;
+}
+
+// ---- Phase 5: Calendar + Recurrence ----
+
+export interface CreateScheduleRuleRequest {
+  templateId: string;
+  rrule: string;
+  startDate: string;
+  endDate?: string | null;
+  timeOfDay?: string | null;
+}
+
+export interface UpdateScheduleRuleRequest {
+  templateId?: string;
+  rrule?: string;
+  startDate?: string;
+  endDate?: string | null;
+  timeOfDay?: string | null;
+}
+
+export interface ScheduleRuleListResponse {
+  rules: ScheduleRule[];
+}
+
+export interface CalendarResponse {
+  items: CalendarItem[];
 }

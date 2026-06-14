@@ -57,6 +57,13 @@ export default function HomeScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.navItem}
+          onPress={() => router.push('/calendar/index' as never)}
+        >
+          <Text style={styles.navItemText}>Calendar</Text>
+          <Text style={styles.navItemArrow}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.navItem}
           onPress={() => router.push('/templates/index')}
         >
           <Text style={styles.navItemText}>Templates</Text>
