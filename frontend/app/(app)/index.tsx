@@ -57,21 +57,21 @@ export default function HomeScreen() {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => router.push('/calendar/index' as never)}
+          onPress={() => router.push('/calendar')}
         >
           <Text style={styles.navItemText}>Calendar</Text>
           <Text style={styles.navItemArrow}>›</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => router.push('/history/index' as never)}
+          onPress={() => router.push('/history')}
         >
           <Text style={styles.navItemText}>History</Text>
           <Text style={styles.navItemArrow}>›</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => router.push('/templates/index')}
+          onPress={() => router.push('/templates')}
         >
           <Text style={styles.navItemText}>Templates</Text>
           <Text style={styles.navItemArrow}>›</Text>
