@@ -1,6 +1,7 @@
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Modal,
   ScrollView,
   StyleSheet,
@@ -12,8 +13,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Dumbbell, GripVertical, Plus, Swords, Trash2, X } from 'lucide-react-native';
-import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
+import { ChevronLeft, Dumbbell, GripVertical, Plus, Swords, X } from 'lucide-react-native';
 import type {
   CreateTemplateItemRequest,
   Discipline,
@@ -37,30 +37,20 @@ interface PendingItem extends CreateTemplateItemRequest {
   _displayName: string;
 }
 
-type DraggableItem =
-  | { kind: 'pending'; item: PendingItem }
-  | { kind: 'existing'; item: TemplateItemWithDetails };
-
-function itemKey(d: DraggableItem) {
-  return d.kind === 'pending' ? d.item._localId : d.item.id;
-}
-
 // ---- Item Row ----
 
 interface ItemRowProps {
   name: string;
   kind: 'exercise' | 'martial_arts';
-  drag: () => void;
-  isActive: boolean;
   onRemove: () => void;
 }
 
-function ItemRow({ name, kind, drag, isActive, onRemove }: ItemRowProps) {
+function ItemRow({ name, kind, onRemove }: ItemRowProps) {
   return (
-    <View style={[styles.itemRow, isActive && styles.itemRowActive]}>
-      <TouchableOpacity onLongPress={drag} delayLongPress={150} style={styles.gripHandle}>
+    <View style={styles.itemRow}>
+      <View style={styles.gripHandle}>
         <GripVertical size={16} color={T.muted} strokeWidth={1.8} />
-      </TouchableOpacity>
+      </View>
       <View style={[styles.kindBadge, kind === 'martial_arts' && styles.kindBadgeMat]}>
         {kind === 'martial_arts' ? (
           <Swords size={13} color="#a78bfa" strokeWidth={1.8} />
@@ -124,10 +114,9 @@ function PickExerciseModal({ visible, onClose, onPick }: PickExerciseModalProps)
             <ActivityIndicator size="large" color={T.primary} />
           </View>
         ) : (
-          <DraggableFlatList
+          <FlatList
             data={exercises ?? []}
             keyExtractor={(item) => item.id}
-            onDragEnd={() => {}}
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.pickRow}
@@ -182,10 +171,9 @@ function PickDisciplineModal({ visible, onClose, onPick }: PickDisciplineModalPr
             <ActivityIndicator size="large" color={T.primary} />
           </View>
         ) : (
-          <DraggableFlatList
+          <FlatList
             data={disciplines ?? []}
             keyExtractor={(item) => item.id}
-            onDragEnd={() => {}}
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.pickRow}
@@ -315,39 +303,6 @@ export default function TemplateEditorScreen() {
     }
   }
 
-  // Draggable items list (new templates only — existing items don't support reorder without API)
-  const draggableItems: DraggableItem[] = isNew
-    ? pendingItems.map((item) => ({ kind: 'pending', item }))
-    : (existingTemplate?.items ?? []).map((item) => ({ kind: 'existing', item }));
-
-  function renderDraggableItem({ item: d, drag, isActive }: RenderItemParams<DraggableItem>) {
-    const name = d.kind === 'pending' ? d.item._displayName : (d.item.exerciseName ?? d.item.disciplineName ?? 'Unknown');
-    const kind = d.kind === 'pending' ? d.item.kind : d.item.kind;
-
-    function handleRemove() {
-      if (d.kind === 'pending') {
-        setPendingItems((prev) => prev.filter((i) => i._localId !== d.item._localId));
-      } else if (existingTemplate) {
-        removeItem.mutate(
-          { templateId: existingTemplate.id, itemId: d.item.id },
-          { onError: (err) => Alert.alert('Error', err.message ?? 'Failed to remove item.') },
-        );
-      }
-    }
-
-    return (
-      <ScaleDecorator>
-        <ItemRow
-          name={name}
-          kind={kind}
-          drag={drag}
-          isActive={isActive}
-          onRemove={handleRemove}
-        />
-      </ScaleDecorator>
-    );
-  }
-
   const screenTitle = isNew ? 'New Template' : (existingTemplate?.name ?? 'Edit Template');
 
   if (!isNew && templatesLoading && !initialised) {
@@ -428,25 +383,36 @@ export default function TemplateEditorScreen() {
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionHeaderText}>Items</Text>
-          <Text style={styles.sectionHeaderHint}>Hold grip to reorder</Text>
         </View>
 
-        {draggableItems.length > 0 ? (
-          <DraggableFlatList
-            data={draggableItems}
-            keyExtractor={itemKey}
-            onDragEnd={({ data }) => {
-              if (isNew) {
-                setPendingItems(data.filter((d) => d.kind === 'pending').map((d) => (d as { kind: 'pending'; item: PendingItem }).item));
-              }
-            }}
-            renderItem={renderDraggableItem}
-            scrollEnabled={false}
-          />
+        {isNew ? (
+          pendingItems.length > 0 ? pendingItems.map((item) => (
+            <ItemRow
+              key={item._localId}
+              name={item._displayName}
+              kind={item.kind}
+              onRemove={() => setPendingItems((prev) => prev.filter((i) => i._localId !== item._localId))}
+            />
+          )) : (
+            <Text style={styles.emptyItemsText}>No items yet. Add exercises or disciplines below.</Text>
+          )
         ) : (
-          <Text style={styles.emptyItemsText}>
-            No items yet. Add exercises or disciplines below.
-          </Text>
+          (existingTemplate?.items ?? []).length > 0 ? (existingTemplate?.items ?? []).map((item) => (
+            <ItemRow
+              key={item.id}
+              name={item.exerciseName ?? item.disciplineName ?? 'Unknown'}
+              kind={item.kind}
+              onRemove={() => {
+                if (!existingTemplate) return;
+                removeItem.mutate(
+                  { templateId: existingTemplate.id, itemId: item.id },
+                  { onError: (err) => Alert.alert('Error', err.message ?? 'Failed to remove item.') },
+                );
+              }}
+            />
+          )) : (
+            <Text style={styles.emptyItemsText}>No items yet. Add exercises or disciplines below.</Text>
+          )
         )}
 
         <View style={styles.addItemsRow}>
@@ -533,7 +499,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: T.border,
     backgroundColor: T.bg,
   },
-  itemRowActive: { backgroundColor: T.surface },
+
   gripHandle: { width: 24, alignItems: 'center' },
   kindBadge: {
     width: 30, height: 30, borderRadius: R.sm,

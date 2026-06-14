@@ -13,4 +13,8 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, 'node_modules'),
 ];
 
+// pnpm uses symlinks to its virtual store (.pnpm/); Metro must follow them
+// so that relative imports inside packages (e.g. expo-font's ./memory) resolve.
+config.resolver.unstable_enableSymlinks = true;
+
 module.exports = config;
