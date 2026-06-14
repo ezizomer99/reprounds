@@ -13,7 +13,7 @@ import {
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Clock, Plus, Search, Trash2 } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { ActivityType, Exercise } from '@app/shared';
 import {
   useCreateExercise,
@@ -79,12 +79,12 @@ function ExerciseRow({ exercise, isOwned, onDelete, onHistory }: ExerciseRowProp
         style={styles.historyButton}
         activeOpacity={0.7}
       >
-        <Clock size={12} color={T.primary} strokeWidth={2} />
+        <Ionicons name="time-outline" size={12} color={T.primary} />
         <Text style={styles.historyText}>History</Text>
       </TouchableOpacity>
       {isOwned && (
         <TouchableOpacity onPress={handleDelete} style={styles.deleteButton} activeOpacity={0.7}>
-          <Trash2 size={15} color={T.danger} strokeWidth={1.8} />
+          <Ionicons name="trash-outline" size={15} color={T.danger} />
         </TouchableOpacity>
       )}
     </View>
@@ -254,7 +254,7 @@ export default function ExercisesScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <ChevronLeft size={22} color={T.text} strokeWidth={2} />
+          <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Exercises</Text>
@@ -263,12 +263,12 @@ export default function ExercisesScreen() {
           )}
         </View>
         <TouchableOpacity style={styles.addBtn} onPress={() => setShowAdd(true)}>
-          <Plus size={18} color={T.onPrimary} strokeWidth={2.4} />
+          <Ionicons name="add" size={18} color={T.onPrimary} />
         </TouchableOpacity>
       </View>
 
       <View style={styles.searchRow}>
-        <Search size={15} color={T.muted} strokeWidth={2} />
+        <Ionicons name="search" size={15} color={T.muted} />
         <TextInput
           style={styles.searchInput}
           value={search}

@@ -12,7 +12,7 @@ import {
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, Plus, Swords, Trash2 } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { Discipline, DisciplineCat } from '@app/shared';
 import {
   useCreateDiscipline,
@@ -58,7 +58,7 @@ function DisciplineRow({ discipline, isOwned, onDelete }: DisciplineRowProps) {
   return (
     <View style={styles.row}>
       <View style={[styles.iconAvatar, { backgroundColor: withAlpha(catColor, 0.14) }]}>
-        <Swords size={18} color={catColor} strokeWidth={1.8} />
+        <Ionicons name="flash" size={18} color={catColor} />
       </View>
       <View style={styles.rowContent}>
         <Text style={styles.rowName}>{discipline.name}</Text>
@@ -66,10 +66,10 @@ function DisciplineRow({ discipline, isOwned, onDelete }: DisciplineRowProps) {
       </View>
       {isOwned ? (
         <TouchableOpacity onPress={handleDelete} style={styles.deleteButton} activeOpacity={0.7}>
-          <Trash2 size={15} color={T.danger} strokeWidth={1.8} />
+          <Ionicons name="trash-outline" size={15} color={T.danger} />
         </TouchableOpacity>
       ) : (
-        <ChevronRight size={16} color={T.muted} />
+        <Ionicons name="chevron-forward" size={16} color={T.muted} />
       )}
     </View>
   );
@@ -200,7 +200,7 @@ export default function DisciplinesScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <ChevronLeft size={22} color={T.text} strokeWidth={2} />
+          <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Disciplines</Text>
@@ -209,7 +209,7 @@ export default function DisciplinesScreen() {
           )}
         </View>
         <TouchableOpacity style={styles.addBtn} onPress={() => setShowAdd(true)}>
-          <Plus size={18} color={T.onPrimary} strokeWidth={2.4} />
+          <Ionicons name="add" size={18} color={T.onPrimary} />
         </TouchableOpacity>
       </View>
 

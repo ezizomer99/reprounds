@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, Dumbbell, Plus, Swords } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { TemplateWithItems } from '@app/shared';
 import { useDeleteTemplate, useTemplates } from '../../../src/hooks/useTemplates';
 import { T, F, R, D } from '../../../src/theme/colors';
@@ -33,9 +33,9 @@ function TemplateRow({ template, onPress, onDelete }: TemplateRowProps) {
     >
       <View style={[styles.iconAvatar, hasMartialArts && styles.iconAvatarMat]}>
         {hasMartialArts ? (
-          <Swords size={18} color="#a78bfa" strokeWidth={1.8} />
+          <Ionicons name="flash" size={18} color="#a78bfa" />
         ) : (
-          <Dumbbell size={18} color={T.textDim} strokeWidth={1.8} />
+          <Ionicons name="barbell" size={18} color={T.textDim} />
         )}
       </View>
       <View style={styles.rowContent}>
@@ -45,7 +45,7 @@ function TemplateRow({ template, onPress, onDelete }: TemplateRowProps) {
           {template.dayLabel ? ` · ${template.dayLabel}` : ''}
         </Text>
       </View>
-      <ChevronRight size={16} color={T.muted} />
+      <Ionicons name="chevron-forward" size={16} color={T.muted} />
     </TouchableOpacity>
   );
 }
@@ -81,7 +81,7 @@ export default function TemplatesScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <ChevronLeft size={22} color={T.text} strokeWidth={2} />
+          <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Templates</Text>
@@ -93,7 +93,7 @@ export default function TemplatesScreen() {
           style={styles.addBtn}
           onPress={() => router.push({ pathname: '/templates/[id]', params: { id: 'new' } })}
         >
-          <Plus size={18} color={T.onPrimary} strokeWidth={2.4} />
+          <Ionicons name="add" size={18} color={T.onPrimary} />
         </TouchableOpacity>
       </View>
 

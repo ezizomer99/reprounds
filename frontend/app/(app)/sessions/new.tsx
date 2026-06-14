@@ -1,7 +1,7 @@
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, Dumbbell, Swords, Plus } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTemplates } from '../../../src/hooks/useTemplates';
 import { useCreateSession } from '../../../src/hooks/useSession';
 import { T, F, R, D } from '../../../src/theme/colors';
@@ -35,7 +35,7 @@ export default function NewSessionScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <ChevronLeft size={22} color={T.text} strokeWidth={2} />
+          <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>New Session</Text>
         <View style={{ width: 40 }} />
@@ -53,7 +53,7 @@ export default function NewSessionScreen() {
           ListHeaderComponent={
             <View style={styles.body}>
               <TouchableOpacity style={styles.heroCta} onPress={handleEmptySession} activeOpacity={0.8}>
-                <Plus size={20} color={T.onPrimary} strokeWidth={2.4} />
+                <Ionicons name="add" size={20} color={T.onPrimary} />
                 <View>
                   <Text style={styles.heroCtaTitle}>Start empty session</Text>
                   <Text style={styles.heroCtaSub}>Log without a template</Text>
@@ -71,9 +71,9 @@ export default function NewSessionScreen() {
             >
               <View style={styles.templateIcon}>
                 {item.items.some((i) => i.kind === 'martial_arts') ? (
-                  <Swords size={19} color={T.primary} strokeWidth={1.8} />
+                  <Ionicons name="flash" size={19} color={T.primary} />
                 ) : (
-                  <Dumbbell size={19} color={T.textDim} strokeWidth={1.8} />
+                  <Ionicons name="barbell" size={19} color={T.textDim} />
                 )}
               </View>
               <View style={styles.templateInfo}>
@@ -83,7 +83,7 @@ export default function NewSessionScreen() {
                   {item.dayLabel ? ` · ${item.dayLabel}` : ''}
                 </Text>
               </View>
-              <ChevronRight size={18} color={T.muted} />
+              <Ionicons name="chevron-forward" size={18} color={T.muted} />
             </TouchableOpacity>
           )}
           ItemSeparatorComponent={() => <View style={styles.rowSep} />}

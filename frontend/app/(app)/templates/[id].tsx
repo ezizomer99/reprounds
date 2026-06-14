@@ -13,7 +13,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Dumbbell, GripVertical, Plus, Swords, X } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type {
   CreateTemplateItemRequest,
   Discipline,
@@ -49,18 +49,18 @@ function ItemRow({ name, kind, onRemove }: ItemRowProps) {
   return (
     <View style={styles.itemRow}>
       <View style={styles.gripHandle}>
-        <GripVertical size={16} color={T.muted} strokeWidth={1.8} />
+        <Ionicons name="reorder-three-outline" size={16} color={T.muted} />
       </View>
       <View style={[styles.kindBadge, kind === 'martial_arts' && styles.kindBadgeMat]}>
         {kind === 'martial_arts' ? (
-          <Swords size={13} color="#a78bfa" strokeWidth={1.8} />
+          <Ionicons name="flash" size={13} color="#a78bfa" />
         ) : (
-          <Dumbbell size={13} color={T.textDim} strokeWidth={1.8} />
+          <Ionicons name="barbell" size={13} color={T.textDim} />
         )}
       </View>
       <Text style={styles.itemName} numberOfLines={1}>{name}</Text>
       <TouchableOpacity onPress={onRemove} style={styles.removeButton} activeOpacity={0.7}>
-        <X size={14} color={T.danger} strokeWidth={2.5} />
+        <Ionicons name="close" size={14} color={T.danger} />
       </TouchableOpacity>
     </View>
   );
@@ -317,7 +317,7 @@ export default function TemplateEditorScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <ChevronLeft size={22} color={T.text} strokeWidth={2} />
+          <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle} numberOfLines={1}>{screenTitle}</Text>
         <TouchableOpacity
@@ -421,7 +421,7 @@ export default function TemplateEditorScreen() {
             onPress={() => setShowExercisePicker(true)}
             activeOpacity={0.7}
           >
-            <Plus size={14} color={T.primary} strokeWidth={2.4} />
+            <Ionicons name="add" size={14} color={T.primary} />
             <Text style={styles.addItemButtonText}>Add Exercise</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -429,7 +429,7 @@ export default function TemplateEditorScreen() {
             onPress={() => setShowDisciplinePicker(true)}
             activeOpacity={0.7}
           >
-            <Plus size={14} color={T.primary} strokeWidth={2.4} />
+            <Ionicons name="add" size={14} color={T.primary} />
             <Text style={styles.addItemButtonText}>Add Discipline</Text>
           </TouchableOpacity>
         </View>

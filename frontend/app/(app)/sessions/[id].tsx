@@ -14,7 +14,7 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Check, Plus } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type {
   Discipline,
   EnumFieldDef,
@@ -234,7 +234,7 @@ function SetRow({ set, sessionId, entryId, onCompleted, onDelete }: {
         onPress={handleComplete}
         disabled={isDone || updateSet.isPending}
       >
-        <Check size={18} color={isDone ? T.onPrimary : T.muted} strokeWidth={2.8} />
+        <Ionicons name="checkmark" size={18} color={isDone ? T.onPrimary : T.muted} />
       </TouchableOpacity>
     </View>
   );
@@ -310,7 +310,7 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted }: {
           <ActivityIndicator size="small" color={T.textDim} />
         ) : (
           <>
-            <Plus size={15} color={T.textDim} strokeWidth={2.4} />
+            <Ionicons name="add" size={15} color={T.textDim} />
             <Text style={styles.addSetText}>Add set</Text>
           </>
         )}
@@ -537,7 +537,7 @@ export default function SessionScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleBack} style={styles.headerBack}>
-          <ChevronLeft size={22} color={T.text} strokeWidth={2} />
+          <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle} numberOfLines={1}>{sessionName}</Text>
@@ -606,11 +606,11 @@ export default function SessionScreen() {
         {session.status !== 'completed' && (
           <View style={styles.addEntryRow}>
             <TouchableOpacity style={styles.addEntryBtn} onPress={() => setShowExercisePicker(true)}>
-              <Plus size={16} color={T.textDim} strokeWidth={2.2} />
+              <Ionicons name="add" size={16} color={T.textDim} />
               <Text style={styles.addEntryText}>Exercise</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.addEntryBtn} onPress={() => setShowDisciplinePicker(true)}>
-              <Plus size={16} color={T.textDim} strokeWidth={2.2} />
+              <Ionicons name="add" size={16} color={T.textDim} />
               <Text style={styles.addEntryText}>Discipline</Text>
             </TouchableOpacity>
           </View>

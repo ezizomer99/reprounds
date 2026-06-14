@@ -8,7 +8,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Flame, Calendar, Clock, Layers, Dumbbell, Swords, ChevronRight } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { useCurrentUser } from '../../src/hooks/useAuth';
 import { useSessions } from '../../src/hooks/useSession';
@@ -56,7 +56,7 @@ export default function HomeScreen() {
           <Text style={styles.headerSub}>{todayLabel()}</Text>
         </View>
         <View style={styles.streakBadge}>
-          <Flame size={14} color={T.gold} fill={T.gold} />
+          <Ionicons name="flame" size={14} color={T.gold} />
           <Text style={styles.streakText}>— day</Text>
         </View>
       </View>
@@ -81,7 +81,7 @@ export default function HomeScreen() {
               <Text style={styles.heroCtaSub}>Start from a template or empty</Text>
             </View>
           </View>
-          <ChevronRight size={20} color={T.onPrimary} strokeWidth={2.5} />
+          <Ionicons name="chevron-forward" size={20} color={T.onPrimary} />
         </TouchableOpacity>
 
         {/* Last Session */}
@@ -99,7 +99,7 @@ export default function HomeScreen() {
                 <Text style={styles.lastSessionName}>
                   {lastSession.templateId ? (templates?.find((t) => t.id === lastSession.templateId)?.name ?? 'Session') : 'Ad-hoc session'}
                 </Text>
-                <ChevronRight size={18} color={T.muted} />
+                <Ionicons name="chevron-forward" size={18} color={T.muted} />
               </View>
               <View style={styles.statsRow}>
                 <View style={styles.stat}>
@@ -143,13 +143,13 @@ export default function HomeScreen() {
         <Text style={[styles.eyebrow, { marginTop: 4 }]}>Training</Text>
         <View style={styles.grid2}>
           <NavCard
-            icon={<Calendar size={28} color={T.primary} strokeWidth={1.8} />}
+            icon={<Ionicons name="calendar" size={28} color={T.primary} />}
             label="Calendar"
             meta="This week"
             onPress={() => router.push('/calendar')}
           />
           <NavCard
-            icon={<Clock size={28} color={T.primary} strokeWidth={1.8} />}
+            icon={<Ionicons name="time-outline" size={28} color={T.primary} />}
             label="History"
             meta={sessions ? `${sessions.length} sessions` : 'Sessions'}
             onPress={() => router.push('/history')}
@@ -160,12 +160,12 @@ export default function HomeScreen() {
           onPress={() => router.push('/templates')}
           activeOpacity={0.7}
         >
-          <Layers size={24} color={T.primary} strokeWidth={1.8} />
+          <Ionicons name="layers-outline" size={24} color={T.primary} />
           <View style={styles.navCardText}>
             <Text style={styles.navCardLabel}>Templates</Text>
             <Text style={styles.navCardMeta}>{templateCount} routines</Text>
           </View>
-          <ChevronRight size={18} color={T.muted} />
+          <Ionicons name="chevron-forward" size={18} color={T.muted} />
         </TouchableOpacity>
 
         {/* Library */}
@@ -176,11 +176,11 @@ export default function HomeScreen() {
             onPress={() => router.push('/library/exercises')}
             activeOpacity={0.7}
           >
-            <Dumbbell size={22} color={T.textDim} strokeWidth={1.8} />
+            <Ionicons name="barbell" size={22} color={T.textDim} />
             <View style={styles.listRowText}>
               <Text style={styles.listRowTitle}>Exercises</Text>
             </View>
-            <ChevronRight size={18} color={T.muted} />
+            <Ionicons name="chevron-forward" size={18} color={T.muted} />
           </TouchableOpacity>
           <View style={styles.rowDivider} />
           <TouchableOpacity
@@ -188,11 +188,11 @@ export default function HomeScreen() {
             onPress={() => router.push('/library/disciplines')}
             activeOpacity={0.7}
           >
-            <Swords size={22} color={T.textDim} strokeWidth={1.8} />
+            <Ionicons name="flash" size={22} color={T.textDim} />
             <View style={styles.listRowText}>
               <Text style={styles.listRowTitle}>Disciplines</Text>
             </View>
-            <ChevronRight size={18} color={T.muted} />
+            <Ionicons name="chevron-forward" size={18} color={T.muted} />
           </TouchableOpacity>
         </View>
 
@@ -221,7 +221,7 @@ function NavCard({ icon, label, meta, onPress }: {
       {icon}
       <Text style={styles.navCardLabel}>{label}</Text>
       <Text style={styles.navCardMeta}>{meta}</Text>
-      <ChevronRight size={16} color={T.muted} style={{ marginTop: 'auto' } as never} />
+      <Ionicons name="chevron-forward" size={16} color={T.muted} style={{ marginTop: 'auto' } as never} />
     </TouchableOpacity>
   );
 }

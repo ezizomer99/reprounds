@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight as ChevronRightIcon, Plus } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { CalendarItem, ScheduleRule } from '@app/shared';
 import {
   useCalendar, useCreateScheduleRule, useDeleteScheduleRule,
@@ -264,11 +264,11 @@ export default function CalendarScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <ChevronLeft size={22} color={T.text} strokeWidth={2} />
+          <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Calendar</Text>
         <TouchableOpacity style={styles.addBtn} onPress={() => { setEditRule(null); setShowAddRule(true); }}>
-          <Plus size={22} color={T.text} strokeWidth={2.2} />
+          <Ionicons name="add" size={22} color={T.text} />
         </TouchableOpacity>
       </View>
 
@@ -276,7 +276,7 @@ export default function CalendarScreen() {
         {/* Week nav */}
         <View style={styles.weekNavCard}>
           <TouchableOpacity style={styles.navArrow} onPress={() => setWeekStart((w) => addDays(w, -7))}>
-            <ChevronLeft size={22} color={T.text} strokeWidth={2} />
+            <Ionicons name="chevron-back" size={22} color={T.text} />
           </TouchableOpacity>
           <View style={{ flex: 1, alignItems: 'center' }}>
             {isCurrentWeek && <Text style={styles.weekLabel2}>This week</Text>}
@@ -288,7 +288,7 @@ export default function CalendarScreen() {
             </TouchableOpacity>
           )}
           <TouchableOpacity style={styles.navArrow} onPress={() => setWeekStart((w) => addDays(w, 7))}>
-            <ChevronRightIcon size={22} color={T.text} strokeWidth={2} />
+            <Ionicons name="chevron-forward" size={22} color={T.text} />
           </TouchableOpacity>
         </View>
 

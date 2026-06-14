@@ -1,7 +1,7 @@
 import { ActivityIndicator, FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, Trophy } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { ExerciseHistoryEntry, StrengthSet } from '@app/shared';
 import { useExerciseHistory, useExercisePRs } from '../../../../src/hooks/useSession';
 import { Sparkline } from '../../../../src/components/Sparkline';
@@ -81,7 +81,7 @@ export default function ExerciseHistoryScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <ChevronLeft size={22} color={T.text} strokeWidth={2} />
+          <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle} numberOfLines={1}>{headerTitle}</Text>
@@ -110,7 +110,7 @@ export default function ExerciseHistoryScreen() {
           {prsData && (
             <View style={styles.prCard}>
               <View style={styles.prHeader}>
-                <Trophy size={18} color={T.gold} strokeWidth={2} />
+                <Ionicons name="trophy" size={18} color={T.gold} />
                 <Text style={styles.prEyebrow}>Personal Records</Text>
                 {prsData.bestSet && (
                   <Text style={styles.prDate}>set {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</Text>

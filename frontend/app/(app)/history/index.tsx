@@ -1,7 +1,7 @@
 import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronLeft, ChevronRight, Dumbbell, Swords } from 'lucide-react-native';
+import { Ionicons } from '@expo/vector-icons';
 import type { Session, TemplateWithItems } from '@app/shared';
 import { useSessions } from '../../../src/hooks/useSession';
 import { useTemplates } from '../../../src/hooks/useTemplates';
@@ -49,10 +49,10 @@ function SessionRow({ session, templateName, isMat, onPress }: {
       </View>
       <View style={[styles.kindBadge, isMat && styles.kindBadgeMat]}>
         {isMat
-          ? <Swords size={12} color={withAlpha('#a78bfa', 1)} strokeWidth={1.8} />
-          : <Dumbbell size={12} color={T.textDim} strokeWidth={1.8} />}
+          ? <Ionicons name="flash" size={12} color={withAlpha('#a78bfa', 1)} />
+          : <Ionicons name="barbell" size={12} color={T.textDim} />}
       </View>
-      <ChevronRight size={16} color={T.muted} />
+      <Ionicons name="chevron-forward" size={16} color={T.muted} />
     </TouchableOpacity>
   );
 }
@@ -70,7 +70,7 @@ export default function HistoryScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <ChevronLeft size={22} color={T.text} strokeWidth={2} />
+          <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>History</Text>
