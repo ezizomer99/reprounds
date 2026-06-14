@@ -73,7 +73,7 @@ export default function TemplatesScreen() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Templates</Text>
         <TouchableOpacity
-          onPress={() => router.push('/(app)/templates/new')}
+          onPress={() => router.push({ pathname: '/templates/[id]', params: { id: 'new' } })}
           style={styles.addButton}
         >
           <Text style={styles.addButtonText}>+ New</Text>
@@ -101,7 +101,7 @@ export default function TemplatesScreen() {
           renderItem={({ item }) => (
             <TemplateRow
               template={item}
-              onPress={(id) => router.push(`/(app)/templates/${id}`)}
+              onPress={(id) => router.push({ pathname: '/templates/[id]', params: { id } })}
               onDelete={handleDelete}
             />
           )}

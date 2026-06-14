@@ -4,11 +4,11 @@ import { View, ActivityIndicator } from 'react-native';
 import { getSessionToken } from '../src/lib/auth';
 
 export default function RootIndex() {
-  const [destination, setDestination] = useState<'/(app)/' | '/(auth)/sign-in' | null>(null);
+  const [destination, setDestination] = useState<'/(app)' | '/(auth)/sign-in' | null>(null);
 
   useEffect(() => {
     getSessionToken().then((token) => {
-      setDestination(token ? '/(app)/' : '/(auth)/sign-in');
+      setDestination(token ? '/(app)' : '/(auth)/sign-in');
     });
   }, []);
 

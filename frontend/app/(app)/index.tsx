@@ -50,7 +50,7 @@ export default function HomeScreen() {
         <Text style={styles.sectionLabel}>Training</Text>
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => router.push('/(app)/templates')}
+          onPress={() => router.push('/templates/index')}
         >
           <Text style={styles.navItemText}>Templates</Text>
           <Text style={styles.navItemArrow}>›</Text>
