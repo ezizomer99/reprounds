@@ -44,9 +44,10 @@ interface ExerciseRowProps {
   exercise: Exercise;
   isOwned: boolean;
   onDelete: (id: string) => void;
+  onHistory: (id: string, name: string) => void;
 }
 
-function ExerciseRow({ exercise, isOwned, onDelete }: ExerciseRowProps) {
+function ExerciseRow({ exercise, isOwned, onDelete, onHistory }: ExerciseRowProps) {
   function handleDelete() {
     Alert.alert(
       'Delete exercise',
@@ -68,6 +69,12 @@ function ExerciseRow({ exercise, isOwned, onDelete }: ExerciseRowProps) {
         <Text style={styles.rowName}>{exercise.name}</Text>
         <TypeBadge type={exercise.type} />
       </View>
+      <TouchableOpacity
+        onPress={() => onHistory(exercise.id, exercise.name)}
+        style={styles.historyButton}
+      >
+        <Text style={styles.historyText}>History</Text>
+      </TouchableOpacity>
       {isOwned && (
         <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
           <Text style={styles.deleteText}>Delete</Text>
@@ -237,6 +244,13 @@ export default function ExercisesScreen() {
     });
   }
 
+  function handleHistory(id: string, name: string) {
+    router.push({
+      pathname: '/history/exercise/[id]',
+      params: { id, name },
+    } as never);
+  }
+
   const filtered = exercises ?? [];
 
   return (
@@ -307,6 +321,7 @@ export default function ExercisesScreen() {
               exercise={item}
               isOwned={item.userId === currentUser?.id}
               onDelete={handleDelete}
+              onHistory={handleHistory}
             />
           )}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -423,6 +438,19 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.4,
+  },
+  historyButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+    marginRight: 8,
+  },
+  historyText: {
+    fontSize: 13,
+    color: '#3b82f6',
+    fontWeight: '500',
   },
   deleteButton: {
     paddingHorizontal: 12,

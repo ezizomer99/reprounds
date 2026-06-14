@@ -5,11 +5,33 @@ import type {
   CreateSessionRequest,
   CreateStrengthSetRequest,
   ExerciseHistoryResponse,
+  ExercisePRsResponse,
+  Session,
+  SessionListResponse,
   SessionWithEntries,
   UpdateSessionEntryRequest,
   UpdateStrengthSetRequest,
 } from '@app/shared';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../lib/api';
+
+export function useSessions(status?: string) {
+  return useQuery<Session[], Error>({
+    queryKey: ['sessions', status],
+    queryFn: async () => {
+      const path = status ? `/sessions?status=${status}` : '/sessions';
+      const data = await apiGet<SessionListResponse>(path);
+      return data.sessions;
+    },
+  });
+}
+
+export function useExercisePRs(exerciseId: string | null) {
+  return useQuery<ExercisePRsResponse, Error>({
+    queryKey: ['exercise-prs', exerciseId],
+    queryFn: () => apiGet<ExercisePRsResponse>(`/exercises/${exerciseId}/prs`),
+    enabled: exerciseId !== null,
+  });
+}
 
 export function useSession(id: string | null) {
   return useQuery<SessionWithEntries, Error>({

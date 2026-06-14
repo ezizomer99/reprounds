@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, asc, eq, inArray, max } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, max } from 'drizzle-orm';
 import { createDb } from '../db';
 import {
   disciplines,
@@ -230,6 +230,41 @@ function validateEntryKind(body: {
   }
   return null;
 }
+
+// GET /sessions
+sessionRoutes.get('/', async (c) => {
+  const userId = c.get('userId');
+  const db = getDb(c.env);
+  const status = c.req.query('status');
+  const limit = Math.min(parseInt(c.req.query('limit') ?? '50', 10), 200);
+
+  const rows = await db
+    .select()
+    .from(sessions)
+    .where(
+      status
+        ? and(eq(sessions.userId, userId), eq(sessions.status, status as 'planned' | 'in_progress' | 'completed' | 'skipped'))
+        : eq(sessions.userId, userId),
+    )
+    .orderBy(desc(sessions.date), desc(sessions.createdAt))
+    .limit(limit);
+
+  const mapped = rows.map((s) => ({
+    id: s.id,
+    userId: s.userId,
+    templateId: s.templateId ?? null,
+    scheduleRuleId: s.scheduleRuleId ?? null,
+    date: s.date,
+    status: s.status,
+    startedAt: s.startedAt?.toISOString() ?? null,
+    completedAt: s.completedAt?.toISOString() ?? null,
+    durationMinutes: s.durationMinutes ?? null,
+    notes: s.notes ?? null,
+    createdAt: s.createdAt.toISOString(),
+  }));
+
+  return c.json({ sessions: mapped });
+});
 
 // GET /sessions/:id
 sessionRoutes.get('/:id', async (c) => {
