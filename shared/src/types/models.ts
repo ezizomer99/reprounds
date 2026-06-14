@@ -185,3 +185,88 @@ export interface UpdateTemplateItemRequest {
 export interface ReorderTemplateItemsRequest {
   order: string[];
 }
+
+// ---- Phase 4: Session Logging ----
+
+export interface CreateSessionRequest {
+  templateId?: string | null;
+  date: string; // ISO date YYYY-MM-DD
+  notes?: string | null;
+}
+
+export interface UpdateSessionRequest {
+  notes?: string | null;
+  durationMinutes?: number | null;
+}
+
+export interface CompleteSessionRequest {
+  durationMinutes?: number | null;
+  notes?: string | null;
+}
+
+export interface CreateSessionEntryRequest {
+  kind: EntryKind;
+  exerciseId?: string | null;
+  disciplineId?: string | null;
+  gi?: GiType | null;
+  orderIndex?: number;
+  restSeconds?: number | null;
+  details?: Record<string, unknown> | null;
+  notes?: string | null;
+}
+
+export interface UpdateSessionEntryRequest {
+  gi?: GiType | null;
+  restSeconds?: number | null;
+  details?: Record<string, unknown> | null;
+  notes?: string | null;
+}
+
+export interface CreateStrengthSetRequest {
+  setNumber: number;
+  setType?: SetType;
+  reps?: number | null;
+  weight?: number | null;
+  rpe?: number | null;
+  rir?: number | null;
+  completed?: boolean;
+}
+
+export interface UpdateStrengthSetRequest {
+  setType?: SetType;
+  reps?: number | null;
+  weight?: number | null;
+  rpe?: number | null;
+  rir?: number | null;
+  completed?: boolean;
+}
+
+export interface SessionEntryWithSets extends SessionEntry {
+  sets: StrengthSet[];
+  exerciseName: string | null;
+  disciplineName: string | null;
+}
+
+export interface SessionWithEntries extends Session {
+  entries: SessionEntryWithSets[];
+}
+
+export interface SessionListResponse {
+  sessions: Session[];
+}
+
+export interface ExerciseHistoryEntry {
+  sessionId: string;
+  date: string;
+  entry: SessionEntryWithSets;
+}
+
+export interface ExerciseHistoryResponse {
+  history: ExerciseHistoryEntry[];
+}
+
+export interface ExercisePRsResponse {
+  estimatedOneRepMax: number | null;
+  bestSet: StrengthSet | null;
+  totalSessions: number;
+}

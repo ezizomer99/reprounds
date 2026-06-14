@@ -49,6 +49,13 @@ export default function HomeScreen() {
       <View style={styles.librarySection}>
         <Text style={styles.sectionLabel}>Training</Text>
         <TouchableOpacity
+          style={[styles.navItem, styles.logWorkoutItem]}
+          onPress={() => router.push('/sessions/new' as never)}
+        >
+          <Text style={[styles.navItemText, styles.logWorkoutText]}>Log Workout</Text>
+          <Text style={[styles.navItemArrow, styles.logWorkoutArrow]}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           style={styles.navItem}
           onPress={() => router.push('/templates/index')}
         >
@@ -121,6 +128,17 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#9ca3af',
     lineHeight: 22,
+  },
+  logWorkoutItem: {
+    backgroundColor: '#3b82f6',
+    borderColor: '#2563eb',
+  },
+  logWorkoutText: {
+    color: '#fff',
+    fontWeight: '700',
+  },
+  logWorkoutArrow: {
+    color: 'rgba(255,255,255,0.7)',
   },
   signOutButton: {
     paddingVertical: 10,

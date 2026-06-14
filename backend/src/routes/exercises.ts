@@ -1,13 +1,19 @@
 import { Hono } from 'hono';
-import { and, eq, ilike, isNull, or } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNull, or } from 'drizzle-orm';
 import { createDb } from '../db';
-import { exercises } from '../db/schema';
+import { disciplines, exercises, sessionEntries, sessions, strengthSets } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import { estimatedOneRepMax } from '@app/shared';
 import type {
   CreateExerciseRequest,
-  UpdateExerciseRequest,
   Exercise,
+  ExerciseHistoryEntry,
+  ExerciseHistoryResponse,
+  ExercisePRsResponse,
   ExerciseListResponse,
+  SessionEntryWithSets,
+  StrengthSet,
+  UpdateExerciseRequest,
 } from '@app/shared';
 
 type Env = {
@@ -178,6 +184,163 @@ exerciseRoutes.delete('/:id', async (c) => {
     .where(and(eq(exercises.id, id), eq(exercises.userId, userId)));
 
   return c.json({ success: true });
+});
+
+function mapSet(row: typeof strengthSets.$inferSelect): StrengthSet {
+  return {
+    id: row.id,
+    sessionEntryId: row.sessionEntryId,
+    setNumber: row.setNumber,
+    setType: row.setType,
+    reps: row.reps,
+    weight: row.weight !== null ? Number(row.weight) : null,
+    rpe: row.rpe !== null ? Number(row.rpe) : null,
+    rir: row.rir,
+    completed: row.completed,
+  };
+}
+
+// GET /exercises/:id/history
+exerciseRoutes.get('/:id/history', async (c) => {
+  const userId = c.get('userId');
+  const exerciseId = c.req.param('id');
+  const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+
+  const entryRows = await db
+    .select({
+      entryId: sessionEntries.id,
+      sessionId: sessionEntries.sessionId,
+      kind: sessionEntries.kind,
+      exerciseId: sessionEntries.exerciseId,
+      disciplineId: sessionEntries.disciplineId,
+      gi: sessionEntries.gi,
+      orderIndex: sessionEntries.orderIndex,
+      supersetGroup: sessionEntries.supersetGroup,
+      restSeconds: sessionEntries.restSeconds,
+      details: sessionEntries.details,
+      entryNotes: sessionEntries.notes,
+      sessionDate: sessions.date,
+      exerciseName: exercises.name,
+      disciplineName: disciplines.name,
+    })
+    .from(sessionEntries)
+    .innerJoin(sessions, eq(sessionEntries.sessionId, sessions.id))
+    .leftJoin(exercises, eq(sessionEntries.exerciseId, exercises.id))
+    .leftJoin(disciplines, eq(sessionEntries.disciplineId, disciplines.id))
+    .where(
+      and(
+        eq(sessionEntries.exerciseId, exerciseId),
+        eq(sessions.userId, userId),
+        eq(sessions.status, 'completed'),
+      ),
+    )
+    .orderBy(desc(sessions.date))
+    .limit(5);
+
+  if (entryRows.length === 0) {
+    const result: ExerciseHistoryResponse = { history: [] };
+    return c.json(result);
+  }
+
+  const entryIds = entryRows.map((r) => r.entryId);
+  const allSets = await db
+    .select()
+    .from(strengthSets)
+    .where(inArray(strengthSets.sessionEntryId, entryIds))
+    .orderBy(asc(strengthSets.setNumber));
+
+  const setsByEntryId = new Map<string, StrengthSet[]>();
+  for (const set of allSets) {
+    const list = setsByEntryId.get(set.sessionEntryId) ?? [];
+    list.push(mapSet(set));
+    setsByEntryId.set(set.sessionEntryId, list);
+  }
+
+  const history: ExerciseHistoryEntry[] = entryRows.map((row) => {
+    const entry: SessionEntryWithSets = {
+      id: row.entryId,
+      sessionId: row.sessionId,
+      kind: row.kind,
+      exerciseId: row.exerciseId,
+      disciplineId: row.disciplineId,
+      gi: row.gi,
+      orderIndex: row.orderIndex,
+      supersetGroup: row.supersetGroup,
+      restSeconds: row.restSeconds,
+      details: row.details as Record<string, unknown> | null,
+      notes: row.entryNotes,
+      sets: setsByEntryId.get(row.entryId) ?? [],
+      exerciseName: row.exerciseName ?? null,
+      disciplineName: row.disciplineName ?? null,
+    };
+    return { sessionId: row.sessionId, date: row.sessionDate, entry };
+  });
+
+  const result: ExerciseHistoryResponse = { history };
+  return c.json(result);
+});
+
+// GET /exercises/:id/prs
+exerciseRoutes.get('/:id/prs', async (c) => {
+  const userId = c.get('userId');
+  const exerciseId = c.req.param('id');
+  const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+
+  const allSetsRows = await db
+    .select({
+      id: strengthSets.id,
+      sessionEntryId: strengthSets.sessionEntryId,
+      setNumber: strengthSets.setNumber,
+      setType: strengthSets.setType,
+      reps: strengthSets.reps,
+      weight: strengthSets.weight,
+      rpe: strengthSets.rpe,
+      rir: strengthSets.rir,
+      completed: strengthSets.completed,
+      sessionId: sessions.id,
+    })
+    .from(strengthSets)
+    .innerJoin(sessionEntries, eq(strengthSets.sessionEntryId, sessionEntries.id))
+    .innerJoin(sessions, eq(sessionEntries.sessionId, sessions.id))
+    .where(
+      and(
+        eq(sessionEntries.exerciseId, exerciseId),
+        eq(sessions.userId, userId),
+        eq(strengthSets.completed, true),
+      ),
+    );
+
+  const mappedSets = allSetsRows.map((row) => mapSet(row));
+
+  const completedWithWeightAndReps = mappedSets.filter(
+    (s): s is StrengthSet & { weight: number; reps: number } =>
+      s.weight !== null && s.reps !== null,
+  );
+
+  let bestEstimated1RM: number | null = null;
+  let bestSetResult: StrengthSet | null = null;
+
+  if (completedWithWeightAndReps.length > 0) {
+    let bestE1RM = -Infinity;
+    for (const s of completedWithWeightAndReps) {
+      const e1rm = estimatedOneRepMax(s.weight, s.reps);
+      if (e1rm > bestE1RM) {
+        bestE1RM = e1rm;
+        bestSetResult = s;
+      }
+    }
+    bestEstimated1RM = bestE1RM === -Infinity ? null : bestE1RM;
+  }
+
+  const uniqueSessionIds = new Set(allSetsRows.map((r) => r.sessionId));
+
+  const result: ExercisePRsResponse = {
+    estimatedOneRepMax: bestEstimated1RM,
+    bestSet: bestSetResult,
+    totalSessions: uniqueSessionIds.size,
+  };
+
+  return c.json(result);
 });
 
 export { exerciseRoutes };

@@ -3,6 +3,7 @@ import { authRoutes } from './routes/auth';
 import { exerciseRoutes } from './routes/exercises';
 import { disciplineRoutes } from './routes/disciplines';
 import { templateRoutes } from './routes/templates';
+import { sessionRoutes } from './routes/sessions';
 
 type Env = {
   Bindings: {
@@ -24,5 +25,6 @@ app.route('/v1/auth', authRoutes);
 app.route('/v1/exercises', exerciseRoutes);
 app.route('/v1/disciplines', disciplineRoutes);
 app.route('/v1/templates', templateRoutes);
+app.route('/v1/sessions', sessionRoutes);
 
 export default app;
