@@ -1,256 +1,216 @@
-import {
-  ActivityIndicator,
-  FlatList,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChevronLeft, Trophy } from 'lucide-react-native';
 import type { ExerciseHistoryEntry, StrengthSet } from '@app/shared';
 import { useExerciseHistory, useExercisePRs } from '../../../../src/hooks/useSession';
+import { Sparkline } from '../../../../src/components/Sparkline';
+import { T, F, R, D } from '../../../../src/theme/colors';
+import { withAlpha } from '../../../../src/lib/color';
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string): { day: string; month: string } {
   const d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  return {
+    day: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    month: d.getFullYear().toString(),
+  };
 }
 
 function formatBestSet(set: StrengthSet | null): string {
   if (!set) return '—';
   const parts: string[] = [];
-  if (set.weight) parts.push(`${set.weight}kg`);
-  if (set.reps) parts.push(`× ${set.reps} reps`);
+  if (set.weight) parts.push(`${set.weight} kg`);
+  if (set.reps) parts.push(`× ${set.reps}`);
   return parts.join(' ') || '—';
 }
 
 function formatSets(sets: StrengthSet[]): string {
-  const completed = sets.filter((s) => s.completed);
-  if (completed.length === 0) return 'No sets logged';
-  const shown = completed.slice(0, 3);
-  const parts = shown.map((s) => {
-    if (s.weight && s.reps) return `${s.weight}kg×${s.reps}`;
+  const done = sets.filter((s) => s.completed);
+  if (!done.length) return 'No sets logged';
+  const shown = done.slice(0, 3).map((s) => {
+    if (s.weight && s.reps) return `${s.weight}×${s.reps}`;
     if (s.reps) return `${s.reps} reps`;
     return '—';
   });
-  const suffix = completed.length > 3 ? ` +${completed.length - 3} more` : '';
-  return `${completed.length} sets — ` + parts.join(', ') + suffix;
+  const more = done.length > 3 ? ` +${done.length - 3}` : '';
+  return shown.join(' · ') + more;
 }
 
-interface HistoryEntryRowProps {
-  entry: ExerciseHistoryEntry;
+function topWeight(sets: StrengthSet[]): number | null {
+  const done = sets.filter((s) => s.completed && s.weight !== null);
+  if (!done.length) return null;
+  return Math.max(...done.map((s) => s.weight!));
 }
 
-function HistoryEntryRow({ entry }: HistoryEntryRowProps) {
+function HistoryRow({ entry, isLast }: { entry: ExerciseHistoryEntry; isLast: boolean }) {
+  const { day } = formatDate(entry.date);
+  const top = topWeight(entry.entry.sets);
   return (
-    <View style={styles.row}>
-      <Text style={styles.rowDate}>{formatDate(entry.date)}</Text>
-      <Text style={styles.rowSets}>{formatSets(entry.entry.sets)}</Text>
+    <View style={[styles.historyRow, !isLast && { borderBottomWidth: 1, borderBottomColor: T.border }]}>
+      <Text style={styles.historyDate}>{day}</Text>
+      <Text style={styles.historySets}>{formatSets(entry.entry.sets)}</Text>
+      {top !== null && (
+        <Text style={styles.historyTop}>{top}<Text style={styles.historyTopUnit}>kg</Text></Text>
+      )}
     </View>
   );
 }
 
 export default function ExerciseHistoryScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
 
   const { data: prsData, isLoading: prsLoading } = useExercisePRs(id ?? null);
-  const { data: historyData, isLoading: historyLoading, isError, error } = useExerciseHistory(id ?? null);
+  const { data: historyData, isLoading: histLoading, isError, error } = useExerciseHistory(id ?? null);
 
   const history = historyData?.history ?? [];
   const headerTitle = name ?? history[0]?.entry.exerciseName ?? 'Exercise';
-  const isLoading = prsLoading || historyLoading;
+  const isLoading = prsLoading || histLoading;
+
+  // Sparkline: top weight per session (chronological order)
+  const topWeights = history
+    .map((e) => topWeight(e.entry.sets))
+    .filter((v): v is number => v !== null)
+    .reverse();
+
+  const sparkMin = topWeights.length ? Math.min(...topWeights) : 0;
+  const sparkMax = topWeights.length ? Math.max(...topWeights) : 0;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backText}>Back</Text>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <ChevronLeft size={22} color={T.text} strokeWidth={2} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>{headerTitle}</Text>
-        <View style={styles.headerSpacer} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle} numberOfLines={1}>{headerTitle}</Text>
+          {history[0]?.entry.exerciseName && <Text style={styles.headerSub}>{history[0].entry.exerciseName}</Text>}
+        </View>
+        <View style={{ width: 40 }} />
       </View>
 
       {isLoading && (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#3b82f6" />
-        </View>
+        <View style={styles.centered}><ActivityIndicator size="large" color={T.primary} /></View>
       )}
 
       {isError && (
         <View style={styles.centered}>
-          <Text style={styles.errorText}>
-            {error?.message ?? 'Failed to load history.'}
-          </Text>
+          <Text style={styles.errorText}>{error?.message ?? 'Failed to load history.'}</Text>
         </View>
       )}
 
       {!isLoading && !isError && (
-        <>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 32 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* PR Card */}
           {prsData && (
             <View style={styles.prCard}>
-              <View style={styles.prRow}>
+              <View style={styles.prHeader}>
+                <Trophy size={18} color={T.gold} strokeWidth={2} />
+                <Text style={styles.prEyebrow}>Personal Records</Text>
+                {prsData.bestSet && (
+                  <Text style={styles.prDate}>set {new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</Text>
+                )}
+              </View>
+              <View style={styles.prSplit}>
                 <View style={styles.prStat}>
-                  <Text style={styles.prStatLabel}>Est. 1RM</Text>
-                  <Text style={styles.prStatValue}>
-                    {prsData.estimatedOneRepMax !== null
-                      ? `${prsData.estimatedOneRepMax} kg`
-                      : '—'}
+                  <Text style={styles.prKey}>Est. 1RM</Text>
+                  <Text style={[styles.prVal, styles.prValGold]}>
+                    {prsData.estimatedOneRepMax !== null ? `${prsData.estimatedOneRepMax} kg` : '—'}
                   </Text>
                 </View>
                 <View style={styles.prDivider} />
                 <View style={styles.prStat}>
-                  <Text style={styles.prStatLabel}>Best Set</Text>
-                  <Text style={styles.prStatValue}>
-                    {formatBestSet(prsData.bestSet)}
-                  </Text>
+                  <Text style={styles.prKey}>Best Set</Text>
+                  <Text style={styles.prVal}>{formatBestSet(prsData.bestSet)}</Text>
                 </View>
               </View>
               <Text style={styles.prTotal}>Total sessions: {prsData.totalSessions}</Text>
             </View>
           )}
 
-          <Text style={styles.sectionLabel}>Recent Sessions</Text>
-
-          <FlatList
-            data={history}
-            keyExtractor={(item) => item.sessionId}
-            renderItem={({ item }) => <HistoryEntryRow entry={item} />}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
-            ListEmptyComponent={
-              <View style={styles.centered}>
-                <Text style={styles.emptyText}>No history yet.</Text>
+          {/* Sparkline */}
+          {topWeights.length >= 2 && (
+            <View style={styles.card}>
+              <View style={styles.sparklineHeader}>
+                <Text style={styles.eyebrow}>Top set · last {topWeights.length}</Text>
+                <Text style={styles.sparklineRange}>{sparkMin}–{sparkMax} kg</Text>
               </View>
-            }
-            contentContainerStyle={history.length === 0 ? styles.emptyList : undefined}
-          />
-        </>
+              <Sparkline values={topWeights} width={320} height={60} color={T.primary} />
+            </View>
+          )}
+
+          {/* History list */}
+          <Text style={styles.eyebrow}>History</Text>
+          {history.length === 0 ? (
+            <View style={styles.centered}>
+              <Text style={styles.emptyText}>No history yet.</Text>
+            </View>
+          ) : (
+            <View style={styles.historyCard}>
+              {history.map((entry, i) => (
+                <HistoryRow key={entry.sessionId} entry={entry} isLast={i === history.length - 1} />
+              ))}
+            </View>
+          )}
+        </ScrollView>
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
+  screen: { flex: 1, backgroundColor: T.bg },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 56,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e7eb',
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: T.border,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    flex: 1,
-    textAlign: 'center',
-  },
-  backButton: {
-    minWidth: 52,
-  },
-  backText: {
-    fontSize: 16,
-    color: '#3b82f6',
-  },
-  headerSpacer: {
-    minWidth: 52,
-  },
+  backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontFamily: F.uiSemi, fontSize: 19, color: T.text, letterSpacing: -0.2 },
+  headerSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 1 },
+
+  body: { padding: D.pad, gap: D.stack },
+
+  // PR Card
   prCard: {
-    margin: 16,
-    padding: 16,
-    backgroundColor: '#f9fafb',
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: '#e5e7eb',
+    backgroundColor: T.surface,
+    borderWidth: 1, borderColor: withAlpha(T.gold, 0.35),
+    borderRadius: R.card, padding: D.cardPad,
+    gap: 12,
+    // subtle gold gradient hint via overlay
   },
-  prRow: {
-    flexDirection: 'row',
-    marginBottom: 12,
-  },
-  prStat: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  prDivider: {
-    width: StyleSheet.hairlineWidth,
-    backgroundColor: '#e5e7eb',
-    marginVertical: 4,
-  },
-  prStatLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#9ca3af',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  prStatValue: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  prTotal: {
-    fontSize: 13,
-    color: '#6b7280',
-    textAlign: 'center',
-  },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#9ca3af',
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  row: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  rowDate: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 4,
-  },
-  rowSets: {
-    fontSize: 13,
-    color: '#6b7280',
-  },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#e5e7eb',
-    marginLeft: 16,
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 48,
-  },
-  emptyList: {
-    flex: 1,
-  },
-  emptyText: {
-    fontSize: 15,
-    color: '#9ca3af',
-    textAlign: 'center',
-    paddingHorizontal: 24,
-  },
-  errorText: {
-    fontSize: 15,
-    color: '#ef4444',
-    textAlign: 'center',
-    paddingHorizontal: 24,
-  },
+  prHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  prEyebrow: { fontFamily: F.uiBold, fontSize: 11, color: T.gold, textTransform: 'uppercase', letterSpacing: 0.8, flex: 1 },
+  prDate: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim },
+  prSplit: { flexDirection: 'row', gap: 0 },
+  prStat: { flex: 1, alignItems: 'center', gap: 4 },
+  prDivider: { width: 1, backgroundColor: T.border, marginVertical: 4 },
+  prKey: { fontFamily: F.uiBold, fontSize: 10, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.6 },
+  prVal: { fontFamily: F.monoBold, fontSize: 24, color: T.text, letterSpacing: -0.5 },
+  prValGold: { color: T.gold },
+  prTotal: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, textAlign: 'center' },
+
+  // Sparkline card
+  card: { backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.card, padding: D.cardPad, paddingBottom: 10, overflow: 'hidden' },
+  sparklineHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  sparklineRange: { fontFamily: F.mono, fontSize: 12, color: T.textDim },
+
+  eyebrow: { fontFamily: F.uiBold, fontSize: 11, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1.2 },
+
+  // History card
+  historyCard: { backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.card, overflow: 'hidden' },
+  historyRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: D.cardPad, paddingVertical: 12, gap: 10 },
+  historyDate: { fontFamily: F.uiSemi, fontSize: 14, color: T.text, width: 76 },
+  historySets: { flex: 1, fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
+  historyTop: { fontFamily: F.monoBold, fontSize: 16, color: T.text },
+  historyTopUnit: { fontFamily: F.uiMed, fontSize: 11, color: T.muted },
+
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
+  emptyText: { fontFamily: F.uiMed, fontSize: 15, color: T.muted },
+  errorText: { fontFamily: F.uiMed, fontSize: 15, color: T.danger, textAlign: 'center' },
 });

@@ -1,91 +1,95 @@
-import {
-  ActivityIndicator,
-  FlatList,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChevronLeft, ChevronRight, Dumbbell, Swords } from 'lucide-react-native';
 import type { Session, TemplateWithItems } from '@app/shared';
 import { useSessions } from '../../../src/hooks/useSession';
 import { useTemplates } from '../../../src/hooks/useTemplates';
+import { T, F, R, D } from '../../../src/theme/colors';
+import { withAlpha } from '../../../src/lib/color';
 
-function formatDate(dateStr: string): string {
+function formatDateBlock(dateStr: string): { day: string; month: string } {
   const d = new Date(dateStr + 'T00:00:00');
-  return d.toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  return {
+    day: String(d.getDate()),
+    month: d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),
+  };
 }
 
 function buildTemplateMap(templates: TemplateWithItems[] | undefined): Map<string, string> {
   const map = new Map<string, string>();
   if (!templates) return map;
-  for (const t of templates) {
-    map.set(t.id, t.name);
-  }
+  for (const t of templates) map.set(t.id, t.name);
   return map;
 }
 
-interface SessionRowProps {
+function SessionRow({ session, templateName, isMat, onPress }: {
   session: Session;
   templateName: string | null;
+  isMat: boolean;
   onPress: () => void;
-}
-
-function SessionRow({ session, templateName, onPress }: SessionRowProps) {
+}) {
+  const { day, month } = formatDateBlock(session.date);
   const duration = session.durationMinutes ? `${session.durationMinutes} min` : null;
 
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.rowContent}>
-        <Text style={styles.rowDate}>{formatDate(session.date)}</Text>
-        <Text style={styles.rowTemplate}>
-          {templateName ?? 'Ad-hoc session'}
-        </Text>
-        {duration ? <Text style={styles.rowDuration}>{duration}</Text> : null}
+      <View style={styles.dateBlock}>
+        <Text style={styles.dateDay}>{day}</Text>
+        <Text style={styles.dateMonth}>{month}</Text>
       </View>
-      <Text style={styles.rowArrow}>›</Text>
+      <View style={styles.rowDivider} />
+      <View style={styles.rowContent}>
+        <Text style={styles.rowName}>{templateName ?? 'Ad-hoc session'}</Text>
+        <Text style={styles.rowMeta}>
+          {duration ?? ''}
+          {duration ? ' · ' : ''}
+          {session.status}
+        </Text>
+      </View>
+      <View style={[styles.kindBadge, isMat && styles.kindBadgeMat]}>
+        {isMat
+          ? <Swords size={12} color={withAlpha('#a78bfa', 1)} strokeWidth={1.8} />
+          : <Dumbbell size={12} color={T.textDim} strokeWidth={1.8} />}
+      </View>
+      <ChevronRight size={16} color={T.muted} />
     </TouchableOpacity>
   );
 }
 
 export default function HistoryScreen() {
   const router = useRouter();
-  const { data: sessions, isLoading: sessionsLoading, isError, error } = useSessions('completed');
+  const insets = useSafeAreaInsets();
+  const { data: sessions, isLoading, isError, error } = useSessions('completed');
   const { data: templates } = useTemplates();
 
   const templateMap = buildTemplateMap(templates);
   const list = sessions ?? [];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backText}>Back</Text>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <ChevronLeft size={22} color={T.text} strokeWidth={2} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>History</Text>
-        <View style={styles.headerSpacer} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>History</Text>
+          {list.length > 0 && <Text style={styles.headerSub}>{list.length} sessions logged</Text>}
+        </View>
+        <View style={{ width: 40 }} />
       </View>
 
-      {sessionsLoading && (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#3b82f6" />
-        </View>
+      {isLoading && (
+        <View style={styles.centered}><ActivityIndicator size="large" color={T.primary} /></View>
       )}
 
       {isError && (
         <View style={styles.centered}>
-          <Text style={styles.errorText}>
-            {error?.message ?? 'Failed to load history.'}
-          </Text>
+          <Text style={styles.errorText}>{error?.message ?? 'Failed to load history.'}</Text>
         </View>
       )}
 
-      {!sessionsLoading && !isError && (
+      {!isLoading && !isError && (
         <FlatList
           data={list}
           keyExtractor={(item) => item.id}
@@ -93,23 +97,22 @@ export default function HistoryScreen() {
             <SessionRow
               session={item}
               templateName={item.templateId ? (templateMap.get(item.templateId) ?? null) : null}
-              onPress={() =>
-                router.push({
-                  pathname: '/sessions/[id]',
-                  params: { id: item.id },
-                } as never)
-              }
+              isMat={false}
+              onPress={() => router.push({ pathname: '/sessions/[id]', params: { id: item.id } } as never)}
             />
           )}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
             <View style={styles.centered}>
-              <Text style={styles.emptyText}>
-                No completed sessions yet. Log a workout to see your history.
-              </Text>
+              <Text style={styles.emptyText}>No completed sessions yet.</Text>
+              <Text style={styles.emptySub}>Log a workout to see your history here.</Text>
             </View>
           }
-          contentContainerStyle={list.length === 0 ? styles.emptyList : undefined}
+          contentContainerStyle={[
+            list.length === 0 && { flex: 1 },
+            { paddingBottom: insets.bottom + 32 },
+          ]}
+          showsVerticalScrollIndicator={false}
         />
       )}
     </View>
@@ -117,87 +120,32 @@ export default function HistoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
+  screen: { flex: 1, backgroundColor: T.bg },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 56,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e7eb',
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: T.border,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+  backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontFamily: F.uiSemi, fontSize: 19, color: T.text, letterSpacing: -0.2 },
+  headerSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 1 },
+
+  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: D.pad, paddingVertical: 13, gap: 12 },
+  dateBlock: { width: 46, alignItems: 'center', flexShrink: 0 },
+  dateDay: { fontFamily: F.monoBold, fontSize: 19, color: T.text },
+  dateMonth: { fontFamily: F.uiBold, fontSize: 10, color: T.textDim, letterSpacing: 0.6 },
+  rowDivider: { width: 1, height: 34, backgroundColor: T.border },
+  rowContent: { flex: 1 },
+  rowName: { fontFamily: F.uiSemi, fontSize: 15, color: T.text, marginBottom: 2 },
+  rowMeta: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
+  kindBadge: {
+    width: 26, height: 26, borderRadius: R.sm,
+    backgroundColor: T.surface2, alignItems: 'center', justifyContent: 'center',
   },
-  backButton: {
-    minWidth: 52,
-  },
-  backText: {
-    fontSize: 16,
-    color: '#3b82f6',
-  },
-  headerSpacer: {
-    minWidth: 52,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  rowContent: {
-    flex: 1,
-  },
-  rowDate: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#111827',
-    marginBottom: 2,
-  },
-  rowTemplate: {
-    fontSize: 13,
-    color: '#6b7280',
-  },
-  rowDuration: {
-    fontSize: 12,
-    color: '#9ca3af',
-    marginTop: 2,
-  },
-  rowArrow: {
-    fontSize: 20,
-    color: '#9ca3af',
-    lineHeight: 22,
-  },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#e5e7eb',
-    marginLeft: 16,
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 48,
-  },
-  emptyList: {
-    flex: 1,
-  },
-  emptyText: {
-    fontSize: 15,
-    color: '#9ca3af',
-    textAlign: 'center',
-    paddingHorizontal: 24,
-  },
-  errorText: {
-    fontSize: 15,
-    color: '#ef4444',
-    textAlign: 'center',
-    paddingHorizontal: 24,
-  },
+  kindBadgeMat: { backgroundColor: withAlpha('#a78bfa', 0.12) },
+  separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad + 46 + 12 + 1 + 12 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
+  emptyText: { fontFamily: F.uiSemi, fontSize: 15, color: T.textDim, marginBottom: 4 },
+  emptySub: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, textAlign: 'center', paddingHorizontal: 24 },
+  errorText: { fontFamily: F.uiMed, fontSize: 15, color: T.danger, textAlign: 'center' },
 });

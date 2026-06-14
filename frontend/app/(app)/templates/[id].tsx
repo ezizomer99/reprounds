@@ -1,7 +1,6 @@
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Modal,
   ScrollView,
   StyleSheet,
@@ -12,6 +11,9 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useMemo } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChevronLeft, Dumbbell, GripVertical, Plus, Swords, Trash2, X } from 'lucide-react-native';
+import DraggableFlatList, { RenderItemParams, ScaleDecorator } from 'react-native-draggable-flatlist';
 import type {
   CreateTemplateItemRequest,
   Discipline,
@@ -27,31 +29,54 @@ import {
   useTemplates,
   useUpdateTemplate,
 } from '../../../src/hooks/useTemplates';
+import { T, F, R, D } from '../../../src/theme/colors';
+import { withAlpha } from '../../../src/lib/color';
+
+interface PendingItem extends CreateTemplateItemRequest {
+  _localId: string;
+  _displayName: string;
+}
+
+type DraggableItem =
+  | { kind: 'pending'; item: PendingItem }
+  | { kind: 'existing'; item: TemplateItemWithDetails };
+
+function itemKey(d: DraggableItem) {
+  return d.kind === 'pending' ? d.item._localId : d.item.id;
+}
+
+// ---- Item Row ----
 
 interface ItemRowProps {
   name: string;
   kind: 'exercise' | 'martial_arts';
+  drag: () => void;
+  isActive: boolean;
   onRemove: () => void;
 }
 
-function ItemRow({ name, kind, onRemove }: ItemRowProps) {
-  const badgeColor = kind === 'exercise' ? '#3b82f6' : '#8b5cf6';
-  const badgeLabel = kind === 'exercise' ? 'GYM' : 'MA';
-
+function ItemRow({ name, kind, drag, isActive, onRemove }: ItemRowProps) {
   return (
-    <View style={styles.itemRow}>
-      <View style={[styles.kindBadge, { backgroundColor: badgeColor }]}>
-        <Text style={styles.kindBadgeText}>{badgeLabel}</Text>
+    <View style={[styles.itemRow, isActive && styles.itemRowActive]}>
+      <TouchableOpacity onLongPress={drag} delayLongPress={150} style={styles.gripHandle}>
+        <GripVertical size={16} color={T.muted} strokeWidth={1.8} />
+      </TouchableOpacity>
+      <View style={[styles.kindBadge, kind === 'martial_arts' && styles.kindBadgeMat]}>
+        {kind === 'martial_arts' ? (
+          <Swords size={13} color="#a78bfa" strokeWidth={1.8} />
+        ) : (
+          <Dumbbell size={13} color={T.textDim} strokeWidth={1.8} />
+        )}
       </View>
-      <Text style={styles.itemName} numberOfLines={1}>
-        {name}
-      </Text>
-      <TouchableOpacity onPress={onRemove} style={styles.removeButton}>
-        <Text style={styles.removeText}>Remove</Text>
+      <Text style={styles.itemName} numberOfLines={1}>{name}</Text>
+      <TouchableOpacity onPress={onRemove} style={styles.removeButton} activeOpacity={0.7}>
+        <X size={14} color={T.danger} strokeWidth={2.5} />
       </TouchableOpacity>
     </View>
   );
 }
+
+// ---- Pick Exercise Modal ----
 
 interface PickExerciseModalProps {
   visible: boolean;
@@ -87,26 +112,27 @@ function PickExerciseModal({ visible, onClose, onPick }: PickExerciseModalProps)
           style={styles.searchInput}
           value={search}
           onChangeText={setSearch}
-          placeholder="Search exercises..."
+          placeholder="Search exercises…"
+          placeholderTextColor={T.muted}
           clearButtonMode="while-editing"
           returnKeyType="search"
+          selectionColor={T.primary}
         />
 
         {isLoading ? (
           <View style={styles.modalCentered}>
-            <ActivityIndicator size="large" color="#3b82f6" />
+            <ActivityIndicator size="large" color={T.primary} />
           </View>
         ) : (
-          <FlatList
+          <DraggableFlatList
             data={exercises ?? []}
             keyExtractor={(item) => item.id}
+            onDragEnd={() => {}}
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.pickRow}
-                onPress={() => {
-                  onPick(item);
-                  handleClose();
-                }}
+                onPress={() => { onPick(item); handleClose(); }}
+                activeOpacity={0.7}
               >
                 <Text style={styles.pickRowName}>{item.name}</Text>
                 <Text style={styles.pickRowType}>{item.type}</Text>
@@ -124,6 +150,8 @@ function PickExerciseModal({ visible, onClose, onPick }: PickExerciseModalProps)
     </Modal>
   );
 }
+
+// ---- Pick Discipline Modal ----
 
 interface PickDisciplineModalProps {
   visible: boolean;
@@ -151,19 +179,18 @@ function PickDisciplineModal({ visible, onClose, onPick }: PickDisciplineModalPr
 
         {isLoading ? (
           <View style={styles.modalCentered}>
-            <ActivityIndicator size="large" color="#3b82f6" />
+            <ActivityIndicator size="large" color={T.primary} />
           </View>
         ) : (
-          <FlatList
+          <DraggableFlatList
             data={disciplines ?? []}
             keyExtractor={(item) => item.id}
+            onDragEnd={() => {}}
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={styles.pickRow}
-                onPress={() => {
-                  onPick(item);
-                  onClose();
-                }}
+                onPress={() => { onPick(item); onClose(); }}
+                activeOpacity={0.7}
               >
                 <Text style={styles.pickRowName}>{item.name}</Text>
                 <Text style={styles.pickRowType}>{item.category}</Text>
@@ -182,14 +209,12 @@ function PickDisciplineModal({ visible, onClose, onPick }: PickDisciplineModalPr
   );
 }
 
-interface PendingItem extends CreateTemplateItemRequest {
-  _localId: string;
-  _displayName: string;
-}
+// ---- Main Screen ----
 
 export default function TemplateEditorScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const isNew = id === 'new';
 
   const { data: templates, isLoading: templatesLoading } = useTemplates();
@@ -252,65 +277,74 @@ export default function TemplateEditorScreen() {
 
   function handleAddExercise(exercise: Exercise) {
     if (isNew) {
-      const item: PendingItem = {
-        _localId: `${Date.now()}-${exercise.id}`,
-        _displayName: exercise.name,
-        kind: 'exercise',
-        exerciseId: exercise.id,
-        disciplineId: null,
-      };
-      setPendingItems((prev) => [...prev, item]);
+      setPendingItems((prev) => [
+        ...prev,
+        {
+          _localId: `${Date.now()}-${exercise.id}`,
+          _displayName: exercise.name,
+          kind: 'exercise',
+          exerciseId: exercise.id,
+          disciplineId: null,
+        },
+      ]);
     } else if (existingTemplate) {
       addItem.mutate(
         { templateId: existingTemplate.id, kind: 'exercise', exerciseId: exercise.id },
-        {
-          onError: (err) => {
-            Alert.alert('Error', err.message ?? 'Failed to add exercise.');
-          },
-        },
+        { onError: (err) => Alert.alert('Error', err.message ?? 'Failed to add exercise.') },
       );
     }
   }
 
   function handleAddDiscipline(discipline: Discipline) {
     if (isNew) {
-      const item: PendingItem = {
-        _localId: `${Date.now()}-${discipline.id}`,
-        _displayName: discipline.name,
-        kind: 'martial_arts',
-        exerciseId: null,
-        disciplineId: discipline.id,
-      };
-      setPendingItems((prev) => [...prev, item]);
-    } else if (existingTemplate) {
-      addItem.mutate(
+      setPendingItems((prev) => [
+        ...prev,
         {
-          templateId: existingTemplate.id,
+          _localId: `${Date.now()}-${discipline.id}`,
+          _displayName: discipline.name,
           kind: 'martial_arts',
+          exerciseId: null,
           disciplineId: discipline.id,
         },
-        {
-          onError: (err) => {
-            Alert.alert('Error', err.message ?? 'Failed to add discipline.');
-          },
-        },
+      ]);
+    } else if (existingTemplate) {
+      addItem.mutate(
+        { templateId: existingTemplate.id, kind: 'martial_arts', disciplineId: discipline.id },
+        { onError: (err) => Alert.alert('Error', err.message ?? 'Failed to add discipline.') },
       );
     }
   }
 
-  function handleRemovePendingItem(localId: string) {
-    setPendingItems((prev) => prev.filter((i) => i._localId !== localId));
-  }
+  // Draggable items list (new templates only — existing items don't support reorder without API)
+  const draggableItems: DraggableItem[] = isNew
+    ? pendingItems.map((item) => ({ kind: 'pending', item }))
+    : (existingTemplate?.items ?? []).map((item) => ({ kind: 'existing', item }));
 
-  function handleRemoveExistingItem(item: TemplateItemWithDetails) {
-    if (!existingTemplate) return;
-    removeItem.mutate(
-      { templateId: existingTemplate.id, itemId: item.id },
-      {
-        onError: (err) => {
-          Alert.alert('Error', err.message ?? 'Failed to remove item.');
-        },
-      },
+  function renderDraggableItem({ item: d, drag, isActive }: RenderItemParams<DraggableItem>) {
+    const name = d.kind === 'pending' ? d.item._displayName : (d.item.exerciseName ?? d.item.disciplineName ?? 'Unknown');
+    const kind = d.kind === 'pending' ? d.item.kind : d.item.kind;
+
+    function handleRemove() {
+      if (d.kind === 'pending') {
+        setPendingItems((prev) => prev.filter((i) => i._localId !== d.item._localId));
+      } else if (existingTemplate) {
+        removeItem.mutate(
+          { templateId: existingTemplate.id, itemId: d.item.id },
+          { onError: (err) => Alert.alert('Error', err.message ?? 'Failed to remove item.') },
+        );
+      }
+    }
+
+    return (
+      <ScaleDecorator>
+        <ItemRow
+          name={name}
+          kind={kind}
+          drag={drag}
+          isActive={isActive}
+          onRemove={handleRemove}
+        />
+      </ScaleDecorator>
     );
   }
 
@@ -318,116 +352,121 @@ export default function TemplateEditorScreen() {
 
   if (!isNew && templatesLoading && !initialised) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3b82f6" />
+      <View style={[styles.loadingContainer, { paddingTop: insets.top }]}>
+        <ActivityIndicator size="large" color={T.primary} />
       </View>
     );
   }
 
-  const existingItems: TemplateItemWithDetails[] = existingTemplate?.items ?? [];
-
   return (
-    <View style={styles.container}>
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backText}>Back</Text>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <ChevronLeft size={22} color={T.text} strokeWidth={2} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>
-          {screenTitle}
-        </Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>{screenTitle}</Text>
         <TouchableOpacity
           onPress={handleSave}
           style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
           disabled={isSaving}
         >
           {isSaving ? (
-            <ActivityIndicator color="#fff" size="small" />
+            <ActivityIndicator color={T.onPrimary} size="small" />
           ) : (
             <Text style={styles.saveButtonText}>Save</Text>
           )}
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scrollView} keyboardShouldPersistTaps="handled">
-        <View style={styles.section}>
-          <Text style={styles.label}>Name *</Text>
-          <TextInput
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="e.g. Push Day"
-            returnKeyType="next"
-          />
-        </View>
+      <ScrollView
+        style={{ flex: 1 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 48 }}
+      >
+        <View style={styles.fields}>
+          <View style={styles.field}>
+            <Text style={styles.label}>Name *</Text>
+            <TextInput
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="e.g. Push Day"
+              placeholderTextColor={T.muted}
+              returnKeyType="next"
+              selectionColor={T.primary}
+            />
+          </View>
 
-        <View style={styles.section}>
-          <Text style={styles.label}>Day Label</Text>
-          <TextInput
-            style={styles.input}
-            value={dayLabel}
-            onChangeText={setDayLabel}
-            placeholder="e.g. Monday, Push Day"
-            returnKeyType="next"
-          />
-        </View>
+          <View style={styles.field}>
+            <Text style={styles.label}>Day Label</Text>
+            <TextInput
+              style={styles.input}
+              value={dayLabel}
+              onChangeText={setDayLabel}
+              placeholder="e.g. Monday, Push Day"
+              placeholderTextColor={T.muted}
+              returnKeyType="next"
+              selectionColor={T.primary}
+            />
+          </View>
 
-        <View style={styles.section}>
-          <Text style={styles.label}>Notes</Text>
-          <TextInput
-            style={[styles.input, styles.notesInput]}
-            value={notes}
-            onChangeText={setNotes}
-            placeholder="Optional notes..."
-            multiline
-            returnKeyType="default"
-          />
+          <View style={styles.field}>
+            <Text style={styles.label}>Notes</Text>
+            <TextInput
+              style={[styles.input, styles.notesInput]}
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Optional notes…"
+              placeholderTextColor={T.muted}
+              multiline
+              returnKeyType="default"
+              selectionColor={T.primary}
+            />
+          </View>
         </View>
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionHeaderText}>Items</Text>
+          <Text style={styles.sectionHeaderHint}>Hold grip to reorder</Text>
         </View>
 
-        {isNew
-          ? pendingItems.map((item) => (
-              <ItemRow
-                key={item._localId}
-                name={item._displayName}
-                kind={item.kind}
-                onRemove={() => handleRemovePendingItem(item._localId)}
-              />
-            ))
-          : existingItems.map((item) => (
-              <ItemRow
-                key={item.id}
-                name={item.exerciseName ?? item.disciplineName ?? 'Unknown'}
-                kind={item.kind}
-                onRemove={() => handleRemoveExistingItem(item)}
-              />
-            ))}
-
-        {isNew && pendingItems.length === 0 && existingItems.length === 0 && (
-          <Text style={styles.emptyItemsText}>No items yet. Add exercises or disciplines below.</Text>
-        )}
-        {!isNew && existingItems.length === 0 && (
-          <Text style={styles.emptyItemsText}>No items yet. Add exercises or disciplines below.</Text>
+        {draggableItems.length > 0 ? (
+          <DraggableFlatList
+            data={draggableItems}
+            keyExtractor={itemKey}
+            onDragEnd={({ data }) => {
+              if (isNew) {
+                setPendingItems(data.filter((d) => d.kind === 'pending').map((d) => (d as { kind: 'pending'; item: PendingItem }).item));
+              }
+            }}
+            renderItem={renderDraggableItem}
+            scrollEnabled={false}
+          />
+        ) : (
+          <Text style={styles.emptyItemsText}>
+            No items yet. Add exercises or disciplines below.
+          </Text>
         )}
 
         <View style={styles.addItemsRow}>
           <TouchableOpacity
             style={styles.addItemButton}
             onPress={() => setShowExercisePicker(true)}
+            activeOpacity={0.7}
           >
-            <Text style={styles.addItemButtonText}>+ Add Exercise</Text>
+            <Plus size={14} color={T.primary} strokeWidth={2.4} />
+            <Text style={styles.addItemButtonText}>Add Exercise</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.addItemButton}
             onPress={() => setShowDisciplinePicker(true)}
+            activeOpacity={0.7}
           >
-            <Text style={styles.addItemButtonText}>+ Add Discipline</Text>
+            <Plus size={14} color={T.primary} strokeWidth={2.4} />
+            <Text style={styles.addItemButtonText}>Add Discipline</Text>
           </TouchableOpacity>
         </View>
-
-        <View style={styles.bottomSpacer} />
       </ScrollView>
 
       <PickExerciseModal
@@ -435,7 +474,6 @@ export default function TemplateEditorScreen() {
         onClose={() => setShowExercisePicker(false)}
         onPick={handleAddExercise}
       />
-
       <PickDisciplineModal
         visible={showDisciplinePicker}
         onClose={() => setShowDisciplinePicker(false)}
@@ -446,226 +484,104 @@ export default function TemplateEditorScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
-  loadingContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#fff',
-  },
+  screen: { flex: 1, backgroundColor: T.bg },
+  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: T.bg },
+
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 56,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e7eb',
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: T.border,
   },
-  headerTitle: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginHorizontal: 8,
-  },
-  backButton: {
-    minWidth: 52,
-  },
-  backText: {
-    fontSize: 16,
-    color: '#3b82f6',
-  },
+  backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { flex: 1, fontFamily: F.uiSemi, fontSize: 19, color: T.text, letterSpacing: -0.2 },
   saveButton: {
-    minWidth: 52,
-    alignItems: 'flex-end',
-    backgroundColor: '#3b82f6',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    backgroundColor: T.primary, borderRadius: R.sm,
+    paddingHorizontal: 14, paddingVertical: 7,
   },
-  saveButtonDisabled: {
-    opacity: 0.6,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  section: {
-    paddingHorizontal: 16,
-    paddingTop: 20,
-  },
+  saveButtonDisabled: { opacity: 0.55 },
+  saveButtonText: { fontFamily: F.uiBold, fontSize: 14, color: T.onPrimary },
+
+  fields: { padding: D.pad, gap: D.stack },
+  field: { gap: 8 },
   label: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 6,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontFamily: F.uiBold, fontSize: 11, color: T.textDim,
+    textTransform: 'uppercase', letterSpacing: 0.8,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: '#111827',
-    backgroundColor: '#fff',
+    borderWidth: 1, borderColor: T.border,
+    borderRadius: R.sm, backgroundColor: T.surface,
+    paddingHorizontal: 12, paddingVertical: 11,
+    fontFamily: F.uiMed, fontSize: 15, color: T.text,
   },
-  notesInput: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
+  notesInput: { minHeight: 80, textAlignVertical: 'top' },
+
   sectionHeader: {
-    paddingHorizontal: 16,
-    paddingTop: 28,
-    paddingBottom: 8,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e7eb',
-    marginBottom: 4,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: D.pad, paddingTop: 24, paddingBottom: 8,
+    borderBottomWidth: 1, borderBottomColor: T.border,
   },
   sectionHeaderText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#374151',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontFamily: F.uiBold, fontSize: 11, color: T.textDim,
+    textTransform: 'uppercase', letterSpacing: 1.0,
   },
+  sectionHeaderHint: { fontFamily: F.uiMed, fontSize: 11, color: T.muted },
+
+  // Item rows
   itemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    gap: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#f3f4f6',
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: D.pad, paddingVertical: 13,
+    borderBottomWidth: 1, borderBottomColor: T.border,
+    backgroundColor: T.bg,
   },
+  itemRowActive: { backgroundColor: T.surface },
+  gripHandle: { width: 24, alignItems: 'center' },
   kindBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 4,
+    width: 30, height: 30, borderRadius: R.sm,
+    backgroundColor: T.surface2, alignItems: 'center', justifyContent: 'center',
   },
-  kindBadgeText: {
-    fontSize: 10,
-    color: '#fff',
-    fontWeight: '700',
-    letterSpacing: 0.4,
-  },
-  itemName: {
-    flex: 1,
-    fontSize: 15,
-    color: '#111827',
-    fontWeight: '500',
-  },
+  kindBadgeMat: { backgroundColor: withAlpha('#a78bfa', 0.12) },
+  itemName: { flex: 1, fontFamily: F.uiMed, fontSize: 15, color: T.text },
   removeButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#fca5a5',
+    width: 28, height: 28, borderRadius: R.sm,
+    backgroundColor: withAlpha(T.danger, 0.1),
+    alignItems: 'center', justifyContent: 'center',
   },
-  removeText: {
-    fontSize: 12,
-    color: '#ef4444',
-    fontWeight: '500',
-  },
+
   emptyItemsText: {
-    fontSize: 14,
-    color: '#9ca3af',
-    textAlign: 'center',
-    paddingVertical: 20,
-    paddingHorizontal: 24,
+    fontFamily: F.uiMed, fontSize: 14, color: T.muted,
+    textAlign: 'center', paddingVertical: 24, paddingHorizontal: 24,
   },
-  addItemsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-  },
+
+  addItemsRow: { flexDirection: 'row', gap: 10, padding: D.pad },
   addItemButton: {
-    flex: 1,
-    backgroundColor: '#f3f4f6',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    borderRadius: R.sm, borderWidth: 1, borderColor: withAlpha(T.primary, 0.35),
+    paddingVertical: 12, backgroundColor: withAlpha(T.primary, 0.06),
   },
-  addItemButtonText: {
-    fontSize: 14,
-    color: '#374151',
-    fontWeight: '600',
-  },
-  bottomSpacer: {
-    height: 40,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#fff',
-    paddingTop: 24,
-  },
+  addItemButtonText: { fontFamily: F.uiMed, fontSize: 14, color: T.primary },
+
+  // Modals
+  modalContainer: { flex: 1, backgroundColor: T.bg, paddingTop: 24 },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    marginBottom: 16,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 24, marginBottom: 16,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  modalCancel: {
-    fontSize: 16,
-    color: '#6b7280',
-  },
+  modalTitle: { fontFamily: F.uiBold, fontSize: 20, color: T.text },
+  modalCancel: { fontFamily: F.uiMed, fontSize: 16, color: T.textDim },
   searchInput: {
-    backgroundColor: '#f3f4f6',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 15,
-    marginHorizontal: 16,
-    marginBottom: 12,
+    backgroundColor: T.surface, borderRadius: R.sm,
+    borderWidth: 1, borderColor: T.border,
+    paddingHorizontal: 12, paddingVertical: 9,
+    fontFamily: F.uiMed, fontSize: 14, color: T.text,
+    marginHorizontal: D.pad, marginBottom: 12,
   },
   pickRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: D.pad, paddingVertical: 14,
   },
-  pickRowName: {
-    fontSize: 16,
-    color: '#111827',
-    fontWeight: '500',
-  },
-  pickRowType: {
-    fontSize: 13,
-    color: '#6b7280',
-  },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#e5e7eb',
-    marginLeft: 16,
-  },
-  modalCentered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 48,
-  },
-  emptyText: {
-    fontSize: 15,
-    color: '#9ca3af',
-  },
+  pickRowName: { fontFamily: F.uiMed, fontSize: 15, color: T.text },
+  pickRowType: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
+  separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad },
+  modalCentered: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
+  emptyText: { fontFamily: F.uiMed, fontSize: 15, color: T.muted },
 });

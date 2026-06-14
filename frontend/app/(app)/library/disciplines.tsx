@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ChevronLeft, ChevronRight, Plus, Swords, Trash2 } from 'lucide-react-native';
 import type { Discipline, DisciplineCat } from '@app/shared';
 import {
   useCreateDiscipline,
@@ -18,6 +20,8 @@ import {
   useDisciplines,
 } from '../../../src/hooks/useDisciplines';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
+import { T, F, R, D } from '../../../src/theme/colors';
+import { withAlpha } from '../../../src/lib/color';
 
 const CATEGORY_OPTIONS: { label: string; value: DisciplineCat }[] = [
   { label: 'Grappling', value: 'grappling' },
@@ -25,19 +29,11 @@ const CATEGORY_OPTIONS: { label: string; value: DisciplineCat }[] = [
   { label: 'Mixed', value: 'mixed' },
 ];
 
-const CATEGORY_BADGE_COLOR: Record<DisciplineCat, string> = {
-  grappling: '#7c3aed',
-  striking: '#dc2626',
-  mixed: '#d97706',
+const CATEGORY_COLOR: Record<DisciplineCat, string> = {
+  grappling: '#a78bfa',
+  striking: T.danger,
+  mixed: T.gold,
 };
-
-function CategoryBadge({ category }: { category: DisciplineCat }) {
-  return (
-    <View style={[styles.badge, { backgroundColor: CATEGORY_BADGE_COLOR[category] }]}>
-      <Text style={styles.badgeText}>{category}</Text>
-    </View>
-  );
-}
 
 interface DisciplineRowProps {
   discipline: Discipline;
@@ -46,31 +42,34 @@ interface DisciplineRowProps {
 }
 
 function DisciplineRow({ discipline, isOwned, onDelete }: DisciplineRowProps) {
+  const catColor = CATEGORY_COLOR[discipline.category];
+
   function handleDelete() {
     Alert.alert(
       'Delete discipline',
       `Remove "${discipline.name}"? This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => onDelete(discipline.id),
-        },
+        { text: 'Delete', style: 'destructive', onPress: () => onDelete(discipline.id) },
       ],
     );
   }
 
   return (
     <View style={styles.row}>
-      <View style={styles.rowLeft}>
-        <Text style={styles.rowName}>{discipline.name}</Text>
-        <CategoryBadge category={discipline.category} />
+      <View style={[styles.iconAvatar, { backgroundColor: withAlpha(catColor, 0.14) }]}>
+        <Swords size={18} color={catColor} strokeWidth={1.8} />
       </View>
-      {isOwned && (
-        <TouchableOpacity onPress={handleDelete} style={styles.deleteButton}>
-          <Text style={styles.deleteText}>Delete</Text>
+      <View style={styles.rowContent}>
+        <Text style={styles.rowName}>{discipline.name}</Text>
+        <Text style={[styles.rowCat, { color: catColor }]}>{discipline.category}</Text>
+      </View>
+      {isOwned ? (
+        <TouchableOpacity onPress={handleDelete} style={styles.deleteButton} activeOpacity={0.7}>
+          <Trash2 size={15} color={T.danger} strokeWidth={1.8} />
         </TouchableOpacity>
+      ) : (
+        <ChevronRight size={16} color={T.muted} />
       )}
     </View>
   );
@@ -133,49 +132,44 @@ function AddDisciplineModal({ visible, onClose }: AddDisciplineModalProps) {
             value={name}
             onChangeText={setName}
             placeholder="e.g. Brazilian Jiu-Jitsu"
+            placeholderTextColor={T.muted}
             autoFocus
             returnKeyType="next"
+            selectionColor={T.primary}
           />
         </View>
 
         <View style={styles.field}>
           <Text style={styles.label}>Category *</Text>
           <View style={styles.categoryOptions}>
-            {CATEGORY_OPTIONS.map(({ label, value }) => (
-              <TouchableOpacity
-                key={value}
-                style={[
-                  styles.categoryButton,
-                  category === value && {
-                    backgroundColor: CATEGORY_BADGE_COLOR[value],
-                    borderColor: CATEGORY_BADGE_COLOR[value],
-                  },
-                ]}
-                onPress={() => setCategory(value)}
-              >
-                <Text
+            {CATEGORY_OPTIONS.map(({ label, value }) => {
+              const active = category === value;
+              const color = CATEGORY_COLOR[value];
+              return (
+                <TouchableOpacity
+                  key={value}
                   style={[
-                    styles.categoryButtonText,
-                    category === value && styles.categoryButtonTextActive,
+                    styles.categoryButton,
+                    active && { backgroundColor: withAlpha(color, 0.18), borderColor: color },
                   ]}
+                  onPress={() => setCategory(value)}
+                  activeOpacity={0.7}
                 >
-                  {label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Text style={[styles.categoryButtonText, active && { color }]}>{label}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </View>
 
         <TouchableOpacity
-          style={[
-            styles.submitButton,
-            createDiscipline.isPending && styles.submitButtonDisabled,
-          ]}
+          style={[styles.submitButton, createDiscipline.isPending && styles.submitButtonDisabled]}
           onPress={handleSubmit}
           disabled={createDiscipline.isPending}
+          activeOpacity={0.8}
         >
           {createDiscipline.isPending ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={T.onPrimary} />
           ) : (
             <Text style={styles.submitText}>Add Discipline</Text>
           )}
@@ -187,6 +181,7 @@ function AddDisciplineModal({ visible, onClose }: AddDisciplineModalProps) {
 
 export default function DisciplinesScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { data: currentUser } = useCurrentUser();
   const [showAdd, setShowAdd] = useState(false);
 
@@ -195,37 +190,36 @@ export default function DisciplinesScreen() {
 
   function handleDelete(id: string) {
     deleteDiscipline.mutate(id, {
-      onError: (err) => {
-        Alert.alert('Error', err.message ?? 'Failed to delete discipline.');
-      },
+      onError: (err) => Alert.alert('Error', err.message ?? 'Failed to delete discipline.'),
     });
   }
 
   const list = disciplines ?? [];
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backText}>Back</Text>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <ChevronLeft size={22} color={T.text} strokeWidth={2} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Disciplines</Text>
-        <TouchableOpacity onPress={() => setShowAdd(true)} style={styles.addButton}>
-          <Text style={styles.addButtonText}>+ Add</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>Disciplines</Text>
+          {list.length > 0 && (
+            <Text style={styles.headerSub}>{list.length} discipline{list.length !== 1 ? 's' : ''}</Text>
+          )}
+        </View>
+        <TouchableOpacity style={styles.addBtn} onPress={() => setShowAdd(true)}>
+          <Plus size={18} color={T.onPrimary} strokeWidth={2.4} />
         </TouchableOpacity>
       </View>
 
       {isLoading && (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#7c3aed" />
-        </View>
+        <View style={styles.centered}><ActivityIndicator size="large" color={T.primary} /></View>
       )}
 
       {isError && (
         <View style={styles.centered}>
-          <Text style={styles.errorText}>
-            {error?.message ?? 'Failed to load disciplines.'}
-          </Text>
+          <Text style={styles.errorText}>{error?.message ?? 'Failed to load disciplines.'}</Text>
         </View>
       )}
 
@@ -246,7 +240,11 @@ export default function DisciplinesScreen() {
               <Text style={styles.emptyText}>No disciplines found.</Text>
             </View>
           }
-          contentContainerStyle={list.length === 0 ? styles.emptyList : undefined}
+          contentContainerStyle={[
+            list.length === 0 && { flex: 1 },
+            { paddingBottom: insets.bottom + 32 },
+          ]}
+          showsVerticalScrollIndicator={false}
         />
       )}
 
@@ -256,179 +254,71 @@ export default function DisciplinesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-  },
+  screen: { flex: 1, backgroundColor: T.bg },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingTop: 56,
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: '#e5e7eb',
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    paddingHorizontal: 12, paddingVertical: 10,
+    borderBottomWidth: 1, borderBottomColor: T.border,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '700',
+  backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontFamily: F.uiSemi, fontSize: 19, color: T.text, letterSpacing: -0.2 },
+  headerSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 1 },
+  addBtn: {
+    width: 36, height: 36, borderRadius: R.sm,
+    backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center',
   },
-  backButton: {
-    minWidth: 52,
-  },
-  backText: {
-    fontSize: 16,
-    color: '#7c3aed',
-  },
-  addButton: {
-    minWidth: 52,
-    alignItems: 'flex-end',
-  },
-  addButtonText: {
-    fontSize: 16,
-    color: '#7c3aed',
-    fontWeight: '600',
-  },
+
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
+    paddingHorizontal: D.pad, paddingVertical: 13,
   },
-  rowLeft: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
+  iconAvatar: {
+    width: 40, height: 40, borderRadius: R.sm,
+    alignItems: 'center', justifyContent: 'center',
   },
-  rowName: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#111827',
-  },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  badgeText: {
-    fontSize: 11,
-    color: '#fff',
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.4,
-  },
+  rowContent: { flex: 1 },
+  rowName: { fontFamily: F.uiMed, fontSize: 15, color: T.text, marginBottom: 2 },
+  rowCat: { fontFamily: F.uiBold, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5 },
   deleteButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: '#fca5a5',
+    width: 32, height: 32, alignItems: 'center', justifyContent: 'center',
+    borderRadius: R.sm, backgroundColor: withAlpha(T.danger, 0.1),
   },
-  deleteText: {
-    fontSize: 13,
-    color: '#ef4444',
-    fontWeight: '500',
-  },
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: '#e5e7eb',
-    marginLeft: 16,
-  },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 48,
-  },
-  emptyList: {
-    flex: 1,
-  },
-  emptyText: {
-    fontSize: 15,
-    color: '#9ca3af',
-  },
-  errorText: {
-    fontSize: 15,
-    color: '#ef4444',
-    textAlign: 'center',
-    paddingHorizontal: 24,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: '#fff',
-    padding: 24,
-  },
+
+  separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad + 40 + 12 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
+  emptyText: { fontFamily: F.uiMed, fontSize: 15, color: T.muted },
+  errorText: { fontFamily: F.uiMed, fontSize: 15, color: T.danger, textAlign: 'center', paddingHorizontal: 24 },
+
+  // Modal
+  modalContainer: { flex: 1, backgroundColor: T.bg, padding: 24, paddingTop: 32 },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     marginBottom: 28,
   },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  modalCancel: {
-    fontSize: 16,
-    color: '#6b7280',
-  },
-  field: {
-    marginBottom: 20,
-  },
+  modalTitle: { fontFamily: F.uiBold, fontSize: 20, color: T.text },
+  modalCancel: { fontFamily: F.uiMed, fontSize: 16, color: T.textDim },
+  field: { marginBottom: 20 },
   label: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#374151',
-    marginBottom: 6,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    fontFamily: F.uiBold, fontSize: 11, color: T.textDim,
+    textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8,
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: '#111827',
+    borderWidth: 1, borderColor: T.border,
+    borderRadius: R.sm, backgroundColor: T.surface,
+    paddingHorizontal: 12, paddingVertical: 11,
+    fontFamily: F.uiMed, fontSize: 15, color: T.text,
   },
-  categoryOptions: {
-    flexDirection: 'row',
-    gap: 8,
-  },
+  categoryOptions: { flexDirection: 'row', gap: 8 },
   categoryButton: {
-    flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    backgroundColor: '#fff',
+    flex: 1, paddingVertical: 11, alignItems: 'center',
+    borderRadius: R.sm, borderWidth: 1, borderColor: T.border,
+    backgroundColor: T.surface,
   },
-  categoryButtonText: {
-    fontSize: 14,
-    color: '#6b7280',
-    fontWeight: '500',
-  },
-  categoryButtonTextActive: {
-    color: '#fff',
-    fontWeight: '600',
-  },
+  categoryButtonText: { fontFamily: F.uiMed, fontSize: 14, color: T.textDim },
   submitButton: {
-    marginTop: 8,
-    backgroundColor: '#7c3aed',
-    borderRadius: 10,
-    paddingVertical: 14,
-    alignItems: 'center',
+    marginTop: 8, backgroundColor: T.primary,
+    borderRadius: R.card, paddingVertical: 14, alignItems: 'center',
   },
-  submitButtonDisabled: {
-    opacity: 0.6,
-  },
-  submitText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '700',
-  },
+  submitButtonDisabled: { opacity: 0.55 },
+  submitText: { fontFamily: F.uiBold, fontSize: 16, color: T.onPrimary },
 });

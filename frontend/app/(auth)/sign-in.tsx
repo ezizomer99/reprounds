@@ -1,9 +1,12 @@
-import { StyleSheet, Text, TouchableOpacity, View, ActivityIndicator } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import { useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiPost } from '../../src/lib/api';
 import { setSessionToken } from '../../src/lib/auth';
+import { GlimaMark } from '../../src/components/GlimaMark';
+import { T, F, R } from '../../src/theme/colors';
 import type { User } from '@app/shared';
 
 interface AuthResponse {
@@ -13,6 +16,7 @@ interface AuthResponse {
 
 export default function SignInScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,23 +52,30 @@ export default function SignInScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Glima</Text>
-      <Text style={styles.subtitle}>Track your training</Text>
+    <View style={[styles.container, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
+      <View style={styles.lockup}>
+        <GlimaMark size={72} color={T.text} />
+        <View style={styles.rule} />
+        <Text style={styles.wordmark}>GLIMA</Text>
+        <Text style={styles.tagline}>Movement Tracker</Text>
+      </View>
 
-      {error && <Text style={styles.error}>{error}</Text>}
+      <View style={styles.bottom}>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
-      <TouchableOpacity
-        style={styles.button}
-        onPress={handleSignIn}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Sign in with Google</Text>
-        )}
-      </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.googleBtn, loading && styles.googleBtnDisabled]}
+          onPress={handleSignIn}
+          disabled={loading}
+          activeOpacity={0.75}
+        >
+          {loading ? (
+            <ActivityIndicator color={T.text} />
+          ) : (
+            <Text style={styles.googleBtnText}>Continue with Google</Text>
+          )}
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -72,37 +83,64 @@ export default function SignInScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: T.bg,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 32,
+  },
+  lockup: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 24,
-    backgroundColor: '#fff',
+    gap: 16,
   },
-  title: {
-    fontSize: 40,
-    fontWeight: 'bold',
-    marginBottom: 8,
+  rule: {
+    width: 32,
+    height: 1,
+    backgroundColor: T.text,
+    opacity: 0.18,
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 48,
+  wordmark: {
+    fontFamily: F.wordmark,
+    fontSize: 52,
+    color: T.text,
+    letterSpacing: 12,
+    paddingLeft: 12,
+  },
+  tagline: {
+    fontFamily: F.uiMed,
+    fontSize: 12,
+    color: T.textDim,
+    letterSpacing: 3,
+    textTransform: 'uppercase',
+    paddingLeft: 3,
+  },
+  bottom: {
+    width: '100%',
+    gap: 12,
   },
   error: {
-    color: '#c00',
-    marginBottom: 16,
+    fontFamily: F.ui,
+    fontSize: 14,
+    color: T.danger,
     textAlign: 'center',
   },
-  button: {
-    backgroundColor: '#1a73e8',
-    paddingVertical: 14,
-    paddingHorizontal: 32,
-    borderRadius: 8,
-    minWidth: 220,
+  googleBtn: {
+    height: 54,
+    backgroundColor: T.surface,
+    borderWidth: 1,
+    borderColor: T.borderStrong,
+    borderRadius: R.sm,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  buttonText: {
-    color: '#fff',
+  googleBtnDisabled: {
+    opacity: 0.5,
+  },
+  googleBtnText: {
+    fontFamily: F.uiSemi,
     fontSize: 16,
-    fontWeight: '600',
+    color: T.text,
+    letterSpacing: -0.2,
   },
 });
