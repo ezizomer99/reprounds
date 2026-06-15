@@ -26,19 +26,42 @@ export interface Discipline {
   createdAt: string;
 }
 
-export interface Template {
+export interface Routine {
   id: string;
   userId: string;
   name: string;
   dayLabel: string | null;
   notes: string | null;
+  // Optional recurring schedule. A routine with rrule === null is unscheduled
+  // (run ad-hoc); a routine with rrule set recurs on the calendar.
+  rrule: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  timeOfDay: string | null;
   createdAt: string;
-  items?: TemplateItem[];
+  items?: RoutineItem[];
 }
 
-export interface TemplateItem {
+// A single planned set in a routine exercise. Mirrors a logged StrengthSet so the
+// plan can be tracked 1:1 during a workout. For conditioning exercises, plan
+// durationSeconds instead of reps.
+export interface PlannedSet {
+  setType: SetType;
+  reps?: number | null;
+  weight?: number | null;
+  durationSeconds?: number | null;
+}
+
+// Planned target for a routine exercise item. Stored in routine_items.target.
+// `sets` is an ordered list (warm-ups first, then working sets) that pre-fills
+// the live workout when a session is started from the routine.
+export interface RoutineItemTarget {
+  sets?: PlannedSet[];
+}
+
+export interface RoutineItem {
   id: string;
-  templateId: string;
+  routineId: string;
   kind: EntryKind;
   exerciseId: string | null;
   disciplineId: string | null;
@@ -48,22 +71,10 @@ export interface TemplateItem {
   target: Record<string, unknown> | null;
 }
 
-export interface ScheduleRule {
-  id: string;
-  userId: string;
-  templateId: string;
-  rrule: string;
-  startDate: string;
-  endDate: string | null;
-  timeOfDay: string | null;
-  createdAt: string;
-}
-
 export interface Session {
   id: string;
   userId: string;
-  templateId: string | null;
-  scheduleRuleId: string | null;
+  routineId: string | null;
   date: string;
   status: SessionStatus;
   startedAt: string | null;
@@ -103,7 +114,7 @@ export interface StrengthSet {
 
 export type CalendarItem =
   | { kind: 'real'; session: Session }
-  | { kind: 'virtual'; date: string; scheduleRuleId: string; templateId: string };
+  | { kind: 'virtual'; date: string; routineId: string };
 
 export interface ExerciseListResponse {
   exercises: Exercise[];
@@ -137,20 +148,20 @@ export interface UpdateDisciplineRequest {
   fieldConfig?: FieldConfig;
 }
 
-export interface TemplateItemWithDetails extends TemplateItem {
+export interface RoutineItemWithDetails extends RoutineItem {
   exerciseName: string | null;
   disciplineName: string | null;
 }
 
-export interface TemplateWithItems extends Template {
-  items: TemplateItemWithDetails[];
+export interface RoutineWithItems extends Routine {
+  items: RoutineItemWithDetails[];
 }
 
-export interface TemplateListResponse {
-  templates: TemplateWithItems[];
+export interface RoutineListResponse {
+  routines: RoutineWithItems[];
 }
 
-export interface CreateTemplateItemRequest {
+export interface CreateRoutineItemRequest {
   kind: EntryKind;
   exerciseId?: string | null;
   disciplineId?: string | null;
@@ -160,37 +171,50 @@ export interface CreateTemplateItemRequest {
   target?: Record<string, unknown> | null;
 }
 
-export interface CreateTemplateRequest {
+export interface CreateRoutineRequest {
   name: string;
   dayLabel?: string | null;
   notes?: string | null;
-  items?: CreateTemplateItemRequest[];
+  rrule?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  timeOfDay?: string | null;
+  items?: CreateRoutineItemRequest[];
 }
 
-export interface UpdateTemplateRequest {
+export interface UpdateRoutineRequest {
   name?: string;
   dayLabel?: string | null;
   notes?: string | null;
+  // Schedule fields — set rrule to null to remove a routine from the calendar.
+  rrule?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  timeOfDay?: string | null;
 }
 
-export type AddTemplateItemRequest = CreateTemplateItemRequest;
+export type AddRoutineItemRequest = CreateRoutineItemRequest;
 
-export interface UpdateTemplateItemRequest {
+export interface UpdateRoutineItemRequest {
   orderIndex?: number;
   supersetGroup?: number | null;
   defaultRestSeconds?: number | null;
   target?: Record<string, unknown> | null;
 }
 
-export interface ReorderTemplateItemsRequest {
+export interface ReorderRoutineItemsRequest {
   order: string[];
+}
+
+// Skip a single scheduled occurrence of a routine on a given date.
+export interface SkipOccurrenceRequest {
+  date: string; // ISO date YYYY-MM-DD
 }
 
 // ---- Phase 4: Session Logging ----
 
 export interface CreateSessionRequest {
-  templateId?: string | null;
-  scheduleRuleId?: string | null;
+  routineId?: string | null;
   date: string; // ISO date YYYY-MM-DD
   notes?: string | null;
 }
@@ -273,26 +297,6 @@ export interface ExercisePRsResponse {
 }
 
 // ---- Phase 5: Calendar + Recurrence ----
-
-export interface CreateScheduleRuleRequest {
-  templateId: string;
-  rrule: string;
-  startDate: string;
-  endDate?: string | null;
-  timeOfDay?: string | null;
-}
-
-export interface UpdateScheduleRuleRequest {
-  templateId?: string;
-  rrule?: string;
-  startDate?: string;
-  endDate?: string | null;
-  timeOfDay?: string | null;
-}
-
-export interface ScheduleRuleListResponse {
-  rules: ScheduleRule[];
-}
 
 export interface CalendarResponse {
   items: CalendarItem[];
