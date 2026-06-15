@@ -4,10 +4,10 @@ import { createDb } from '../db';
 import {
   disciplines,
   exercises,
+  routineItems,
   sessionEntries,
   sessions,
   strengthSets,
-  templateItems,
 } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type {
@@ -135,8 +135,7 @@ async function fetchSessionWithEntries(
   return {
     id: session.id,
     userId: session.userId,
-    templateId: session.templateId,
-    scheduleRuleId: session.scheduleRuleId,
+    routineId: session.routineId,
     date: session.date,
     status: session.status,
     startedAt: session.startedAt?.toISOString() ?? null,
@@ -252,8 +251,7 @@ sessionRoutes.get('/', async (c) => {
   const mapped = rows.map((s) => ({
     id: s.id,
     userId: s.userId,
-    templateId: s.templateId ?? null,
-    scheduleRuleId: s.scheduleRuleId ?? null,
+    routineId: s.routineId ?? null,
     date: s.date,
     status: s.status,
     startedAt: s.startedAt?.toISOString() ?? null,
@@ -299,7 +297,7 @@ sessionRoutes.post('/', async (c) => {
       .insert(sessions)
       .values({
         userId,
-        templateId: body.templateId ?? null,
+        routineId: body.routineId ?? null,
         date: body.date,
         status: 'in_progress',
         startedAt: new Date(),
@@ -307,24 +305,50 @@ sessionRoutes.post('/', async (c) => {
       })
       .returning();
 
-    if (body.templateId) {
+    if (body.routineId) {
       const items = await tx
         .select()
-        .from(templateItems)
-        .where(eq(templateItems.templateId, body.templateId))
-        .orderBy(asc(templateItems.orderIndex));
+        .from(routineItems)
+        .where(eq(routineItems.routineId, body.routineId))
+        .orderBy(asc(routineItems.orderIndex));
 
-      if (items.length > 0) {
-        await tx.insert(sessionEntries).values(
-          items.map((item) => ({
+      for (const item of items) {
+        const [entry] = await tx
+          .insert(sessionEntries)
+          .values({
             sessionId: sess.id,
             kind: item.kind,
             exerciseId: item.exerciseId ?? null,
             disciplineId: item.disciplineId ?? null,
             orderIndex: item.orderIndex,
             restSeconds: item.defaultRestSeconds ?? null,
-          })),
-        );
+          })
+          .returning();
+
+        // Pre-fill planned sets for exercises that have a target plan.
+        if (item.kind === 'exercise' && item.target) {
+          const t = item.target as {
+            sets?: Array<{
+              setType?: 'warmup' | 'normal' | 'drop' | 'failure' | 'amrap';
+              reps?: number | null;
+              weight?: number | null;
+              durationSeconds?: number | null;
+            }>;
+          };
+          const planned = Array.isArray(t.sets) ? t.sets.slice(0, 30) : [];
+          if (planned.length > 0) {
+            await tx.insert(strengthSets).values(
+              planned.map((p, i) => ({
+                sessionEntryId: entry.id,
+                setNumber: i + 1,
+                setType: p.setType ?? 'normal',
+                reps: p.durationSeconds != null ? p.durationSeconds : (p.reps ?? null),
+                weight: p.weight != null ? String(p.weight) : null,
+                completed: false,
+              })),
+            );
+          }
+        }
       }
     }
 

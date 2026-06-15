@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
-import { and, eq, gte, isNull, lte, or } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, isNull, lte, or } from 'drizzle-orm';
 import { RRule } from 'rrule';
 import { createDb } from '../db';
-import { scheduleRules, sessions } from '../db/schema';
+import { routines, sessions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { CalendarItem } from '@app/shared';
 
@@ -28,8 +28,7 @@ function mapSession(row: typeof sessions.$inferSelect) {
   return {
     id: row.id,
     userId: row.userId,
-    templateId: row.templateId ?? null,
-    scheduleRuleId: row.scheduleRuleId ?? null,
+    routineId: row.routineId ?? null,
     date: row.date,
     status: row.status,
     startedAt: row.startedAt?.toISOString() ?? null,
@@ -41,7 +40,7 @@ function mapSession(row: typeof sessions.$inferSelect) {
 }
 
 export function projectOccurrences(
-  rules: (typeof scheduleRules.$inferSelect)[],
+  scheduledRoutines: (typeof routines.$inferSelect)[],
   existingSessions: (typeof sessions.$inferSelect)[],
   from: string,
   to: string,
@@ -53,20 +52,22 @@ export function projectOccurrences(
 
   const materialized = new Set<string>();
   for (const s of existingSessions) {
-    if (s.scheduleRuleId) {
-      materialized.add(`${s.scheduleRuleId}:${s.date}`);
+    if (s.routineId) {
+      materialized.add(`${s.routineId}:${s.date}`);
     }
   }
 
   const virtualItems: CalendarItem[] = [];
 
-  for (const rule of rules) {
-    const dtstart = new Date(rule.startDate + 'T00:00:00Z');
-    const parsed = RRule.parseString(rule.rrule);
+  for (const routine of scheduledRoutines) {
+    if (!routine.rrule || !routine.startDate) continue;
+
+    const dtstart = new Date(routine.startDate + 'T00:00:00Z');
+    const parsed = RRule.parseString(routine.rrule);
     const rruleObj = new RRule({
       ...parsed,
       dtstart,
-      until: rule.endDate ? new Date(rule.endDate + 'T23:59:59Z') : undefined,
+      until: routine.endDate ? new Date(routine.endDate + 'T23:59:59Z') : undefined,
     });
 
     const fromDt = new Date(from + 'T00:00:00Z');
@@ -75,12 +76,11 @@ export function projectOccurrences(
 
     for (const d of occurrences) {
       const dateStr = d.toISOString().slice(0, 10);
-      if (!materialized.has(`${rule.id}:${dateStr}`)) {
+      if (!materialized.has(`${routine.id}:${dateStr}`)) {
         virtualItems.push({
           kind: 'virtual',
           date: dateStr,
-          scheduleRuleId: rule.id,
-          templateId: rule.templateId,
+          routineId: routine.id,
         });
       }
     }
@@ -108,16 +108,17 @@ calendarRoutes.get('/', async (c) => {
 
   const db = getDb(c.env);
 
-  const rules = await db
+  const scheduledRoutines = await db
     .select()
-    .from(scheduleRules)
+    .from(routines)
     .where(
       and(
-        eq(scheduleRules.userId, userId),
-        lte(scheduleRules.startDate, to),
+        eq(routines.userId, userId),
+        isNotNull(routines.rrule),
+        lte(routines.startDate, to),
         or(
-          isNull(scheduleRules.endDate),
-          gte(scheduleRules.endDate, from),
+          isNull(routines.endDate),
+          gte(routines.endDate, from),
         ),
       ),
     );
@@ -133,7 +134,7 @@ calendarRoutes.get('/', async (c) => {
       ),
     );
 
-  const items = projectOccurrences(rules, sessionRows, from, to);
+  const items = projectOccurrences(scheduledRoutines, sessionRows, from, to);
 
   return c.json({ items });
 });

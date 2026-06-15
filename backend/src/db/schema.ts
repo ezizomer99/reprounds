@@ -49,18 +49,27 @@ export const disciplines = pgTable('disciplines', {
   createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const templates = pgTable('templates', {
+// A routine is a workout definition (its items) plus an optional recurring
+// schedule. rrule === null means the routine is unscheduled (run ad-hoc);
+// when rrule is set, the routine projects onto the calendar.
+export const routines = pgTable('routines', {
   id:        uuid('id').primaryKey().defaultRandom(),
   userId:    uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   name:      text('name').notNull(),
   dayLabel:  text('day_label'),
   notes:     text('notes'),
+  rrule:     text('rrule'),
+  startDate: date('start_date'),
+  endDate:   date('end_date'),
+  timeOfDay: time('time_of_day'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  userIdIdx: index('routines_user_id_idx').on(t.userId),
+}));
 
-export const templateItems = pgTable('template_items', {
+export const routineItems = pgTable('routine_items', {
   id:                 uuid('id').primaryKey().defaultRandom(),
-  templateId:         uuid('template_id').notNull().references(() => templates.id, { onDelete: 'cascade' }),
+  routineId:          uuid('routine_id').notNull().references(() => routines.id, { onDelete: 'cascade' }),
   kind:               entryKindEnum('kind').notNull(),
   exerciseId:         uuid('exercise_id').references(() => exercises.id),
   disciplineId:       uuid('discipline_id').references(() => disciplines.id),
@@ -68,32 +77,18 @@ export const templateItems = pgTable('template_items', {
   supersetGroup:      integer('superset_group'),
   defaultRestSeconds: integer('default_rest_seconds'),
   target:             jsonb('target'),
-}, (t) => [
-  check(
-    'template_items_kind_check',
+}, (t) => ({
+  kindCheck: check(
+    'routine_items_kind_check',
     sql`(${t.kind} = 'exercise' AND ${t.exerciseId} IS NOT NULL AND ${t.disciplineId} IS NULL)
      OR (${t.kind} = 'martial_arts' AND ${t.disciplineId} IS NOT NULL AND ${t.exerciseId} IS NULL)`,
   ),
-]);
-
-export const scheduleRules = pgTable('schedule_rules', {
-  id:         uuid('id').primaryKey().defaultRandom(),
-  userId:     uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  templateId: uuid('template_id').notNull().references(() => templates.id, { onDelete: 'cascade' }),
-  rrule:      text('rrule').notNull(),
-  startDate:  date('start_date').notNull(),
-  endDate:    date('end_date'),
-  timeOfDay:  time('time_of_day'),
-  createdAt:  timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [
-  index('schedule_rules_user_id_idx').on(t.userId),
-]);
+}));
 
 export const sessions = pgTable('sessions', {
   id:              uuid('id').primaryKey().defaultRandom(),
   userId:          uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  templateId:      uuid('template_id').references(() => templates.id),
-  scheduleRuleId:  uuid('schedule_rule_id').references(() => scheduleRules.id),
+  routineId:       uuid('routine_id').references(() => routines.id),
   date:            date('date').notNull(),
   status:          sessionStatusEnum('status').notNull().default('planned'),
   startedAt:       timestamp('started_at', { withTimezone: true }),
@@ -101,9 +96,9 @@ export const sessions = pgTable('sessions', {
   durationMinutes: integer('duration_minutes'),
   notes:           text('notes'),
   createdAt:       timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [
-  index('sessions_user_id_date_idx').on(t.userId, t.date),
-]);
+}, (t) => ({
+  userIdDateIdx: index('sessions_user_id_date_idx').on(t.userId, t.date),
+}));
 
 export const sessionEntries = pgTable('session_entries', {
   id:            uuid('id').primaryKey().defaultRandom(),
@@ -117,15 +112,15 @@ export const sessionEntries = pgTable('session_entries', {
   restSeconds:   integer('rest_seconds'),
   details:       jsonb('details'),
   notes:         text('notes'),
-}, (t) => [
-  index('session_entries_session_id_idx').on(t.sessionId),
-  index('session_entries_exercise_id_idx').on(t.exerciseId),
-  check(
+}, (t) => ({
+  sessionIdIdx: index('session_entries_session_id_idx').on(t.sessionId),
+  exerciseIdIdx: index('session_entries_exercise_id_idx').on(t.exerciseId),
+  kindCheck: check(
     'session_entries_kind_check',
     sql`(${t.kind} = 'exercise' AND ${t.exerciseId} IS NOT NULL AND ${t.disciplineId} IS NULL)
      OR (${t.kind} = 'martial_arts' AND ${t.disciplineId} IS NOT NULL AND ${t.exerciseId} IS NULL)`,
   ),
-]);
+}));
 
 export const strengthSets = pgTable('strength_sets', {
   id:              uuid('id').primaryKey().defaultRandom(),
@@ -137,6 +132,6 @@ export const strengthSets = pgTable('strength_sets', {
   rpe:             numeric('rpe'),
   rir:             integer('rir'),
   completed:       boolean('completed').notNull().default(false),
-}, (t) => [
-  index('strength_sets_session_entry_id_idx').on(t.sessionEntryId),
-]);
+}, (t) => ({
+  sessionEntryIdIdx: index('strength_sets_session_entry_id_idx').on(t.sessionEntryId),
+}));
