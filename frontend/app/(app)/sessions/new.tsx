@@ -2,22 +2,22 @@ import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View }
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useTemplates } from '../../../src/hooks/useTemplates';
+import { useRoutines } from '../../../src/hooks/useRoutines';
 import { useCreateSession } from '../../../src/hooks/useSession';
 import { T, F, R, D } from '../../../src/theme/colors';
-import type { TemplateWithItems } from '@app/shared';
+import type { RoutineWithItems } from '@app/shared';
 
 export default function NewSessionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { data: templates, isLoading, isError } = useTemplates();
+  const { data: routines, isLoading, isError } = useRoutines();
   const createSession = useCreateSession();
 
   const todayISO = new Date().toISOString().split('T')[0];
 
-  async function handleStartFromTemplate(template: TemplateWithItems) {
+  async function handleStartFromRoutine(routine: RoutineWithItems) {
     try {
-      const session = await createSession.mutateAsync({ templateId: template.id, date: todayISO });
+      const session = await createSession.mutateAsync({ routineId: routine.id, date: todayISO });
       router.push({ pathname: '/sessions/[id]', params: { id: session.id } } as never);
     } catch { /* surfaced via createSession.error */ }
   }
@@ -48,7 +48,7 @@ export default function NewSessionScreen() {
         </View>
       ) : (
         <FlatList
-          data={templates ?? []}
+          data={routines ?? []}
           keyExtractor={(item) => item.id}
           ListHeaderComponent={
             <View style={styles.body}>
@@ -56,29 +56,29 @@ export default function NewSessionScreen() {
                 <Ionicons name="add" size={20} color={T.onPrimary} />
                 <View>
                   <Text style={styles.heroCtaTitle}>Start empty session</Text>
-                  <Text style={styles.heroCtaSub}>Log without a template</Text>
+                  <Text style={styles.heroCtaSub}>Log without a routine</Text>
                 </View>
               </TouchableOpacity>
 
-              <Text style={styles.eyebrow}>From template</Text>
+              <Text style={styles.eyebrow}>From routine</Text>
             </View>
           }
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={styles.templateRow}
-              onPress={() => handleStartFromTemplate(item)}
+              style={styles.routineRow}
+              onPress={() => handleStartFromRoutine(item)}
               activeOpacity={0.7}
             >
-              <View style={styles.templateIcon}>
+              <View style={styles.routineIcon}>
                 {item.items.some((i) => i.kind === 'martial_arts') ? (
                   <Ionicons name="flash" size={19} color={T.primary} />
                 ) : (
                   <Ionicons name="barbell" size={19} color={T.textDim} />
                 )}
               </View>
-              <View style={styles.templateInfo}>
-                <Text style={styles.templateName}>{item.name}</Text>
-                <Text style={styles.templateMeta}>
+              <View style={styles.routineInfo}>
+                <Text style={styles.routineName}>{item.name}</Text>
+                <Text style={styles.routineMeta}>
                   {item.items.length} item{item.items.length !== 1 ? 's' : ''}
                   {item.dayLabel ? ` · ${item.dayLabel}` : ''}
                 </Text>
@@ -94,12 +94,12 @@ export default function NewSessionScreen() {
               </View>
             ) : isError ? (
               <View style={styles.centered}>
-                <Text style={styles.errorText}>Failed to load templates.</Text>
+                <Text style={styles.errorText}>Failed to load routines.</Text>
               </View>
             ) : (
               <View style={styles.centered}>
-                <Text style={styles.emptyText}>No templates yet.</Text>
-                <Text style={styles.emptySubText}>Create templates from the Training section.</Text>
+                <Text style={styles.emptyText}>No routines yet.</Text>
+                <Text style={styles.emptySubText}>Create routines from the Training section.</Text>
               </View>
             )
           }
@@ -128,17 +128,17 @@ const styles = StyleSheet.create({
   heroCtaTitle: { fontFamily: F.uiBold, fontSize: 16, color: T.onPrimary },
   heroCtaSub: { fontFamily: F.uiMed, fontSize: 12, color: 'rgba(13,15,20,0.65)', marginTop: 1 },
   eyebrow: { fontFamily: F.uiBold, fontSize: 11, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1.2 },
-  templateRow: {
+  routineRow: {
     flexDirection: 'row', alignItems: 'center', gap: 14,
     paddingHorizontal: D.pad, paddingVertical: 14,
   },
-  templateIcon: {
+  routineIcon: {
     width: 38, height: 38, borderRadius: R.sm,
     backgroundColor: T.surface2, alignItems: 'center', justifyContent: 'center',
   },
-  templateInfo: { flex: 1 },
-  templateName: { fontFamily: F.uiMed, fontSize: 15, color: T.text, marginBottom: 2 },
-  templateMeta: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
+  routineInfo: { flex: 1 },
+  routineName: { fontFamily: F.uiMed, fontSize: 15, color: T.text, marginBottom: 2 },
+  routineMeta: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
   rowSep: { height: 1, backgroundColor: T.border, marginLeft: D.pad + 38 + 14 },
   centered: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48, paddingHorizontal: 24 },
   startingText: { fontFamily: F.uiMed, fontSize: 15, color: T.textDim, marginTop: 12 },

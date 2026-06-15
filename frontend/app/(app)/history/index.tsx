@@ -2,9 +2,9 @@ import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View }
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import type { Session, TemplateWithItems } from '@app/shared';
+import type { Session, RoutineWithItems } from '@app/shared';
 import { useSessions } from '../../../src/hooks/useSession';
-import { useTemplates } from '../../../src/hooks/useTemplates';
+import { useRoutines } from '../../../src/hooks/useRoutines';
 import { T, F, R, D } from '../../../src/theme/colors';
 import { withAlpha } from '../../../src/lib/color';
 
@@ -16,16 +16,16 @@ function formatDateBlock(dateStr: string): { day: string; month: string } {
   };
 }
 
-function buildTemplateMap(templates: TemplateWithItems[] | undefined): Map<string, string> {
+function buildRoutineMap(routines: RoutineWithItems[] | undefined): Map<string, string> {
   const map = new Map<string, string>();
-  if (!templates) return map;
-  for (const t of templates) map.set(t.id, t.name);
+  if (!routines) return map;
+  for (const t of routines) map.set(t.id, t.name);
   return map;
 }
 
-function SessionRow({ session, templateName, isMat, onPress }: {
+function SessionRow({ session, routineName, isMat, onPress }: {
   session: Session;
-  templateName: string | null;
+  routineName: string | null;
   isMat: boolean;
   onPress: () => void;
 }) {
@@ -40,7 +40,7 @@ function SessionRow({ session, templateName, isMat, onPress }: {
       </View>
       <View style={styles.rowDivider} />
       <View style={styles.rowContent}>
-        <Text style={styles.rowName}>{templateName ?? 'Ad-hoc session'}</Text>
+        <Text style={styles.rowName}>{routineName ?? 'Ad-hoc session'}</Text>
         <Text style={styles.rowMeta}>
           {duration ?? ''}
           {duration ? ' · ' : ''}
@@ -61,9 +61,9 @@ export default function HistoryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { data: sessions, isLoading, isError, error } = useSessions('completed');
-  const { data: templates } = useTemplates();
+  const { data: routines } = useRoutines();
 
-  const templateMap = buildTemplateMap(templates);
+  const routineMap = buildRoutineMap(routines);
   const list = sessions ?? [];
 
   return (
@@ -96,7 +96,7 @@ export default function HistoryScreen() {
           renderItem={({ item }) => (
             <SessionRow
               session={item}
-              templateName={item.templateId ? (templateMap.get(item.templateId) ?? null) : null}
+              routineName={item.routineId ? (routineMap.get(item.routineId) ?? null) : null}
               isMat={false}
               onPress={() => router.push({ pathname: '/sessions/[id]', params: { id: item.id } } as never)}
             />

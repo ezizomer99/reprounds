@@ -10,25 +10,25 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import type { TemplateWithItems } from '@app/shared';
-import { useDeleteTemplate, useTemplates } from '../../../src/hooks/useTemplates';
+import type { RoutineWithItems } from '@app/shared';
+import { useDeleteRoutine, useRoutines } from '../../../src/hooks/useRoutines';
 import { T, F, R, D } from '../../../src/theme/colors';
 import { withAlpha } from '../../../src/lib/color';
 
-interface TemplateRowProps {
-  template: TemplateWithItems;
+interface RoutineRowProps {
+  routine: RoutineWithItems;
   onPress: (id: string) => void;
   onDelete: (id: string, name: string) => void;
 }
 
-function TemplateRow({ template, onPress, onDelete }: TemplateRowProps) {
-  const hasMartialArts = template.items.some((i) => i.kind === 'martial_arts');
+function RoutineRow({ routine, onPress, onDelete }: RoutineRowProps) {
+  const hasMartialArts = routine.items.some((i) => i.kind === 'martial_arts');
 
   return (
     <TouchableOpacity
       style={styles.row}
-      onPress={() => onPress(template.id)}
-      onLongPress={() => onDelete(template.id, template.name)}
+      onPress={() => onPress(routine.id)}
+      onLongPress={() => onDelete(routine.id, routine.name)}
       activeOpacity={0.7}
     >
       <View style={[styles.iconAvatar, hasMartialArts && styles.iconAvatarMat]}>
@@ -39,10 +39,10 @@ function TemplateRow({ template, onPress, onDelete }: TemplateRowProps) {
         )}
       </View>
       <View style={styles.rowContent}>
-        <Text style={styles.rowName}>{template.name}</Text>
+        <Text style={styles.rowName}>{routine.name}</Text>
         <Text style={styles.rowMeta}>
-          {template.items.length} item{template.items.length !== 1 ? 's' : ''}
-          {template.dayLabel ? ` · ${template.dayLabel}` : ''}
+          {routine.items.length} item{routine.items.length !== 1 ? 's' : ''}
+          {routine.dayLabel ? ` · ${routine.dayLabel}` : ''}
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={16} color={T.muted} />
@@ -50,15 +50,15 @@ function TemplateRow({ template, onPress, onDelete }: TemplateRowProps) {
   );
 }
 
-export default function TemplatesScreen() {
+export default function RoutinesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { data: templates, isLoading, isError, error } = useTemplates();
-  const deleteTemplate = useDeleteTemplate();
+  const { data: routines, isLoading, isError, error } = useRoutines();
+  const deleteRoutine = useDeleteRoutine();
 
   function handleDelete(id: string, name: string) {
     Alert.alert(
-      'Delete template',
+      'Delete routine',
       `Remove "${name}"? This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
@@ -66,8 +66,8 @@ export default function TemplatesScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
-            deleteTemplate.mutate(id, {
-              onError: (err) => Alert.alert('Error', err.message ?? 'Failed to delete template.'),
+            deleteRoutine.mutate(id, {
+              onError: (err) => Alert.alert('Error', err.message ?? 'Failed to delete routine.'),
             });
           },
         },
@@ -75,7 +75,7 @@ export default function TemplatesScreen() {
     );
   }
 
-  const list = templates ?? [];
+  const list = routines ?? [];
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -84,14 +84,14 @@ export default function TemplatesScreen() {
           <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Templates</Text>
+          <Text style={styles.headerTitle}>Routines</Text>
           {list.length > 0 && (
-            <Text style={styles.headerSub}>{list.length} template{list.length !== 1 ? 's' : ''}</Text>
+            <Text style={styles.headerSub}>{list.length} routine{list.length !== 1 ? 's' : ''}</Text>
           )}
         </View>
         <TouchableOpacity
           style={styles.addBtn}
-          onPress={() => router.push({ pathname: '/templates/[id]', params: { id: 'new' } })}
+          onPress={() => router.push({ pathname: '/routines/[id]', params: { id: 'new' } })}
         >
           <Ionicons name="add" size={18} color={T.onPrimary} />
         </TouchableOpacity>
@@ -103,7 +103,7 @@ export default function TemplatesScreen() {
 
       {isError && (
         <View style={styles.centered}>
-          <Text style={styles.errorText}>{error?.message ?? 'Failed to load templates.'}</Text>
+          <Text style={styles.errorText}>{error?.message ?? 'Failed to load routines.'}</Text>
         </View>
       )}
 
@@ -112,16 +112,16 @@ export default function TemplatesScreen() {
           data={list}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <TemplateRow
-              template={item}
-              onPress={(id) => router.push({ pathname: '/templates/[id]', params: { id } })}
+            <RoutineRow
+              routine={item}
+              onPress={(id) => router.push({ pathname: '/routines/[id]', params: { id } })}
               onDelete={handleDelete}
             />
           )}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
             <View style={styles.centered}>
-              <Text style={styles.emptyText}>No templates yet.</Text>
+              <Text style={styles.emptyText}>No routines yet.</Text>
               <Text style={styles.emptySub}>Tap + to create one.</Text>
             </View>
           }

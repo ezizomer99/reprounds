@@ -127,8 +127,8 @@ export default function ProfileTab() {
           />
           <NavRow
             icon="layers-outline"
-            label="Templates"
-            onPress={() => router.push('/templates' as never)}
+            label="Routines"
+            onPress={() => router.push('/routines' as never)}
           />
           <NavRow
             icon="flash-outline"

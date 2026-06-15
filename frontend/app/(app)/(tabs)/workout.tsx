@@ -10,10 +10,10 @@ import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import type { TemplateWithItems } from '@app/shared';
+import type { RoutineWithItems } from '@app/shared';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useSessions } from '../../../src/hooks/useSession';
-import { useTemplates } from '../../../src/hooks/useTemplates';
+import { useRoutines } from '../../../src/hooks/useRoutines';
 import { T, F, R, D } from '../../../src/theme/colors';
 import { withAlpha } from '../../../src/lib/color';
 
@@ -66,23 +66,23 @@ function isToday(d: Date): boolean {
   );
 }
 
-function TemplateCard({
-  template,
+function RoutineCard({
+  routine,
   onPress,
 }: {
-  template: TemplateWithItems;
+  routine: RoutineWithItems;
   onPress: () => void;
 }) {
   return (
-    <TouchableOpacity style={styles.templateCard} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.templateIconBox}>
+    <TouchableOpacity style={styles.routineCard} onPress={onPress} activeOpacity={0.7}>
+      <View style={styles.routineIconBox}>
         <Ionicons name="layers-outline" size={20} color={T.primary} />
       </View>
-      <Text style={styles.templateName} numberOfLines={1}>
-        {template.name}
+      <Text style={styles.routineName} numberOfLines={1}>
+        {routine.name}
       </Text>
-      <Text style={styles.templateMeta}>
-        {template.items.length} exercise{template.items.length !== 1 ? 's' : ''}
+      <Text style={styles.routineMeta}>
+        {routine.items.length} exercise{routine.items.length !== 1 ? 's' : ''}
       </Text>
     </TouchableOpacity>
   );
@@ -93,7 +93,7 @@ export default function WorkoutTab() {
   const insets = useSafeAreaInsets();
   const { data: user } = useCurrentUser();
   const { data: sessions } = useSessions('completed');
-  const { data: templates } = useTemplates();
+  const { data: routines } = useRoutines();
 
   const weekDays = useMemo(getWeekDays, []);
   const sessionDates = useMemo(
@@ -203,26 +203,26 @@ export default function WorkoutTab() {
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Routines</Text>
           <TouchableOpacity
-            onPress={() => router.push('/templates' as never)}
+            onPress={() => router.push('/routines' as never)}
             activeOpacity={0.7}
           >
             <Text style={styles.viewAll}>View all</Text>
           </TouchableOpacity>
         </View>
 
-        {templates && templates.length > 0 ? (
+        {routines && routines.length > 0 ? (
           <FlatList
-            data={templates}
+            data={routines}
             keyExtractor={(t) => t.id}
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.templatesList}
+            contentContainerStyle={styles.routinesList}
             renderItem={({ item }) => (
-              <TemplateCard
-                template={item}
+              <RoutineCard
+                routine={item}
                 onPress={() =>
                   router.push({
-                    pathname: '/templates/[id]',
+                    pathname: '/routines/[id]',
                     params: { id: item.id },
                   } as never)
                 }
@@ -233,7 +233,7 @@ export default function WorkoutTab() {
           <View style={[styles.card, styles.emptyCard]}>
             <Text style={styles.emptyText}>No routines yet.</Text>
             <TouchableOpacity
-              onPress={() => router.push('/templates' as never)}
+              onPress={() => router.push('/routines' as never)}
               activeOpacity={0.7}
             >
               <Text style={styles.emptyLink}>Create your first routine →</Text>
@@ -374,8 +374,8 @@ const styles = StyleSheet.create({
   sectionTitle: { fontFamily: F.uiBold, fontSize: 17, color: T.text },
   viewAll: { fontFamily: F.uiMed, fontSize: 13, color: T.primary },
 
-  templatesList: { gap: 10, paddingVertical: 2 },
-  templateCard: {
+  routinesList: { gap: 10, paddingVertical: 2 },
+  routineCard: {
     width: 160,
     backgroundColor: T.surface,
     borderWidth: 1,
@@ -384,7 +384,7 @@ const styles = StyleSheet.create({
     padding: D.cardPad,
     gap: 8,
   },
-  templateIconBox: {
+  routineIconBox: {
     width: 36,
     height: 36,
     borderRadius: R.sm,
@@ -392,8 +392,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  templateName: { fontFamily: F.uiSemi, fontSize: 14, color: T.text },
-  templateMeta: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
+  routineName: { fontFamily: F.uiSemi, fontSize: 14, color: T.text },
+  routineMeta: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
 
   emptyCard: { alignItems: 'center', paddingVertical: 24, gap: 8 },
   emptyText: { fontFamily: F.uiMed, fontSize: 14, color: T.textDim },

@@ -3,17 +3,35 @@ import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import type { CalendarItem, ScheduleRule } from '@app/shared';
-import {
-  useCalendar, useCreateScheduleRule, useDeleteScheduleRule,
-  useScheduleRules, useUpdateScheduleRule,
-} from '../../../src/hooks/useScheduleRules';
-import { useTemplates } from '../../../src/hooks/useTemplates';
+import type { CalendarItem, RoutineWithItems } from '@app/shared';
+import { useCalendar } from '../../../src/hooks/useCalendar';
+import { useRoutines, useSkipOccurrence, useUpdateRoutine } from '../../../src/hooks/useRoutines';
+import { useCreateSession } from '../../../src/hooks/useSession';
 import { T, F, R, D } from '../../../src/theme/colors';
 import { withAlpha } from '../../../src/lib/color';
 
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const BYDAY_VALUES = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
+
+const DAY_FULL: Record<string, string> = {
+  MO: 'Monday', TU: 'Tuesday', WE: 'Wednesday', TH: 'Thursday',
+  FR: 'Friday', SA: 'Saturday', SU: 'Sunday',
+};
+
+function formatRRule(rrule: string | null): string {
+  if (!rrule) return 'Not scheduled';
+  const m = rrule.match(/BYDAY=([A-Z,]+)/);
+  if (!m) return rrule;
+  const days = m[1].split(',').map((d) => DAY_FULL[d] ?? d);
+  if (days.length === 1) return `Every ${days[0]}`;
+  return `Every ${days.slice(0, -1).join(', ')} and ${days[days.length - 1]}`;
+}
+
+function formatDateLabel(iso: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
 
 function startOfWeek(d: Date): Date {
   const day = d.getDay();
@@ -46,13 +64,25 @@ function isThisWeek(weekStart: Date): boolean {
   return toDateStr(weekStart) === toDateStr(startOfWeek(new Date()));
 }
 
-function DayRow({ day, items, templateNameMap, onVirtualTap, onRealTap, onRealLongPress }: {
+function getByDaysFromRRule(rrule: string | null): number[] {
+  if (!rrule) return [0];
+  const match = rrule.match(/BYDAY=([A-Z,]+)/);
+  if (!match) return [0];
+  const days = match[1].split(',').map((d) => {
+    const idx = BYDAY_VALUES.indexOf(d);
+    return idx >= 0 ? idx : 0;
+  });
+  return days.length > 0 ? days : [0];
+}
+
+function DayRow({ day, items, routineNameMap, onVirtualTap, onRealTap, onRealLongPress, startingSession }: {
   day: Date;
   items: CalendarItem[];
-  templateNameMap: Record<string, string>;
+  routineNameMap: Record<string, string>;
   onVirtualTap: (item: Extract<CalendarItem, { kind: 'virtual' }>) => void;
   onRealTap: (item: Extract<CalendarItem, { kind: 'real' }>) => void;
   onRealLongPress: (item: Extract<CalendarItem, { kind: 'real' }>) => void;
+  startingSession: boolean;
 }) {
   const dateStr = toDateStr(day);
   const dayItems = items.filter((i) => i.kind === 'virtual' ? i.date === dateStr : i.session.date === dateStr);
@@ -71,19 +101,20 @@ function DayRow({ day, items, templateNameMap, onVirtualTap, onRealTap, onRealLo
           if (item.kind === 'virtual') {
             return (
               <TouchableOpacity
-                key={`v-${item.scheduleRuleId}-${idx}`}
-                style={[styles.pill, styles.pillVirtual]}
-                onPress={() => onVirtualTap(item)}
+                key={`v-${item.routineId}-${idx}`}
+                style={[styles.pill, styles.pillVirtual, startingSession && { opacity: 0.5 }]}
+                onPress={() => !startingSession && onVirtualTap(item)}
+                disabled={startingSession}
                 activeOpacity={0.7}
               >
                 <Text style={styles.pillVirtualText} numberOfLines={1}>
-                  {templateNameMap[item.templateId] ?? 'Scheduled'}
+                  {routineNameMap[item.routineId] ?? 'Scheduled'}
                 </Text>
               </TouchableOpacity>
             );
           }
           const { session } = item;
-          const name = session.templateId ? (templateNameMap[session.templateId] ?? 'Session') : 'Ad-hoc';
+          const name = session.routineId ? (routineNameMap[session.routineId] ?? 'Session') : 'Ad-hoc';
           const isDone = session.status === 'completed';
           const isSkipped = session.status === 'skipped';
           return (
@@ -103,49 +134,57 @@ function DayRow({ day, items, templateNameMap, onVirtualTap, onRealTap, onRealLo
   );
 }
 
-function RuleModal({ visible, editRule, templates, onClose }: {
+// Schedule a routine (create mode = pick an unscheduled routine; edit mode = bound to one routine).
+function ScheduleModal({ visible, mode, routine, unscheduled, onClose }: {
   visible: boolean;
-  editRule: ScheduleRule | null;
-  templates: { id: string; name: string }[];
+  mode: 'create' | 'edit';
+  routine: RoutineWithItems | null;
+  unscheduled: RoutineWithItems[];
   onClose: () => void;
 }) {
   const today = toDateStr(new Date());
-  const [templateId, setTemplateId] = useState(editRule?.templateId ?? (templates[0]?.id ?? ''));
-  const [byDay, setByDay] = useState(0);
-  const [startDate, setStartDate] = useState(editRule?.startDate ?? today);
+  const [routineId, setRoutineId] = useState('');
+  const [byDays, setByDays] = useState<number[]>([0]);
+  const [startDate, setStartDate] = useState(today);
 
-  const createRule = useCreateScheduleRule();
-  const updateRule = useUpdateScheduleRule();
-
-  function getByDayFromRule(rule: ScheduleRule): number {
-    const match = rule.rrule.match(/BYDAY=([A-Z]+)/);
-    if (!match) return 0;
-    const idx = BYDAY_VALUES.indexOf(match[1]);
-    return idx >= 0 ? idx : 0;
-  }
+  const updateRoutine = useUpdateRoutine();
 
   function handleOpen() {
-    if (editRule) {
-      setTemplateId(editRule.templateId);
-      setByDay(getByDayFromRule(editRule));
-      setStartDate(editRule.startDate);
+    if (mode === 'edit' && routine) {
+      setRoutineId(routine.id);
+      setByDays(getByDaysFromRRule(routine.rrule));
+      setStartDate(routine.startDate ?? today);
     } else {
-      setTemplateId(templates[0]?.id ?? '');
-      setByDay(0);
+      setRoutineId(unscheduled[0]?.id ?? '');
+      setByDays([0]);
       setStartDate(today);
     }
   }
 
-  function handleSave() {
-    const rrule = `FREQ=WEEKLY;BYDAY=${BYDAY_VALUES[byDay]}`;
-    if (editRule) {
-      updateRule.mutate({ id: editRule.id, mode: 'all', rrule, templateId, startDate }, { onSuccess: onClose });
-    } else {
-      createRule.mutate({ templateId, rrule, startDate }, { onSuccess: onClose });
-    }
+  function toggleDay(idx: number) {
+    setByDays((prev) => {
+      if (prev.includes(idx)) {
+        if (prev.length === 1) return prev;
+        return prev.filter((d) => d !== idx);
+      }
+      return [...prev, idx].sort((a, b) => a - b);
+    });
   }
 
-  const isPending = createRule.isPending || updateRule.isPending;
+  function handleSave() {
+    const id = mode === 'edit' && routine ? routine.id : routineId;
+    if (!id) return;
+    const rrule = `FREQ=WEEKLY;BYDAY=${byDays.map((i) => BYDAY_VALUES[i]).join(',')}`;
+    updateRoutine.mutate(
+      { id, rrule, startDate },
+      {
+        onSuccess: onClose,
+        onError: (err) => Alert.alert('Error', err.message ?? 'Could not save schedule.'),
+      },
+    );
+  }
+
+  const canSave = (mode === 'edit' ? !!routine : !!routineId) && !updateRoutine.isPending;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onShow={handleOpen} onRequestClose={onClose}>
@@ -154,41 +193,55 @@ function RuleModal({ visible, editRule, templates, onClose }: {
           <TouchableOpacity onPress={onClose}>
             <Text style={styles.modalCancelText}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={styles.modalTitle}>{editRule ? 'Edit Rule' : 'New Rule'}</Text>
-          <TouchableOpacity onPress={handleSave} disabled={isPending || !templateId}>
-            <Text style={[styles.modalSaveText, (!templateId || isPending) && { opacity: 0.35 }]}>Save</Text>
+          <Text style={styles.modalTitle}>{mode === 'edit' ? 'Edit Schedule' : 'Schedule Routine'}</Text>
+          <TouchableOpacity onPress={handleSave} disabled={!canSave}>
+            <Text style={[styles.modalSaveText, !canSave && { opacity: 0.35 }]}>Save</Text>
           </TouchableOpacity>
         </View>
 
         <ScrollView style={{ flex: 1, padding: D.pad }} keyboardShouldPersistTaps="handled">
-          <Text style={styles.fieldLabel}>Template</Text>
-          {templates.length === 0 ? (
-            <Text style={styles.emptyHint}>No templates — create one first.</Text>
+          {mode === 'edit' ? (
+            <>
+              <Text style={styles.fieldLabel}>Routine</Text>
+              <View style={styles.boundRoutine}>
+                <Text style={styles.boundRoutineText}>{routine?.name ?? ''}</Text>
+              </View>
+            </>
           ) : (
-            <View style={{ gap: 6 }}>
-              {templates.map((t) => (
-                <TouchableOpacity
-                  key={t.id}
-                  style={[styles.templateOpt, templateId === t.id && styles.templateOptSel]}
-                  onPress={() => setTemplateId(t.id)}
-                >
-                  <Text style={[styles.templateOptText, templateId === t.id && styles.templateOptTextSel]}>{t.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+            <>
+              <Text style={styles.fieldLabel}>Routine</Text>
+              {unscheduled.length === 0 ? (
+                <Text style={styles.emptyHint}>Every routine is already scheduled. Create a new routine first.</Text>
+              ) : (
+                <View style={{ gap: 6 }}>
+                  {unscheduled.map((r) => (
+                    <TouchableOpacity
+                      key={r.id}
+                      style={[styles.routineOpt, routineId === r.id && styles.routineOptSel]}
+                      onPress={() => setRoutineId(r.id)}
+                    >
+                      <Text style={[styles.routineOptText, routineId === r.id && styles.routineOptTextSel]}>{r.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </>
           )}
 
-          <Text style={[styles.fieldLabel, { marginTop: 24 }]}>Day of Week</Text>
+          <Text style={[styles.fieldLabel, { marginTop: 24 }]}>Days of Week</Text>
           <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-            {DAY_NAMES.map((d, idx) => (
-              <TouchableOpacity
-                key={d}
-                style={[styles.dayBtn, byDay === idx && styles.dayBtnSel]}
-                onPress={() => setByDay(idx)}
-              >
-                <Text style={[styles.dayBtnText, byDay === idx && styles.dayBtnTextSel]}>{d}</Text>
-              </TouchableOpacity>
-            ))}
+            {DAY_NAMES.map((d, idx) => {
+              const active = byDays.includes(idx);
+              return (
+                <TouchableOpacity
+                  key={d}
+                  style={[styles.dayBtn, active && styles.dayBtnSel]}
+                  onPress={() => toggleDay(idx)}
+                >
+                  <Text style={[styles.dayBtnText, active && styles.dayBtnTextSel]}>{d}</Text>
+                </TouchableOpacity>
+              );
+            })}
           </View>
 
           <Text style={[styles.fieldLabel, { marginTop: 24 }]}>Start Date (YYYY-MM-DD)</Text>
@@ -208,33 +261,124 @@ function RuleModal({ visible, editRule, templates, onClose }: {
   );
 }
 
+function ScheduleDetailModal({ visible, routine, onClose, onEdit, onRemove }: {
+  visible: boolean;
+  routine: RoutineWithItems | null;
+  onClose: () => void;
+  onEdit: () => void;
+  onRemove: () => void;
+}) {
+  if (!routine) return null;
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={styles.detailModal}>
+        <View style={styles.detailHeader}>
+          <TouchableOpacity style={styles.detailClose} onPress={onClose}>
+            <Ionicons name="close" size={22} color={T.textDim} />
+          </TouchableOpacity>
+          <Text style={styles.detailHeaderTitle}>Scheduled Routine</Text>
+          <View style={{ width: 36 }} />
+        </View>
+
+        <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
+          <View style={styles.detailHero}>
+            <View style={styles.detailHeroIcon}>
+              <Ionicons name="calendar-outline" size={26} color={T.primary} />
+            </View>
+            <Text style={styles.detailHeroName}>{routine.name}</Text>
+          </View>
+
+          <View style={styles.detailInfoCard}>
+            <View style={styles.detailInfoRow}>
+              <Ionicons name="repeat-outline" size={18} color={T.textDim} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.detailInfoLabel}>Repeats</Text>
+                <Text style={styles.detailInfoValue}>{formatRRule(routine.rrule)}</Text>
+              </View>
+            </View>
+            <View style={{ height: 1, backgroundColor: T.border }} />
+            <View style={styles.detailInfoRow}>
+              <Ionicons name="play-circle-outline" size={18} color={T.textDim} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.detailInfoLabel}>Starting</Text>
+                <Text style={styles.detailInfoValue}>{formatDateLabel(routine.startDate)}</Text>
+              </View>
+            </View>
+            {routine.endDate && (
+              <>
+                <View style={{ height: 1, backgroundColor: T.border }} />
+                <View style={styles.detailInfoRow}>
+                  <Ionicons name="stop-circle-outline" size={18} color={T.textDim} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.detailInfoLabel}>Ending</Text>
+                    <Text style={styles.detailInfoValue}>{formatDateLabel(routine.endDate)}</Text>
+                  </View>
+                </View>
+              </>
+            )}
+          </View>
+
+          <View style={styles.detailActionsCard}>
+            <TouchableOpacity style={styles.detailAction} onPress={onEdit} activeOpacity={0.7}>
+              <Ionicons name="pencil-outline" size={18} color={T.primary} />
+              <Text style={[styles.detailActionText, { color: T.primary }]}>Edit Schedule</Text>
+            </TouchableOpacity>
+            <View style={{ height: 1, backgroundColor: T.border }} />
+            <TouchableOpacity style={styles.detailAction} onPress={onRemove} activeOpacity={0.7}>
+              <Ionicons name="trash-outline" size={18} color={T.danger} />
+              <Text style={[styles.detailActionText, { color: T.danger }]}>Remove from Schedule</Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.detailFootnote}>
+            Removing the schedule keeps the routine — you can still run it any time and re-schedule it later.
+          </Text>
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
 export default function CalendarScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeek(new Date()));
-  const [showAddRule, setShowAddRule] = useState(false);
-  const [editRule, setEditRule] = useState<ScheduleRule | null>(null);
+  const [scheduleMode, setScheduleMode] = useState<'create' | 'edit'>('create');
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [editRoutine, setEditRoutine] = useState<RoutineWithItems | null>(null);
+  const [selectedRoutine, setSelectedRoutine] = useState<RoutineWithItems | null>(null);
+  const [startingSession, setStartingSession] = useState(false);
 
   const from = toDateStr(weekStart);
   const to = toDateStr(addDays(weekStart, 6));
 
   const { data: calendarData } = useCalendar(from, to);
-  const { data: rules } = useScheduleRules();
-  const { data: templates } = useTemplates();
-  const deleteScheduleRule = useDeleteScheduleRule();
+  const { data: routines } = useRoutines();
+  const updateRoutine = useUpdateRoutine();
+  const skipOccurrence = useSkipOccurrence();
+  const createSession = useCreateSession();
 
   const items: CalendarItem[] = calendarData?.items ?? [];
-  const ruleList: ScheduleRule[] = rules ?? [];
-  const templateList = templates ?? [];
+  const routineList: RoutineWithItems[] = routines ?? [];
+  const scheduledRoutines = routineList.filter((r) => r.rrule);
+  const unscheduledRoutines = routineList.filter((r) => !r.rrule);
 
-  const templateNameMap: Record<string, string> = {};
-  for (const t of templateList) templateNameMap[t.id] = t.name;
+  const routineNameMap: Record<string, string> = {};
+  for (const r of routineList) routineNameMap[r.id] = r.name;
 
-  function handleVirtualTap(item: Extract<CalendarItem, { kind: 'virtual' }>) {
-    Alert.alert('Start session?', `Start "${templateNameMap[item.templateId] ?? 'session'}"?`, [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Start', onPress: () => router.push({ pathname: '/sessions/new' as never, params: { scheduleRuleId: item.scheduleRuleId, date: item.date } } as never) },
-    ]);
+  async function handleVirtualTap(item: Extract<CalendarItem, { kind: 'virtual' }>) {
+    if (startingSession) return;
+    setStartingSession(true);
+    try {
+      const session = await createSession.mutateAsync({
+        routineId: item.routineId,
+        date: item.date,
+      });
+      router.push({ pathname: '/sessions/[id]', params: { id: session.id } } as never);
+    } catch (err) {
+      Alert.alert('Error', (err as Error).message ?? 'Could not start session.');
+    } finally {
+      setStartingSession(false);
+    }
   }
 
   function handleRealTap(item: Extract<CalendarItem, { kind: 'real' }>) {
@@ -243,17 +387,22 @@ export default function CalendarScreen() {
 
   function handleRealLongPress(item: Extract<CalendarItem, { kind: 'real' }>) {
     const { session } = item;
-    if (session.status === 'completed' || !session.scheduleRuleId) return;
-    Alert.alert('Remove occurrence?', 'Remove this session from your schedule?', [
+    if (session.status === 'completed' || !session.routineId) return;
+    const routineId = session.routineId;
+    Alert.alert('Skip this day?', 'Mark this scheduled session as skipped?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => deleteScheduleRule.mutate({ id: session.scheduleRuleId!, mode: 'single', date: session.date }) },
+      { text: 'Skip', style: 'destructive', onPress: () => skipOccurrence.mutate({ id: routineId, date: session.date }) },
     ]);
   }
 
-  function handleDeleteRule(rule: ScheduleRule) {
-    Alert.alert('Delete rule', `Remove all occurrences for "${templateNameMap[rule.templateId] ?? 'this rule'}"?`, [
+  function handleRemoveSchedule(routine: RoutineWithItems) {
+    Alert.alert('Remove from schedule', `Stop scheduling "${routine.name}"? The routine itself is kept.`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete all', style: 'destructive', onPress: () => deleteScheduleRule.mutate({ id: rule.id, mode: 'all' }) },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: () => updateRoutine.mutate({ id: routine.id, rrule: null, startDate: null, endDate: null }),
+      },
     ]);
   }
 
@@ -267,7 +416,7 @@ export default function CalendarScreen() {
           <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Calendar</Text>
-        <TouchableOpacity style={styles.addBtn} onPress={() => { setEditRule(null); setShowAddRule(true); }}>
+        <TouchableOpacity style={styles.addBtn} onPress={() => { setScheduleMode('create'); setEditRoutine(null); setShowSchedule(true); }}>
           <Ionicons name="add" size={22} color={T.text} />
         </TouchableOpacity>
       </View>
@@ -299,46 +448,58 @@ export default function CalendarScreen() {
               key={toDateStr(day)}
               day={day}
               items={items}
-              templateNameMap={templateNameMap}
+              routineNameMap={routineNameMap}
               onVirtualTap={handleVirtualTap}
               onRealTap={handleRealTap}
               onRealLongPress={handleRealLongPress}
+              startingSession={startingSession}
             />
           ))}
         </View>
 
-        {/* Rules section */}
-        <Text style={[styles.eyebrow, { marginTop: 24 }]}>Schedule Rules</Text>
-        {ruleList.length === 0 ? (
-          <Text style={styles.emptyHint}>No rules yet. Tap + to add one.</Text>
+        {/* Scheduled routines section */}
+        <Text style={[styles.eyebrow, { marginTop: 24 }]}>Scheduled Routines</Text>
+        {scheduledRoutines.length === 0 ? (
+          <Text style={styles.emptyHint}>No routines scheduled. Tap + to schedule one.</Text>
         ) : (
           <View style={styles.rulesCard}>
-            {ruleList.map((rule, idx) => (
-              <View key={rule.id}>
-                <View style={styles.ruleRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.ruleName} numberOfLines={1}>{templateNameMap[rule.templateId] ?? 'Unknown'}</Text>
-                    <Text style={styles.ruleRrule}>{rule.rrule}</Text>
+            {scheduledRoutines.map((routine, idx) => (
+              <View key={routine.id}>
+                <TouchableOpacity
+                  style={styles.ruleRow}
+                  onPress={() => setSelectedRoutine(routine)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.ruleIcon}>
+                    <Ionicons name="repeat-outline" size={17} color={T.textDim} />
                   </View>
-                  <TouchableOpacity onPress={() => { setEditRule(rule); setShowAddRule(true); }} style={styles.ruleActionBtn}>
-                    <Text style={styles.editText}>Edit</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => handleDeleteRule(rule)} style={styles.ruleActionBtn}>
-                    <Text style={styles.deleteText}>Delete</Text>
-                  </TouchableOpacity>
-                </View>
-                {idx < ruleList.length - 1 && <View style={{ height: 1, backgroundColor: T.border }} />}
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.ruleName} numberOfLines={1}>{routine.name}</Text>
+                    <Text style={styles.ruleSubtitle}>{formatRRule(routine.rrule)}</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={T.muted} />
+                </TouchableOpacity>
+                {idx < scheduledRoutines.length - 1 && <View style={{ height: 1, backgroundColor: T.border }} />}
               </View>
             ))}
           </View>
         )}
       </ScrollView>
 
-      <RuleModal
-        visible={showAddRule}
-        editRule={editRule}
-        templates={templateList.map((t) => ({ id: t.id, name: t.name }))}
-        onClose={() => { setShowAddRule(false); setEditRule(null); }}
+      <ScheduleModal
+        visible={showSchedule}
+        mode={scheduleMode}
+        routine={editRoutine}
+        unscheduled={unscheduledRoutines}
+        onClose={() => { setShowSchedule(false); setEditRoutine(null); }}
+      />
+
+      <ScheduleDetailModal
+        visible={selectedRoutine !== null}
+        routine={selectedRoutine}
+        onClose={() => setSelectedRoutine(null)}
+        onEdit={() => { setScheduleMode('edit'); setEditRoutine(selectedRoutine); setSelectedRoutine(null); setShowSchedule(true); }}
+        onRemove={() => { if (selectedRoutine) handleRemoveSchedule(selectedRoutine); setSelectedRoutine(null); }}
       />
     </View>
   );
@@ -401,14 +562,33 @@ const styles = StyleSheet.create({
   eyebrow: { fontFamily: F.uiBold, fontSize: 11, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1.2 },
   emptyHint: { fontFamily: F.uiMed, fontSize: 14, color: T.muted },
   rulesCard: { backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.card, overflow: 'hidden' },
-  ruleRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: D.cardPad, paddingVertical: 12, gap: 8 },
+  ruleRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: D.cardPad, paddingVertical: 14 },
+  ruleIcon: { width: 34, height: 34, borderRadius: R.sm, backgroundColor: T.surface2, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
   ruleName: { fontFamily: F.uiSemi, fontSize: 14, color: T.text },
-  ruleRrule: { fontFamily: F.uiMed, fontSize: 11, color: T.muted, marginTop: 1 },
-  ruleActionBtn: { paddingHorizontal: 8, paddingVertical: 4 },
-  editText: { fontFamily: F.uiSemi, fontSize: 13, color: T.primary },
-  deleteText: { fontFamily: F.uiSemi, fontSize: 13, color: T.danger },
+  ruleSubtitle: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 1 },
 
-  // Rule modal
+  // Schedule detail modal
+  detailModal: { flex: 1, backgroundColor: T.bg },
+  detailHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: D.pad, paddingTop: 56, paddingBottom: 14,
+    borderBottomWidth: 1, borderBottomColor: T.border,
+  },
+  detailClose: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  detailHeaderTitle: { fontFamily: F.uiSemi, fontSize: 17, color: T.text },
+  detailHero: { alignItems: 'center', paddingVertical: 28, gap: 10 },
+  detailHeroIcon: { width: 56, height: 56, borderRadius: 28, backgroundColor: withAlpha(T.primary, 0.15), alignItems: 'center', justifyContent: 'center' },
+  detailHeroName: { fontFamily: F.uiBold, fontSize: 20, color: T.text },
+  detailInfoCard: { marginHorizontal: D.pad, backgroundColor: T.surface, borderRadius: R.card, borderWidth: 1, borderColor: T.border, overflow: 'hidden' },
+  detailInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: D.cardPad, paddingVertical: 14 },
+  detailInfoLabel: { fontFamily: F.uiBold, fontSize: 10, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.6 },
+  detailInfoValue: { fontFamily: F.uiMed, fontSize: 14, color: T.text, marginTop: 2 },
+  detailActionsCard: { marginHorizontal: D.pad, marginTop: 14, backgroundColor: T.surface, borderRadius: R.card, borderWidth: 1, borderColor: T.border, overflow: 'hidden' },
+  detailAction: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: D.cardPad, paddingVertical: 16 },
+  detailActionText: { fontFamily: F.uiSemi, fontSize: 15 },
+  detailFootnote: { fontFamily: F.uiMed, fontSize: 12, color: T.muted, paddingHorizontal: D.pad, paddingTop: 12, lineHeight: 17 },
+
+  // Schedule create/edit modal
   modal: { flex: 1, backgroundColor: T.bg },
   modalHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -419,14 +599,18 @@ const styles = StyleSheet.create({
   modalCancelText: { fontFamily: F.uiMed, fontSize: 16, color: T.textDim },
   modalSaveText: { fontFamily: F.uiSemi, fontSize: 16, color: T.primary },
   fieldLabel: { fontFamily: F.uiBold, fontSize: 11, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
-  emptyHint2: { fontFamily: F.uiMed, fontSize: 14, color: T.muted },
-  templateOpt: {
+  boundRoutine: {
+    paddingHorizontal: 14, paddingVertical: 12, borderRadius: R.sm,
+    borderWidth: 1, borderColor: T.border, backgroundColor: T.surface2,
+  },
+  boundRoutineText: { fontFamily: F.uiSemi, fontSize: 15, color: T.text },
+  routineOpt: {
     paddingHorizontal: 14, paddingVertical: 10, borderRadius: R.sm,
     borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,
   },
-  templateOptSel: { borderColor: T.primary, backgroundColor: withAlpha(T.primary, 0.1) },
-  templateOptText: { fontFamily: F.uiMed, fontSize: 15, color: T.textDim },
-  templateOptTextSel: { color: T.primary, fontFamily: F.uiSemi },
+  routineOptSel: { borderColor: T.primary, backgroundColor: withAlpha(T.primary, 0.1) },
+  routineOptText: { fontFamily: F.uiMed, fontSize: 15, color: T.textDim },
+  routineOptTextSel: { color: T.primary, fontFamily: F.uiSemi },
   dayBtn: {
     paddingHorizontal: 10, paddingVertical: 8, borderRadius: R.sm,
     borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,

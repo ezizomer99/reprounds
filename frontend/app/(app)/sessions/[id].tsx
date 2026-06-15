@@ -163,27 +163,21 @@ function PickDisciplineModal({ visible, onClose, onPick }: {
 
 // ─── Set row ─────────────────────────────────────────────────────────────────
 
-function SetRow({ set, sessionId, entryId, onCompleted, onDelete, exerciseType }: {
+function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMenu, exerciseType }: {
   set: StrengthSet;
   sessionId: string;
   entryId: string;
+  displayNumber: number | null; // null = warm-up
   onCompleted: () => void;
-  onDelete: () => void;
+  onOpenMenu: () => void;
   exerciseType?: 'strength' | 'conditioning';
 }) {
   const isTime = exerciseType === 'conditioning';
+  const isWarm = set.setType === 'warmup';
   const updateSet = useUpdateStrengthSet();
   const [reps, setReps] = useState(set.reps !== null ? String(set.reps) : '');
   const [weight, setWeight] = useState(set.weight !== null ? String(set.weight) : '');
   const [duration, setDuration] = useState(set.reps !== null ? fmtDuration(set.reps) : '');
-  const [setType, setSetType] = useState<SetType>(set.setType);
-
-  function cycleType() {
-    const idx = SET_TYPE_CYCLE.indexOf(setType);
-    const next = SET_TYPE_CYCLE[(idx + 1) % SET_TYPE_CYCLE.length];
-    setSetType(next);
-    updateSet.mutate({ sessionId, entryId, setId: set.id, setType: next });
-  }
 
   function handleBlurReps() {
     const parsed = reps.trim() === '' ? null : Number(reps);
@@ -201,30 +195,38 @@ function SetRow({ set, sessionId, entryId, onCompleted, onDelete, exerciseType }
     updateSet.mutate({ sessionId, entryId, setId: set.id, reps: secs });
   }
 
-  function handleComplete() {
-    updateSet.mutate({ sessionId, entryId, setId: set.id, completed: true }, { onSuccess: onCompleted });
-  }
-
-  const chipColor = SET_TYPE_COLOR[setType];
   const isDone = set.completed;
+
+  function toggleComplete() {
+    const next = !isDone;
+    updateSet.mutate(
+      { sessionId, entryId, setId: set.id, completed: next },
+      { onSuccess: () => { if (next) onCompleted(); } },
+    );
+  }
 
   return (
     <View style={[styles.setRow, isDone && { backgroundColor: withAlpha(T.primary, 0.08) }]}>
-      {/* Set number / long-press to delete */}
-      <TouchableOpacity style={styles.setNum} onLongPress={onDelete} delayLongPress={600}>
-        <Text style={styles.setNumText}>{set.setNumber}</Text>
-      </TouchableOpacity>
-
-      {/* Type chip — cycles on tap */}
+      {/* Number circle / warm-up — tap to toggle complete */}
       <TouchableOpacity
-        style={[styles.typeChip, { borderColor: withAlpha(chipColor, 0.45) }]}
-        onPress={cycleType}
+        style={[
+          styles.setCircle,
+          isWarm && styles.setCircleWarm,
+          isDone && styles.setCircleDone,
+        ]}
+        onPress={toggleComplete}
+        disabled={updateSet.isPending}
       >
-        <Text style={[styles.typeChipText, { color: chipColor }]}>{SET_TYPE_LABEL[setType]}</Text>
+        {isDone ? (
+          <Ionicons name="checkmark" size={16} color={T.onPrimary} />
+        ) : isWarm ? (
+          <Ionicons name="flame-outline" size={14} color={T.gold} />
+        ) : (
+          <Text style={styles.setCircleText}>{displayNumber}</Text>
+        )}
       </TouchableOpacity>
 
       {isTime ? (
-        /* Duration cell (conditioning exercises) */
         <View style={[styles.cell, { flex: 2 }, isDone && styles.cellDone]}>
           <TextInput
             style={styles.cellValue}
@@ -242,7 +244,6 @@ function SetRow({ set, sessionId, entryId, onCompleted, onDelete, exerciseType }
         </View>
       ) : (
         <>
-          {/* Weight cell */}
           <View style={[styles.cell, isDone && styles.cellDone]}>
             <TextInput
               style={styles.cellValue}
@@ -259,7 +260,6 @@ function SetRow({ set, sessionId, entryId, onCompleted, onDelete, exerciseType }
             <Text style={styles.cellUnit}>kg</Text>
           </View>
 
-          {/* Reps cell */}
           <View style={[styles.cell, isDone && styles.cellDone]}>
             <TextInput
               style={styles.cellValue}
@@ -273,19 +273,50 @@ function SetRow({ set, sessionId, entryId, onCompleted, onDelete, exerciseType }
               editable={!isDone}
               textAlign="center"
             />
+            <Text style={styles.cellUnit}>reps</Text>
           </View>
         </>
       )}
 
-      {/* Check button */}
-      <TouchableOpacity
-        style={[styles.checkBtn, isDone && { backgroundColor: T.primary, borderColor: T.primary }]}
-        onPress={handleComplete}
-        disabled={isDone || updateSet.isPending}
-      >
-        <Ionicons name="checkmark" size={18} color={isDone ? T.onPrimary : T.muted} />
+      <TouchableOpacity style={styles.menuBtn} onPress={onOpenMenu}>
+        <Ionicons name="ellipsis-vertical" size={16} color={T.muted} />
       </TouchableOpacity>
     </View>
+  );
+}
+
+// ─── Per-set actions menu ─────────────────────────────────────────────────────
+
+function SetActionsMenu({ set, onSetType, onDuplicate, onDelete, onClose }: {
+  set: StrengthSet;
+  onSetType: (t: SetType) => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={styles.menuBackdrop} activeOpacity={1} onPress={onClose}>
+        <View style={styles.menuSheet}>
+          <Text style={styles.menuHeader}>Set type</Text>
+          {SET_TYPE_CYCLE.map((t) => (
+            <TouchableOpacity key={t} style={styles.menuItem} onPress={() => { onSetType(t); onClose(); }}>
+              <Text style={[styles.menuItemText, { color: SET_TYPE_COLOR[t] }]}>{SET_TYPE_LABEL[t]}</Text>
+              {set.setType === t && <Ionicons name="checkmark" size={16} color={T.primary} />}
+            </TouchableOpacity>
+          ))}
+          <View style={styles.menuDivider} />
+          <TouchableOpacity style={styles.menuItem} onPress={() => { onDuplicate(); onClose(); }}>
+            <Ionicons name="copy-outline" size={16} color={T.textDim} />
+            <Text style={styles.menuItemText}>Duplicate set</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.menuItem} onPress={() => { onDelete(); onClose(); }}>
+            <Ionicons name="trash-outline" size={16} color={T.danger} />
+            <Text style={[styles.menuItemText, { color: T.danger }]}>Delete set</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
   );
 }
 
@@ -315,17 +346,37 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, exerciseType }: {
 }) {
   const isTime = exerciseType === 'conditioning';
   const addSet = useAddStrengthSet();
+  const updateSet = useUpdateStrengthSet();
   const deleteSet = useDeleteStrengthSet();
   const restSeconds = entry.restSeconds ?? 120;
+  const [menuSet, setMenuSet] = useState<StrengthSet | null>(null);
 
-  function handleAddSet() {
-    addSet.mutate({ sessionId, entryId: entry.id, setNumber: entry.sets.length + 1, setType: 'normal', completed: false });
+  const warmups = entry.sets.filter((s) => s.setType === 'warmup');
+  const working = entry.sets.filter((s) => s.setType !== 'warmup');
+
+  function handleAddWarmup() {
+    addSet.mutate({ sessionId, entryId: entry.id, setNumber: entry.sets.length + 1, setType: 'warmup', completed: false });
   }
 
-  function handleDeleteSet(setId: string) {
+  function handleAddSet() {
+    const last = working[working.length - 1];
+    addSet.mutate({
+      sessionId, entryId: entry.id, setNumber: entry.sets.length + 1, setType: 'normal',
+      reps: last?.reps ?? null, weight: last?.weight ?? null, completed: false,
+    });
+  }
+
+  function handleDuplicate(set: StrengthSet) {
+    addSet.mutate({
+      sessionId, entryId: entry.id, setNumber: entry.sets.length + 1, setType: set.setType,
+      reps: set.reps, weight: set.weight, completed: false,
+    });
+  }
+
+  function handleDelete(set: StrengthSet) {
     Alert.alert('Delete Set', 'Remove this set?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Delete', style: 'destructive', onPress: () => deleteSet.mutate({ sessionId, entryId: entry.id, setId }) },
+      { text: 'Delete', style: 'destructive', onPress: () => deleteSet.mutate({ sessionId, entryId: entry.id, setId: set.id }) },
     ]);
   }
 
@@ -337,9 +388,27 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, exerciseType }: {
       </View>
       {entry.exerciseId && <LastTime exerciseId={entry.exerciseId} />}
 
+      {/* Warm-up */}
+      <TouchableOpacity style={styles.addSubRow} onPress={handleAddWarmup} disabled={addSet.isPending}>
+        <Ionicons name="add" size={15} color={T.gold} />
+        <Text style={[styles.addSubText, { color: T.gold }]}>Warm-up</Text>
+      </TouchableOpacity>
+      {warmups.map((set) => (
+        <SetRow
+          key={set.id}
+          set={set}
+          sessionId={sessionId}
+          entryId={entry.id}
+          displayNumber={null}
+          onCompleted={() => onSetCompleted(restSeconds)}
+          onOpenMenu={() => setMenuSet(set)}
+          exerciseType={exerciseType}
+        />
+      ))}
+
+      {/* Working sets */}
       <View style={styles.colHeaders}>
-        <View style={styles.setNum} />
-        <View style={styles.typeChipPlaceholder} />
+        <View style={styles.setCirclePlaceholder} />
         {isTime ? (
           <Text style={[styles.colHeader, { flex: 2 }]}>Duration</Text>
         ) : (
@@ -348,17 +417,18 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, exerciseType }: {
             <Text style={styles.colHeader}>Reps</Text>
           </>
         )}
-        <View style={{ width: 44 }} />
+        <View style={{ width: 32 }} />
       </View>
 
-      {entry.sets.map((set) => (
+      {working.map((set, i) => (
         <SetRow
           key={set.id}
           set={set}
           sessionId={sessionId}
           entryId={entry.id}
+          displayNumber={i + 1}
           onCompleted={() => onSetCompleted(restSeconds)}
-          onDelete={() => handleDeleteSet(set.id)}
+          onOpenMenu={() => setMenuSet(set)}
           exerciseType={exerciseType}
         />
       ))}
@@ -368,11 +438,21 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, exerciseType }: {
           <ActivityIndicator size="small" color={T.textDim} />
         ) : (
           <>
-            <Ionicons name="add" size={15} color={T.textDim} />
-            <Text style={styles.addSetText}>Add set</Text>
+            <Ionicons name="add" size={15} color={T.primary} />
+            <Text style={styles.addSetText}>Set</Text>
           </>
         )}
       </TouchableOpacity>
+
+      {menuSet && (
+        <SetActionsMenu
+          set={menuSet}
+          onSetType={(t) => updateSet.mutate({ sessionId, entryId: entry.id, setId: menuSet.id, setType: t })}
+          onDuplicate={() => handleDuplicate(menuSet)}
+          onDelete={() => handleDelete(menuSet)}
+          onClose={() => setMenuSet(null)}
+        />
+      )}
     </View>
   );
 }
@@ -577,7 +657,7 @@ export default function SessionScreen() {
     }
   }
 
-  const sessionName = useMemo(() => (session?.templateId ? 'Session' : 'Ad-hoc Session'), [session]);
+  const sessionName = useMemo(() => (session?.routineId ? 'Session' : 'Ad-hoc Session'), [session]);
 
   if (isLoading) {
     return <View style={styles.loadingScreen}><ActivityIndicator size="large" color={T.primary} /></View>;
@@ -766,6 +846,15 @@ const styles = StyleSheet.create({
   },
   setNum: { width: 28, alignItems: 'center', justifyContent: 'center' },
   setNumText: { fontFamily: F.uiSemi, fontSize: 13, color: T.muted },
+  setCircle: {
+    width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, borderColor: T.borderStrong,
+    backgroundColor: T.surface2, alignItems: 'center', justifyContent: 'center',
+  },
+  setCircleWarm: { borderColor: withAlpha(T.gold, 0.5) },
+  setCircleDone: { backgroundColor: T.primary, borderColor: T.primary },
+  setCircleText: { fontFamily: F.monoBold, fontSize: 14, color: T.text },
+  setCirclePlaceholder: { width: 30 },
+  menuBtn: { width: 28, height: 32, alignItems: 'center', justifyContent: 'center' },
   typeChip: {
     height: 28, borderRadius: R.chip, borderWidth: 1,
     paddingHorizontal: 8,
@@ -807,7 +896,17 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed', flexDirection: 'row', alignItems: 'center',
     justifyContent: 'center', gap: 6,
   },
-  addSetText: { fontFamily: F.uiSemi, fontSize: 13, color: T.textDim },
+  addSetText: { fontFamily: F.uiSemi, fontSize: 13, color: T.primary },
+  addSubRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 2 },
+  addSubText: { fontFamily: F.uiSemi, fontSize: 13 },
+
+  // Per-set actions menu
+  menuBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  menuSheet: { backgroundColor: T.surface, borderTopLeftRadius: R.card, borderTopRightRadius: R.card, paddingVertical: 8, paddingBottom: 32 },
+  menuHeader: { fontFamily: F.uiBold, fontSize: 11, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.8, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 6 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 20, paddingVertical: 14 },
+  menuItemText: { flex: 1, fontFamily: F.uiSemi, fontSize: 15, color: T.text },
+  menuDivider: { height: 1, backgroundColor: T.border, marginVertical: 6 },
 
   // MA fields
   maField: { gap: 6 },
