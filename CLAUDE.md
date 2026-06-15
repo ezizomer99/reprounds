@@ -78,3 +78,12 @@ Invoke these for deep domain work:
 | `auth` | Google Sign-In flow, JWT minting/verification, JWKS |
 | `calendar-recurrence` | RRULE projection, exception materialization, the three edit modes |
 | `shared-types` | API contract types, field_config schema, est. 1RM calculator |
+| `security-reviewer` | Pre-commit/pre-push security review: leaked secrets, auth/authz mistakes, IDOR, injection risks, data exposure |
+
+---
+
+## Security
+
+`.githooks/` runs a secret scanner on every `git commit` (staged diff) and `git push` (pushed commits). It blocks on API keys, tokens, private key blocks, `.env` files, and `.claude/settings*.json`. Bypass with `--no-verify` only when the diff is confirmed clean.
+
+For deeper AI-powered review before committing, invoke the `security-reviewer` agent — it checks auth/authz scoping, IDOR, injection risks, and data exposure in addition to secrets.

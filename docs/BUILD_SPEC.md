@@ -98,48 +98,40 @@ CREATE TABLE disciplines (
   created_at   timestamptz NOT NULL DEFAULT now()
 );
 
--- Reusable plans ("Lift + bag day", "Tuesday BJJ")
-CREATE TABLE templates (
-  id         uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id    uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  name       text NOT NULL,
-  day_label  text,
-  notes      text,
-  created_at timestamptz NOT NULL DEFAULT now()
+-- Reusable plans with optional recurrence ("Lift + bag day", "Tuesday BJJ")
+CREATE TABLE routines (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name         text NOT NULL,
+  day_label    text,
+  notes        text,
+  rrule        text,        -- RFC 5545 RRULE string, e.g. "FREQ=WEEKLY;BYDAY=TU"; NULL = unscheduled
+  start_date   date,
+  end_date     date,        -- NULL = open-ended
+  time_of_day  time,
+  created_at   timestamptz NOT NULL DEFAULT now()
 );
+CREATE INDEX ON routines(user_id);
 
-CREATE TABLE template_items (
-  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  template_id         uuid NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
-  kind                entry_kind NOT NULL,
-  exercise_id         uuid REFERENCES exercises(id),    -- when kind='exercise'
-  discipline_id       uuid REFERENCES disciplines(id),  -- when kind='martial_arts'
-  order_index         int NOT NULL DEFAULT 0,
-  superset_group      int,
+CREATE TABLE routine_items (
+  id                   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  routine_id           uuid NOT NULL REFERENCES routines(id) ON DELETE CASCADE,
+  kind                 entry_kind NOT NULL,
+  exercise_id          uuid REFERENCES exercises(id),    -- when kind='exercise'
+  discipline_id        uuid REFERENCES disciplines(id),  -- when kind='martial_arts'
+  order_index          int NOT NULL DEFAULT 0,
+  superset_group       int,
   default_rest_seconds int,
-  target              jsonb,  -- planned e.g. {"sets":3,"reps":5,"weight":100} or {"rounds":3,"minutes":3}
+  target               jsonb,  -- PlannedSet[] e.g. [{"sets":3,"reps":5,"weight":100}]
   CHECK ( (kind='exercise' AND exercise_id IS NOT NULL AND discipline_id IS NULL)
        OR (kind='martial_arts' AND discipline_id IS NOT NULL AND exercise_id IS NULL) )
 );
 
--- Recurring weekly schedule (the "series"). See §5.2.
-CREATE TABLE schedule_rules (
-  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  template_id uuid NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
-  rrule       text NOT NULL,        -- RFC 5545 RRULE, e.g. "FREQ=WEEKLY;BYDAY=TU"
-  start_date  date NOT NULL,
-  end_date    date,                 -- NULL = open-ended
-  time_of_day time,
-  created_at  timestamptz NOT NULL DEFAULT now()
-);
-
--- A concrete dated session (the "instance"). See §5.2 for how these relate to rules.
+-- A concrete dated session (the "instance"). See §5.2 for how these relate to routines.
 CREATE TABLE sessions (
   id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id          uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  template_id      uuid REFERENCES templates(id),        -- optional source plan
-  schedule_rule_id uuid REFERENCES schedule_rules(id),   -- set if generated from a rule
+  routine_id       uuid REFERENCES routines(id),   -- optional source routine
   date             date NOT NULL,
   status           session_status NOT NULL DEFAULT 'planned',
   started_at       timestamptz,
@@ -180,7 +172,7 @@ CREATE TABLE strength_sets (
 );
 ```
 
-Indexes worth adding: `sessions(user_id, date)`, `session_entries(session_id)`, `strength_sets(session_entry_id)`, `session_entries(exercise_id)` (for "last time" + history lookups), `schedule_rules(user_id)`.
+Indexes worth adding: `sessions(user_id, date)`, `session_entries(session_id)`, `strength_sets(session_entry_id)`, `session_entries(exercise_id)` (for "last time" + history lookups). `routines(user_id)` is already included in the DDL above.
 
 ---
 
@@ -198,12 +190,14 @@ Setup gotchas to handle: needs a **Web OAuth client ID** (used on both platforms
 
 ### 5.2 Recurring schedule + exceptions
 
-The pattern (series) and each day (instance) are separate; editing one must not affect the others.
+The recurrence fields (`rrule`, `start_date`, `end_date`, `time_of_day`) live directly on the `routines` row — there is no separate schedule table. A routine with `rrule = NULL` is an unscheduled plan; one with an rrule is a recurring series. Use a maintained RRULE library to compute occurrence dates — do not hand-roll calendar math.
 
-- `schedule_rules` stores the recurrence (`rrule`). Use a maintained RRULE library to compute occurrence dates — do not hand-roll calendar math.
-- The calendar endpoint returns, for a date range: all real `sessions` rows in range, **plus** virtual occurrences projected from rules **for dates that don't already have a session row** for that rule.
-- **Editing/skipping one day** materializes a real `sessions` row for that date (status `skipped`, or a modified `planned`/`completed`), linked via `schedule_rule_id`. The projector then skips that date because a row exists. Other dates keep generating untouched.
-- **Three edit modes** (Google Calendar parity): this one (materialize an exception row), this & following (set `end_date` on the old rule, create a new rule from that date), all (edit the rule itself).
+- The calendar endpoint returns, for a date range: all real `sessions` rows in range, **plus** virtual occurrences projected from the routine's `rrule` **for dates that don't already have a session row** linked to that routine.
+- **Skipping one day** (`POST /routines/:id/skip`): materializes a `sessions` row for that date with status `skipped`, linked via `routine_id`. The projector skips that date on future requests because a row already exists. Other dates keep generating untouched.
+- **Three edit modes** (Google Calendar parity):
+  - **single** — skip/materialize one occurrence as above.
+  - **this & following** — set `end_date` on the current routine, create a new routine (copying name, items, and rrule) starting from that date with the modified values.
+  - **all** — edit the routine's `rrule`/schedule fields directly.
 - Logging against a planned day flips its session to `completed` (materializing it if it was still virtual).
 
 ### 5.3 Dynamic discipline forms
@@ -251,40 +245,45 @@ The pattern (series) and each day (instance) are separate; editing one must not 
 ## 7. API surface (REST, all under `/v1`, all auth'd except `/auth/google`)
 
 ```
-POST   /auth/google            -> { sessionToken, user }
-GET    /auth/me                -> current user
+POST   /auth/google                                -> { sessionToken, user }
+GET    /auth/me                                    -> current user
 
-GET    /exercises              ?type=&search=
+GET    /exercises                                  ?type=&search=
 POST   /exercises
 PATCH  /exercises/:id
 DELETE /exercises/:id
-GET    /exercises/:id/history  -> recent entries + sets ("last time", progression)
-GET    /exercises/:id/prs      -> computed PRs / est. 1RM
+GET    /exercises/:id/history                      -> recent entries + sets ("last time", progression)
+GET    /exercises/:id/prs                          -> computed PRs / est. 1RM
 
 GET    /disciplines
 POST   /disciplines
 PATCH  /disciplines/:id
 DELETE /disciplines/:id
+GET    /disciplines/:id/history
 
-GET    /templates              (with items)
-POST   /templates
-PATCH  /templates/:id
-DELETE /templates/:id
+GET    /routines                                   (with items)
+POST   /routines                                   (with optional items)
+PATCH  /routines/:id
+DELETE /routines/:id
+POST   /routines/:id/skip                          skip one occurrence — materializes a skipped session
+POST   /routines/:id/items
+PATCH  /routines/:id/items/:itemId
+DELETE /routines/:id/items/:itemId
+PUT    /routines/:id/items/order                   reorder items
 
-GET    /schedule-rules
-POST   /schedule-rules
-PATCH  /schedule-rules/:id      ?mode=single|following|all
-DELETE /schedule-rules/:id      ?mode=single|following|all
-
-GET    /calendar               ?from=&to=  -> materialized + projected occurrences
-GET    /sessions/:id           (with entries + sets)
-POST   /sessions               (ad-hoc or materialize a planned day)
+GET    /calendar                                   ?from=YYYY-MM-DD&to=YYYY-MM-DD
+GET    /sessions                                   ?status=&limit=
+POST   /sessions
+GET    /sessions/:id                               (with entries + sets)
 PATCH  /sessions/:id
 DELETE /sessions/:id
 POST   /sessions/:id/complete
+POST   /sessions/:id/entries
+PATCH  /sessions/:id/entries/:entryId
+POST   /sessions/:id/entries/:entryId/sets
+PATCH  /sessions/:id/entries/:entryId/sets/:setId
+DELETE /sessions/:id/entries/:entryId/sets/:setId
 ```
-
-Session entries and strength sets can be nested under the session payload for create/update, or exposed as sub-resources — implementer's call; nested is simpler for the logging flow.
 
 ---
 
@@ -308,13 +307,13 @@ Boundaries (the point of the layout):
 
 ## 9. Build phases (do in order)
 
-0. **Scaffold** — monorepo, Drizzle schema + first migration against Neon, Hyperdrive binding, Worker "hello", Expo app boots as an EAS **dev build** on device.
-1. **Auth** — Google sign-in → `/auth/google` verify → session JWT → `/auth/me`; secure-store wiring.
-2. **Libraries** — exercises + disciplines CRUD; seed global defaults (common lifts, jump rope, heavy bag, BJJ discipline with its `field_config`).
-3. **Templates** — create/edit templates with mixed gym + martial-arts items.
-4. **Logging** — strength logger first (sets, types, RPE/RIR, rest timer, "last time", reorder), then conditioning, then the dynamic martial-arts form.
-5. **Calendar + recurrence** — schedule rules, projection, materialization-on-edit, the three edit modes, planned→completed on logging.
-6. **History + stats** — session history, computed 1RM + PRs.
+0. ✅ **Scaffold** — monorepo, Drizzle schema + first migration against Neon, Hyperdrive binding, Worker "hello", Expo app boots as an EAS **dev build** on device.
+1. ✅ **Auth** — Google sign-in → `/auth/google` verify → session JWT → `/auth/me`; secure-store wiring.
+2. ✅ **Libraries** — exercises + disciplines CRUD; seed global defaults (common lifts, jump rope, heavy bag, BJJ discipline with its `field_config`).
+3. ✅ **Routines** (renamed from Templates) — create/edit routines with mixed gym + martial-arts items; items management, reorder, skip-occurrence.
+4. 🔄 **Logging** — sessions/entries/sets API complete; frontend screens exist; "last time" display, rest timer, and RPE/RIR UI may be partially complete.
+5. 🔄 **Calendar + recurrence** — `/calendar` endpoint and calendar screen exist; skip (single occurrence) implemented; "this & following" and "all" edit modes partially implemented.
+6. ⬜ **History + stats** — `/exercises/:id/history` and `/exercises/:id/prs` backend complete; history screen exists; computed 1RM + PR logic may be partial.
 
 Then move to **Claude Design** for visual/UX polish of the core screens (logger, calendar, discipline log, library), and feed that back into the RN components.
 
@@ -322,10 +321,10 @@ Then move to **Claude Design** for visual/UX polish of the core screens (logger,
 
 ## 10. Decisions to confirm before/while building
 
-- Worker framework: **Hono** (assumed) vs alternative.
-- RRULE storage: full RFC 5545 string (assumed, more flexible) vs a simpler `weekday` int for v1.
-- Session JWT lifetime + refresh strategy.
-- Monorepo tooling: pnpm workspaces alone vs + Turborepo.
-- Seed list: which default exercises and disciplines to ship.
+- Worker framework: ✅ **Hono** confirmed.
+- RRULE storage: ✅ Full RFC 5545 string confirmed.
+- Session JWT lifetime + refresh strategy: TBD — HMAC SHA-256 implemented; expiry/refresh strategy not finalized.
+- Monorepo tooling: ✅ pnpm workspaces (no Turborepo) confirmed.
+- Seed list: TBD — seeding mechanism exists but final list not confirmed as shipped.
 ```
 
