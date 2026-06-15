@@ -8,3 +8,5 @@ ios/
 android/
 *.tsbuildinfo
 docs/
+.claude/settings.json
+.claude/settings.local.json
