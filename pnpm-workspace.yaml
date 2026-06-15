@@ -2,9 +2,8 @@ packages:
   - 'frontend'
   - 'backend'
   - 'shared'
+shamefullyHoist: true
 allowBuilds:
   esbuild: true
   sharp: true
   workerd: true
-overrides:
-  metro-cache: '0.82.5'

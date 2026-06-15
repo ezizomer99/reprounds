@@ -44,6 +44,11 @@ function resolveRealPackagePath(pkgName) {
 const extraNodeModules = {};
 const packagesToPreResolve = [
   '@expo/vector-icons',
+  'metro-config',
+  'metro-cache',
+  'metro',
+  'metro-core',
+  'metro-runtime',
 ];
 for (const pkg of packagesToPreResolve) {
   const real = resolveRealPackagePath(pkg);

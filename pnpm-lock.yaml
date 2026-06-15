@@ -4,8 +4,7 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-overrides:
-  metro-cache: 0.82.5
+pnpmfileChecksum: sha256-4pjczTFUq4k92z5WFZF3zeuHVI1GMXQR8CZ83DawiDE=
 
 importers:
 
