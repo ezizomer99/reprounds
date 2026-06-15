@@ -1,3 +1,9 @@
 # Git hooks and shell scripts must stay LF or they break under sh on Windows.
 .githooks/** text eol=lf
 *.sh text eol=lf
+
+# Force LF on lockfile and pnpm config so EAS Build (Linux) sees byte-identical
+# files to local (Windows) — prevents lockfile/checksum mismatches on frozen install.
+pnpm-lock.yaml text eol=lf
+pnpm-workspace.yaml text eol=lf
+.npmrc text eol=lf

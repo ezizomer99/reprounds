@@ -2,7 +2,7 @@ packages:
   - 'frontend'
   - 'backend'
   - 'shared'
-shamefullyHoist: true
+nodeLinker: hoisted
 allowBuilds:
   esbuild: true
   sharp: true
