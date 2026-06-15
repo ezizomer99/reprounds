@@ -42,11 +42,11 @@ import { withAlpha } from '../../../src/lib/color';
 
 const SET_TYPE_CYCLE: SetType[] = ['warmup', 'normal', 'drop', 'failure', 'amrap'];
 const SET_TYPE_LABEL: Record<SetType, string> = {
-  warmup: 'W',
-  normal: 'N',
-  drop: 'D',
-  failure: 'F',
-  amrap: 'A',
+  warmup: 'Warmup',
+  normal: 'Normal',
+  drop: 'Drop',
+  failure: 'Failure',
+  amrap: 'AMRAP',
 };
 const SET_TYPE_COLOR: Record<SetType, string> = {
   warmup: T.textDim,
@@ -55,6 +55,25 @@ const SET_TYPE_COLOR: Record<SetType, string> = {
   failure: T.danger,
   amrap: T.gold,
 };
+
+function fmtDuration(secs: number): string {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+function parseDuration(val: string): number | null {
+  const t = val.trim();
+  if (!t) return null;
+  if (t.includes(':')) {
+    const [mPart, sPart] = t.split(':');
+    const m = parseInt(mPart || '0', 10);
+    const s = parseInt(sPart || '0', 10);
+    if (isNaN(m) || isNaN(s)) return null;
+    return m * 60 + Math.min(s, 59);
+  }
+  const n = parseInt(t, 10);
+  return isNaN(n) ? null : n;
+}
 
 // ─── Exercise picker modal ────────────────────────────────────────────────────
 
@@ -144,16 +163,19 @@ function PickDisciplineModal({ visible, onClose, onPick }: {
 
 // ─── Set row ─────────────────────────────────────────────────────────────────
 
-function SetRow({ set, sessionId, entryId, onCompleted, onDelete }: {
+function SetRow({ set, sessionId, entryId, onCompleted, onDelete, exerciseType }: {
   set: StrengthSet;
   sessionId: string;
   entryId: string;
   onCompleted: () => void;
   onDelete: () => void;
+  exerciseType?: 'strength' | 'conditioning';
 }) {
+  const isTime = exerciseType === 'conditioning';
   const updateSet = useUpdateStrengthSet();
   const [reps, setReps] = useState(set.reps !== null ? String(set.reps) : '');
   const [weight, setWeight] = useState(set.weight !== null ? String(set.weight) : '');
+  const [duration, setDuration] = useState(set.reps !== null ? fmtDuration(set.reps) : '');
   const [setType, setSetType] = useState<SetType>(set.setType);
 
   function cycleType() {
@@ -171,6 +193,12 @@ function SetRow({ set, sessionId, entryId, onCompleted, onDelete }: {
   function handleBlurWeight() {
     const parsed = weight.trim() === '' ? null : Number(weight);
     updateSet.mutate({ sessionId, entryId, setId: set.id, weight: isNaN(parsed as number) ? null : parsed });
+  }
+
+  function handleBlurDuration() {
+    const secs = parseDuration(duration);
+    if (secs !== null) setDuration(fmtDuration(secs));
+    updateSet.mutate({ sessionId, entryId, setId: set.id, reps: secs });
   }
 
   function handleComplete() {
@@ -195,38 +223,59 @@ function SetRow({ set, sessionId, entryId, onCompleted, onDelete }: {
         <Text style={[styles.typeChipText, { color: chipColor }]}>{SET_TYPE_LABEL[setType]}</Text>
       </TouchableOpacity>
 
-      {/* Weight cell */}
-      <View style={[styles.cell, isDone && styles.cellDone]}>
-        <TextInput
-          style={styles.cellValue}
-          value={weight}
-          onChangeText={setWeight}
-          onBlur={handleBlurWeight}
-          placeholder="—"
-          placeholderTextColor={T.muted}
-          keyboardType="decimal-pad"
-          returnKeyType="done"
-          editable={!isDone}
-          textAlign="center"
-        />
-        <Text style={styles.cellUnit}>kg</Text>
-      </View>
+      {isTime ? (
+        /* Duration cell (conditioning exercises) */
+        <View style={[styles.cell, { flex: 2 }, isDone && styles.cellDone]}>
+          <TextInput
+            style={styles.cellValue}
+            value={duration}
+            onChangeText={setDuration}
+            onBlur={handleBlurDuration}
+            placeholder="0:00"
+            placeholderTextColor={T.muted}
+            keyboardType="default"
+            returnKeyType="done"
+            editable={!isDone}
+            textAlign="center"
+          />
+          <Text style={styles.cellUnit}>min</Text>
+        </View>
+      ) : (
+        <>
+          {/* Weight cell */}
+          <View style={[styles.cell, isDone && styles.cellDone]}>
+            <TextInput
+              style={styles.cellValue}
+              value={weight}
+              onChangeText={setWeight}
+              onBlur={handleBlurWeight}
+              placeholder="—"
+              placeholderTextColor={T.muted}
+              keyboardType="decimal-pad"
+              returnKeyType="done"
+              editable={!isDone}
+              textAlign="center"
+            />
+            <Text style={styles.cellUnit}>kg</Text>
+          </View>
 
-      {/* Reps cell */}
-      <View style={[styles.cell, isDone && styles.cellDone]}>
-        <TextInput
-          style={styles.cellValue}
-          value={reps}
-          onChangeText={setReps}
-          onBlur={handleBlurReps}
-          placeholder="—"
-          placeholderTextColor={T.muted}
-          keyboardType="number-pad"
-          returnKeyType="done"
-          editable={!isDone}
-          textAlign="center"
-        />
-      </View>
+          {/* Reps cell */}
+          <View style={[styles.cell, isDone && styles.cellDone]}>
+            <TextInput
+              style={styles.cellValue}
+              value={reps}
+              onChangeText={setReps}
+              onBlur={handleBlurReps}
+              placeholder="—"
+              placeholderTextColor={T.muted}
+              keyboardType="number-pad"
+              returnKeyType="done"
+              editable={!isDone}
+              textAlign="center"
+            />
+          </View>
+        </>
+      )}
 
       {/* Check button */}
       <TouchableOpacity
@@ -258,11 +307,13 @@ function LastTime({ exerciseId }: { exerciseId: string }) {
 
 // ─── Strength entry card ──────────────────────────────────────────────────────
 
-function StrengthEntryCard({ entry, sessionId, onSetCompleted }: {
+function StrengthEntryCard({ entry, sessionId, onSetCompleted, exerciseType }: {
   entry: SessionEntryWithSets;
   sessionId: string;
   onSetCompleted: (restSecs: number) => void;
+  exerciseType?: 'strength' | 'conditioning';
 }) {
+  const isTime = exerciseType === 'conditioning';
   const addSet = useAddStrengthSet();
   const deleteSet = useDeleteStrengthSet();
   const restSeconds = entry.restSeconds ?? 120;
@@ -288,9 +339,15 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted }: {
 
       <View style={styles.colHeaders}>
         <View style={styles.setNum} />
-        <View style={styles.typeChip} />
-        <Text style={styles.colHeader}>Weight</Text>
-        <Text style={styles.colHeader}>Reps</Text>
+        <View style={styles.typeChipPlaceholder} />
+        {isTime ? (
+          <Text style={[styles.colHeader, { flex: 2 }]}>Duration</Text>
+        ) : (
+          <>
+            <Text style={styles.colHeader}>Weight</Text>
+            <Text style={styles.colHeader}>Reps</Text>
+          </>
+        )}
         <View style={{ width: 44 }} />
       </View>
 
@@ -302,6 +359,7 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted }: {
           entryId={entry.id}
           onCompleted={() => onSetCompleted(restSeconds)}
           onDelete={() => handleDeleteSet(set.id)}
+          exerciseType={exerciseType}
         />
       ))}
 
@@ -475,6 +533,12 @@ export default function SessionScreen() {
   const completeSession = useCompleteSession();
   const addEntry = useAddSessionEntry();
   const { data: disciplines } = useDisciplines();
+  const { data: allExercises } = useExercises();
+  const exerciseTypeMap = useMemo(() => {
+    const m = new Map<string, 'strength' | 'conditioning'>();
+    allExercises?.forEach((e) => m.set(e.id, e.type));
+    return m;
+  }, [allExercises]);
 
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [showDisciplinePicker, setShowDisciplinePicker] = useState(false);
@@ -587,6 +651,7 @@ export default function SessionScreen() {
                 entry={entry}
                 sessionId={session.id}
                 onSetCompleted={handleSetCompleted}
+                exerciseType={entry.exerciseId ? exerciseTypeMap.get(entry.exerciseId) : undefined}
               />
             );
           }
@@ -702,11 +767,13 @@ const styles = StyleSheet.create({
   setNum: { width: 28, alignItems: 'center', justifyContent: 'center' },
   setNumText: { fontFamily: F.uiSemi, fontSize: 13, color: T.muted },
   typeChip: {
-    width: 28, height: 28, borderRadius: R.chip, borderWidth: 1,
+    height: 28, borderRadius: R.chip, borderWidth: 1,
+    paddingHorizontal: 8,
     backgroundColor: T.surface2, alignItems: 'center', justifyContent: 'center',
     borderColor: T.borderStrong,
   },
-  typeChipText: { fontFamily: F.uiBold, fontSize: 11 },
+  typeChipText: { fontFamily: F.uiBold, fontSize: 10 },
+  typeChipPlaceholder: { width: 72 },
   cell: {
     flex: 1,
     height: D.rowH - 12,

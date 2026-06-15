@@ -3,7 +3,6 @@ import {
   Alert,
   FlatList,
   Modal,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -119,13 +118,11 @@ function AddExerciseModal({ visible, onClose }: AddExerciseModalProps) {
       Alert.alert('Validation', 'Name is required.');
       return;
     }
-
     const parsedRest = restSeconds.trim() ? parseInt(restSeconds.trim(), 10) : null;
     if (restSeconds.trim() && (isNaN(parsedRest!) || parsedRest! < 0)) {
       Alert.alert('Validation', 'Rest seconds must be a positive number.');
       return;
     }
-
     try {
       await createExercise.mutateAsync({
         name: trimmed,
@@ -220,7 +217,7 @@ function AddExerciseModal({ visible, onClose }: AddExerciseModalProps) {
   );
 }
 
-export default function ExercisesScreen() {
+export default function ExercisesTab() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { data: currentUser } = useCurrentUser();
@@ -252,21 +249,12 @@ export default function ExercisesScreen() {
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
+      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="chevron-back" size={22} color={T.text} />
-        </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Exercises</Text>
-          {filtered.length > 0 && (
-            <Text style={styles.headerSub}>{filtered.length} exercises</Text>
-          )}
-        </View>
-        <TouchableOpacity style={styles.addBtn} onPress={() => setShowAdd(true)}>
-          <Ionicons name="add" size={18} color={T.onPrimary} />
-        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Exercises</Text>
       </View>
 
+      {/* Search + Add */}
       <View style={styles.searchRow}>
         <Ionicons name="search" size={15} color={T.muted} />
         <TextInput
@@ -275,33 +263,33 @@ export default function ExercisesScreen() {
           onChangeText={setSearch}
           placeholder="Search exercises…"
           placeholderTextColor={T.muted}
-          clearButtonMode="while-editing"
           returnKeyType="search"
           selectionColor={T.primary}
         />
+        <TouchableOpacity style={styles.addBtn} onPress={() => setShowAdd(true)} activeOpacity={0.8}>
+          <Ionicons name="add" size={22} color={T.onPrimary} />
+        </TouchableOpacity>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterScroll}
-        contentContainerStyle={styles.filterRow}
-      >
+      {/* Filter Tabs */}
+      <View style={styles.filterTabsRow}>
         {TYPE_FILTERS.map(({ label, value }) => (
           <TouchableOpacity
             key={value}
-            style={[styles.filterChip, filterType === value && styles.filterChipActive]}
+            style={[styles.filterTab, filterType === value && styles.filterTabActive]}
             onPress={() => setFilterType(value)}
           >
-            <Text style={[styles.filterChipText, filterType === value && styles.filterChipTextActive]}>
+            <Text style={[styles.filterTabText, filterType === value && styles.filterTabTextActive]}>
               {label}
             </Text>
           </TouchableOpacity>
         ))}
-      </ScrollView>
+      </View>
 
       {isLoading && (
-        <View style={styles.centered}><ActivityIndicator size="large" color={T.primary} /></View>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={T.primary} />
+        </View>
       )}
 
       {isError && (
@@ -343,97 +331,164 @@ export default function ExercisesScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: T.bg },
+
   header: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 12, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: T.border,
+    paddingHorizontal: D.pad,
+    paddingTop: 14,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
   },
-  backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontFamily: F.uiSemi, fontSize: 19, color: T.text, letterSpacing: -0.2 },
-  headerSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 1 },
-  addBtn: {
-    width: 36, height: 36, borderRadius: R.sm,
-    backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center',
-  },
+  headerTitle: { fontFamily: F.uiBold, fontSize: 22, color: T.text, letterSpacing: -0.3 },
 
   searchRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: T.surface, borderRadius: R.sm,
-    margin: D.pad, paddingHorizontal: 12, paddingVertical: 9,
-    borderWidth: 1, borderColor: T.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: T.surface,
+    margin: D.pad,
+    marginBottom: 0,
+    borderRadius: R.sm,
+    paddingLeft: 12,
+    borderWidth: 1,
+    borderColor: T.border,
+    overflow: 'hidden',
   },
   searchInput: {
-    flex: 1, fontFamily: F.uiMed, fontSize: 14, color: T.text,
+    flex: 1,
+    fontFamily: F.uiMed,
+    fontSize: 14,
+    color: T.text,
+    paddingVertical: 10,
+  },
+  addBtn: {
+    width: 44,
+    height: 44,
+    backgroundColor: T.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
-  filterScroll: { flexGrow: 0 },
-  filterRow: { paddingHorizontal: D.pad, gap: 8, paddingBottom: 12 },
-  filterChip: {
-    paddingHorizontal: 14, paddingVertical: 6,
-    borderRadius: R.chip, borderWidth: 1, borderColor: T.border,
+  filterTabsRow: {
+    flexDirection: 'row',
     backgroundColor: T.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+    marginTop: D.pad,
   },
-  filterChipActive: { backgroundColor: T.text, borderColor: T.text },
-  filterChipText: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim },
-  filterChipTextActive: { color: T.bg },
+  filterTab: {
+    flex: 1,
+    paddingVertical: 13,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  filterTabActive: { borderBottomColor: T.primary },
+  filterTabText: { fontFamily: F.uiMed, fontSize: 14, color: T.textDim },
+  filterTabTextActive: { fontFamily: F.uiBold, color: T.text },
 
   row: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: D.pad, paddingVertical: 13, gap: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: D.pad,
+    paddingVertical: 13,
+    gap: 10,
   },
   rowLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   rowName: { fontFamily: F.uiMed, fontSize: 15, color: T.text },
   badge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: R.sm },
-  badgeText: { fontFamily: F.uiBold, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.4 },
+  badgeText: {
+    fontFamily: F.uiBold,
+    fontSize: 10,
+    textTransform: 'uppercase',
+    letterSpacing: 0.4,
+  },
 
   historyButton: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 10, paddingVertical: 6,
-    borderRadius: R.sm, borderWidth: 1, borderColor: withAlpha(T.primary, 0.35),
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: R.sm,
+    borderWidth: 1,
+    borderColor: withAlpha(T.primary, 0.35),
   },
   historyText: { fontFamily: F.uiMed, fontSize: 12, color: T.primary },
   deleteButton: {
-    width: 32, height: 32, alignItems: 'center', justifyContent: 'center',
-    borderRadius: R.sm, backgroundColor: withAlpha(T.danger, 0.1),
+    width: 32,
+    height: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: R.sm,
+    backgroundColor: withAlpha(T.danger, 0.1),
   },
 
   separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
   emptyText: { fontFamily: F.uiMed, fontSize: 15, color: T.muted },
-  errorText: { fontFamily: F.uiMed, fontSize: 15, color: T.danger, textAlign: 'center', paddingHorizontal: 24 },
+  errorText: {
+    fontFamily: F.uiMed,
+    fontSize: 15,
+    color: T.danger,
+    textAlign: 'center',
+    paddingHorizontal: 24,
+  },
 
   // Modal
   modalContainer: { flex: 1, backgroundColor: T.bg, padding: 24, paddingTop: 32 },
   modalHeader: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 28,
   },
   modalTitle: { fontFamily: F.uiBold, fontSize: 20, color: T.text },
   modalCancel: { fontFamily: F.uiMed, fontSize: 16, color: T.textDim },
   field: { marginBottom: 20 },
   label: {
-    fontFamily: F.uiBold, fontSize: 11, color: T.textDim,
-    textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8,
+    fontFamily: F.uiBold,
+    fontSize: 11,
+    color: T.textDim,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 8,
   },
   input: {
-    borderWidth: 1, borderColor: T.border,
-    borderRadius: R.sm, backgroundColor: T.surface,
-    paddingHorizontal: 12, paddingVertical: 11,
-    fontFamily: F.uiMed, fontSize: 15, color: T.text,
+    borderWidth: 1,
+    borderColor: T.border,
+    borderRadius: R.sm,
+    backgroundColor: T.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    fontFamily: F.uiMed,
+    fontSize: 15,
+    color: T.text,
   },
   segmented: {
-    flexDirection: 'row', borderWidth: 1, borderColor: T.border,
-    borderRadius: R.sm, overflow: 'hidden',
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: T.border,
+    borderRadius: R.sm,
+    overflow: 'hidden',
   },
-  segmentButton: { flex: 1, paddingVertical: 11, alignItems: 'center', backgroundColor: T.surface },
+  segmentButton: {
+    flex: 1,
+    paddingVertical: 11,
+    alignItems: 'center',
+    backgroundColor: T.surface,
+  },
   segmentButtonLeft: { borderRightWidth: 1, borderRightColor: T.border },
   segmentButtonRight: {},
   segmentButtonActive: { backgroundColor: T.primary },
   segmentText: { fontFamily: F.uiMed, fontSize: 14, color: T.textDim },
   segmentTextActive: { fontFamily: F.uiBold, color: T.onPrimary },
   submitButton: {
-    marginTop: 8, backgroundColor: T.primary,
-    borderRadius: R.card, paddingVertical: 14, alignItems: 'center',
+    marginTop: 8,
+    backgroundColor: T.primary,
+    borderRadius: R.card,
+    paddingVertical: 14,
+    alignItems: 'center',
   },
   submitButtonDisabled: { opacity: 0.55 },
   submitText: { fontFamily: F.uiBold, fontSize: 16, color: T.onPrimary },
