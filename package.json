@@ -12,7 +12,6 @@
     "db:seed": "pnpm --filter backend db:seed"
   },
   "devDependencies": {
-    "@expo/vector-icons": "^14.1.0",
     "typescript": "^5.5.0"
   }
 }
