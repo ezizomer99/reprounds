@@ -1,13 +1,16 @@
 import { Hono } from 'hono';
-import { and, eq, isNull, or } from 'drizzle-orm';
+import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import { createDb } from '../db';
-import { disciplines } from '../db/schema';
+import { disciplines, sessionEntries, sessions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type {
   CreateDisciplineRequest,
   UpdateDisciplineRequest,
   Discipline,
   DisciplineListResponse,
+  ExerciseHistoryEntry,
+  ExerciseHistoryResponse,
+  SessionEntryWithSets,
 } from '@app/shared';
 import type { FieldConfig } from '@app/shared';
 
@@ -144,6 +147,64 @@ disciplineRoutes.patch('/:id', async (c) => {
   };
 
   return c.json({ discipline });
+});
+
+// GET /disciplines/:id/history
+disciplineRoutes.get('/:id/history', async (c) => {
+  const userId = c.get('userId');
+  const disciplineId = c.req.param('id');
+  const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+
+  const entryRows = await db
+    .select({
+      entryId: sessionEntries.id,
+      sessionId: sessionEntries.sessionId,
+      kind: sessionEntries.kind,
+      exerciseId: sessionEntries.exerciseId,
+      disciplineId: sessionEntries.disciplineId,
+      gi: sessionEntries.gi,
+      orderIndex: sessionEntries.orderIndex,
+      supersetGroup: sessionEntries.supersetGroup,
+      restSeconds: sessionEntries.restSeconds,
+      details: sessionEntries.details,
+      entryNotes: sessionEntries.notes,
+      sessionDate: sessions.date,
+      disciplineName: disciplines.name,
+    })
+    .from(sessionEntries)
+    .innerJoin(sessions, eq(sessionEntries.sessionId, sessions.id))
+    .leftJoin(disciplines, eq(sessionEntries.disciplineId, disciplines.id))
+    .where(
+      and(
+        eq(sessionEntries.disciplineId, disciplineId),
+        eq(sessions.userId, userId),
+        eq(sessions.status, 'completed'),
+      ),
+    )
+    .orderBy(desc(sessions.date));
+
+  const history: ExerciseHistoryEntry[] = entryRows.map((row) => {
+    const entry: SessionEntryWithSets = {
+      id: row.entryId,
+      sessionId: row.sessionId,
+      kind: row.kind,
+      exerciseId: row.exerciseId,
+      disciplineId: row.disciplineId,
+      gi: row.gi,
+      orderIndex: row.orderIndex,
+      supersetGroup: row.supersetGroup,
+      restSeconds: row.restSeconds,
+      details: row.details as Record<string, unknown> | null,
+      notes: row.entryNotes,
+      sets: [],
+      exerciseName: null,
+      disciplineName: row.disciplineName ?? null,
+    };
+    return { sessionId: row.sessionId, date: row.sessionDate, entry };
+  });
+
+  const result: ExerciseHistoryResponse = { history };
+  return c.json(result);
 });
 
 disciplineRoutes.delete('/:id', async (c) => {

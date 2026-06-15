@@ -3,6 +3,7 @@ import type {
   CreateDisciplineRequest,
   Discipline,
   DisciplineListResponse,
+  ExerciseHistoryResponse,
 } from '@app/shared';
 import { apiDelete, apiGet, apiPost } from '../lib/api';
 
@@ -13,6 +14,14 @@ export function useDisciplines() {
       const data = await apiGet<DisciplineListResponse>('/disciplines');
       return data.disciplines;
     },
+  });
+}
+
+export function useDisciplineHistory(disciplineId: string | null) {
+  return useQuery<ExerciseHistoryResponse, Error>({
+    queryKey: ['discipline-history', disciplineId],
+    queryFn: () => apiGet<ExerciseHistoryResponse>(`/disciplines/${disciplineId}/history`),
+    enabled: disciplineId !== null,
   });
 }
 
