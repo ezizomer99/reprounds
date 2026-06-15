@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
     "dev:backend": "pnpm --filter backend dev",
     "dev:frontend": "pnpm --filter frontend start",
     "db:generate": "pnpm --filter backend db:generate",
