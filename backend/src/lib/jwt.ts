@@ -1,6 +1,6 @@
 const ALGORITHM = { name: 'HMAC', hash: 'SHA-256' };
 
-function base64UrlEncode(bytes: ArrayBuffer): string {
+function base64UrlEncode(bytes: ArrayBuffer | Uint8Array): string {
   return btoa(String.fromCharCode(...new Uint8Array(bytes)))
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
