@@ -2,6 +2,7 @@
   "name": "glima-tracker",
   "private": true,
   "version": "0.0.0",
+  "packageManager": "pnpm@11.6.0",
   "scripts": {
     "prepare": "git config core.hooksPath .githooks || true",
     "dev:backend": "pnpm --filter backend dev",
