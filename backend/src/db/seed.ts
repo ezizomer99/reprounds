@@ -35,18 +35,15 @@ async function seed() {
     { name: 'Running',         type: 'conditioning' },
   ]);
 
+  const martialArtsFieldConfig = [
+    { key: 'title', label: 'Title', type: 'text' },
+    { key: 'notes', label: 'Notes', type: 'textarea' },
+  ];
+
   await db.insert(disciplines).values([
-    {
-      name: 'BJJ',
-      category: 'grappling',
-      fieldConfig: [
-        { key: 'gi',      label: 'Gi / No-gi', type: 'enum',     options: ['gi', 'no_gi'], column: 'gi' },
-        { key: 'focus',   label: 'Focus',       type: 'text' },
-        { key: 'rounds',  label: 'Rounds',      type: 'number' },
-        { key: 'sparred', label: 'Sparred',     type: 'boolean' },
-        { key: 'notes',   label: 'Notes',       type: 'textarea' },
-      ],
-    },
+    { name: 'BJJ',    category: 'grappling', fieldConfig: martialArtsFieldConfig },
+    { name: 'Boxing', category: 'striking',  fieldConfig: martialArtsFieldConfig },
+    { name: 'MMA',    category: 'mixed',     fieldConfig: martialArtsFieldConfig },
   ]);
 
   console.log('Done.');
