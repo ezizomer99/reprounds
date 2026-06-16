@@ -8,11 +8,13 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { RoutineWithItems } from '@app/shared';
 import { useDeleteRoutine, useRoutines } from '../../../src/hooks/useRoutines';
-import { T, F, R, D } from '../../../src/theme/colors';
+import { F, R, D, ThemeColors } from '../../../src/theme/colors';
+import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
 
 interface RoutineRowProps {
@@ -22,6 +24,8 @@ interface RoutineRowProps {
 }
 
 function RoutineRow({ routine, onPress, onDelete }: RoutineRowProps) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   const hasMartialArts = routine.items.some((i) => i.kind === 'martial_arts');
 
   return (
@@ -33,7 +37,7 @@ function RoutineRow({ routine, onPress, onDelete }: RoutineRowProps) {
     >
       <View style={[styles.iconAvatar, hasMartialArts && styles.iconAvatarMat]}>
         {hasMartialArts ? (
-          <Ionicons name="flash" size={18} color="#a78bfa" />
+          <Ionicons name="flash" size={18} color={T.grappling} />
         ) : (
           <Ionicons name="barbell" size={18} color={T.textDim} />
         )}
@@ -53,6 +57,8 @@ function RoutineRow({ routine, onPress, onDelete }: RoutineRowProps) {
 export default function RoutinesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   const { data: routines, isLoading, isError, error } = useRoutines();
   const deleteRoutine = useDeleteRoutine();
 
@@ -136,37 +142,39 @@ export default function RoutinesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: T.bg },
-  header: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 12, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: T.border,
-  },
-  backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontFamily: F.uiSemi, fontSize: 19, color: T.text, letterSpacing: -0.2 },
-  headerSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 1 },
-  addBtn: {
-    width: 36, height: 36, borderRadius: R.sm,
-    backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center',
-  },
+function makeStyles(T: ThemeColors) {
+  return StyleSheet.create({
+    screen: { flex: 1, backgroundColor: T.bg },
+    header: {
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      paddingHorizontal: 12, paddingVertical: 10,
+      borderBottomWidth: 1, borderBottomColor: T.border,
+    },
+    backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+    headerTitle: { fontFamily: F.uiSemi, fontSize: 19, color: T.text, letterSpacing: -0.2 },
+    headerSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 1 },
+    addBtn: {
+      width: 36, height: 36, borderRadius: R.sm,
+      backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center',
+    },
 
-  row: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingHorizontal: D.pad, paddingVertical: 14,
-  },
-  iconAvatar: {
-    width: 40, height: 40, borderRadius: R.sm,
-    backgroundColor: T.surface2, alignItems: 'center', justifyContent: 'center',
-  },
-  iconAvatarMat: { backgroundColor: withAlpha('#a78bfa', 0.12) },
-  rowContent: { flex: 1 },
-  rowName: { fontFamily: F.uiMed, fontSize: 15, color: T.text, marginBottom: 2 },
-  rowMeta: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
+    row: {
+      flexDirection: 'row', alignItems: 'center', gap: 12,
+      paddingHorizontal: D.pad, paddingVertical: 14,
+    },
+    iconAvatar: {
+      width: 40, height: 40, borderRadius: R.sm,
+      backgroundColor: T.surface2, alignItems: 'center', justifyContent: 'center',
+    },
+    iconAvatarMat: { backgroundColor: withAlpha(T.grappling, 0.12) },
+    rowContent: { flex: 1 },
+    rowName: { fontFamily: F.uiMed, fontSize: 15, color: T.text, marginBottom: 2 },
+    rowMeta: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
 
-  separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad + 40 + 12 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
-  emptyText: { fontFamily: F.uiSemi, fontSize: 15, color: T.textDim, marginBottom: 4 },
-  emptySub: { fontFamily: F.uiMed, fontSize: 13, color: T.muted },
-  errorText: { fontFamily: F.uiMed, fontSize: 15, color: T.danger, textAlign: 'center', paddingHorizontal: 24 },
-});
+    separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad + 40 + 12 },
+    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
+    emptyText: { fontFamily: F.uiSemi, fontSize: 15, color: T.textDim, marginBottom: 4 },
+    emptySub: { fontFamily: F.uiMed, fontSize: 13, color: T.muted },
+    errorText: { fontFamily: F.uiMed, fontSize: 15, color: T.danger, textAlign: 'center', paddingHorizontal: 24 },
+  });
+}

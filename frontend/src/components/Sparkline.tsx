@@ -1,5 +1,5 @@
 import { StyleSheet, View } from 'react-native';
-import { T } from '../theme/colors';
+import { useTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../lib/color';
 
 interface SparklineProps {
@@ -9,15 +9,16 @@ interface SparklineProps {
   color?: string;
 }
 
-// Bar-chart sparkline — no native SVG needed.
-// Each value becomes a vertical bar scaled to the min/max range.
-export function Sparkline({ values, height = 60, color = T.primary }: SparklineProps) {
+export function Sparkline({ values, height = 60, color }: SparklineProps) {
+  const { T } = useTheme();
+  const barColor = color ?? T.primary;
+
   if (values.length < 2) return null;
 
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
-  const barH = height - 8; // leave 4px top + 4px bottom padding
+  const barH = height - 8;
 
   return (
     <View style={[styles.container, { height }]}>
@@ -32,7 +33,7 @@ export function Sparkline({ values, height = 60, color = T.primary }: SparklineP
                 styles.bar,
                 {
                   height: h,
-                  backgroundColor: isLast ? T.gold : withAlpha(color, 0.75),
+                  backgroundColor: isLast ? T.gold : withAlpha(barColor, 0.75),
                   width: isLast ? 5 : 3,
                   borderRadius: 2,
                 },

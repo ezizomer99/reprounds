@@ -13,7 +13,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { Session } from '@app/shared';
 import { useSessions } from '../../../src/hooks/useSession';
-import { T, F, R, D } from '../../../src/theme/colors';
+import { F, R, D, ThemeColors } from '../../../src/theme/colors';
+import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
 
 type StatsTab = 'overview' | 'weekly' | 'this_week';
@@ -61,6 +62,8 @@ function CategoryCard({
   chips,
   onPress,
 }: CategoryCardProps) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   return (
     <TouchableOpacity style={styles.catCard} onPress={onPress} activeOpacity={0.75}>
       <View style={[styles.catIconBox, { backgroundColor: iconBg }]}>
@@ -89,6 +92,8 @@ function CategoryCard({
 export default function StatsTab() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   const [activeTab, setActiveTab] = useState<StatsTab>('overview');
 
   const { data: sessions, isLoading } = useSessions('completed');
@@ -144,9 +149,9 @@ export default function StatsTab() {
                 <Text style={[styles.statCardNum, { color: T.primary }]}>{thisWeek}</Text>
                 <Text style={[styles.statCardLabel, { color: T.primary }]}>This Week</Text>
               </View>
-              <View style={[styles.statCard, { backgroundColor: withAlpha('#10b981', 0.12) }]}>
-                <Text style={[styles.statCardNum, { color: '#10b981' }]}>{avg}</Text>
-                <Text style={[styles.statCardLabel, { color: '#10b981' }]}>Avg/Week</Text>
+              <View style={[styles.statCard, { backgroundColor: withAlpha(T.conditioning, 0.12) }]}>
+                <Text style={[styles.statCardNum, { color: T.conditioning }]}>{avg}</Text>
+                <Text style={[styles.statCardLabel, { color: T.conditioning }]}>Avg/Week</Text>
               </View>
               <View style={[styles.statCard, { backgroundColor: withAlpha(T.gold, 0.12) }]}>
                 <Text style={[styles.statCardNum, { color: T.gold }]}>0</Text>
@@ -159,8 +164,8 @@ export default function StatsTab() {
         {/* Category cards */}
         <CategoryCard
           iconName="pulse-outline"
-          iconBg={withAlpha('#10b981', 0.2)}
-          iconColor="#10b981"
+          iconBg={withAlpha(T.conditioning, 0.2)}
+          iconColor={T.conditioning}
           title="Activity"
           subtitle="Workout frequency and streaks"
           chips={['Frequency', 'Streaks']}
@@ -169,8 +174,8 @@ export default function StatsTab() {
 
         <CategoryCard
           iconName="trending-up-outline"
-          iconBg={withAlpha('#3b82f6', 0.2)}
-          iconColor="#3b82f6"
+          iconBg={withAlpha(T.performance, 0.2)}
+          iconColor={T.performance}
           title="Performance"
           subtitle="Volume and personal records"
           chips={['Volume', 'History']}
@@ -191,93 +196,94 @@ export default function StatsTab() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: T.bg },
+function makeStyles(T: ThemeColors) {
+  return StyleSheet.create({
+    screen: { flex: 1, backgroundColor: T.bg },
 
-  header: {
-    paddingHorizontal: D.pad,
-    paddingTop: 14,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: T.border,
-  },
-  headerTitle: { fontFamily: F.uiBold, fontSize: 22, color: T.text, letterSpacing: -0.3 },
+    header: {
+      paddingHorizontal: D.pad,
+      paddingTop: 14,
+      paddingBottom: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: T.border,
+    },
+    headerTitle: { fontFamily: F.uiBold, fontSize: 22, color: T.text, letterSpacing: -0.3 },
 
-  scroll: { flex: 1 },
-  body: { padding: D.pad, gap: D.stack },
+    scroll: { flex: 1 },
+    body: { padding: D.pad, gap: D.stack },
 
-  card: {
-    backgroundColor: T.surface,
-    borderWidth: 1,
-    borderColor: T.border,
-    borderRadius: R.card,
-    padding: D.cardPad,
-  },
+    card: {
+      backgroundColor: T.surface,
+      borderWidth: 1,
+      borderColor: T.border,
+      borderRadius: R.card,
+      padding: D.cardPad,
+    },
 
-  highlightsLabel: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 14,
-  },
-  highlightsTitle: { fontFamily: F.uiBold, fontSize: 16, color: T.text },
+    highlightsLabel: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 14,
+    },
+    highlightsTitle: { fontFamily: F.uiBold, fontSize: 16, color: T.text },
 
-  tabSwitcher: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 16,
-  },
-  tabBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: R.sm,
-    backgroundColor: T.surface2,
-  },
-  tabBtnActive: { backgroundColor: T.primary },
-  tabBtnText: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim },
-  tabBtnTextActive: { fontFamily: F.uiBold, color: T.onPrimary },
+    tabSwitcher: {
+      flexDirection: 'row',
+      gap: 6,
+      marginBottom: 16,
+    },
+    tabBtn: {
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: R.sm,
+      backgroundColor: T.surface2,
+    },
+    tabBtnActive: { backgroundColor: T.primary },
+    tabBtnText: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim },
+    tabBtnTextActive: { fontFamily: F.uiBold, color: T.onPrimary },
 
-  statCardsRow: { flexDirection: 'row', gap: 8 },
-  statCard: {
-    flex: 1,
-    borderRadius: R.sm,
-    paddingVertical: 14,
-    alignItems: 'center',
-    gap: 4,
-  },
-  statCardNum: { fontFamily: F.monoBold, fontSize: 24 },
-  statCardLabel: { fontFamily: F.uiMed, fontSize: 11, textAlign: 'center' },
+    statCardsRow: { flexDirection: 'row', gap: 8 },
+    statCard: {
+      flex: 1,
+      borderRadius: R.sm,
+      paddingVertical: 14,
+      alignItems: 'center',
+      gap: 4,
+    },
+    statCardNum: { fontFamily: F.monoBold, fontSize: 24 },
+    statCardLabel: { fontFamily: F.uiMed, fontSize: 11, textAlign: 'center' },
 
-  // Category cards
-  catCard: {
-    backgroundColor: T.surface,
-    borderWidth: 1,
-    borderColor: T.border,
-    borderRadius: R.card,
-    padding: D.cardPad,
-    flexDirection: 'row',
-    gap: 14,
-    alignItems: 'flex-start',
-  },
-  catIconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: R.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexShrink: 0,
-  },
-  catBody: { flex: 1, gap: 10 },
-  catTop: { flexDirection: 'row', alignItems: 'flex-start' },
-  catTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text, marginBottom: 2 },
-  catSubtitle: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
-  catChips: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
-  catChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: R.chip,
-    borderWidth: 1,
-    borderColor: T.borderStrong,
-  },
-  catChipText: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
-});
+    catCard: {
+      backgroundColor: T.surface,
+      borderWidth: 1,
+      borderColor: T.border,
+      borderRadius: R.card,
+      padding: D.cardPad,
+      flexDirection: 'row',
+      gap: 14,
+      alignItems: 'flex-start',
+    },
+    catIconBox: {
+      width: 48,
+      height: 48,
+      borderRadius: R.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    catBody: { flex: 1, gap: 10 },
+    catTop: { flexDirection: 'row', alignItems: 'flex-start' },
+    catTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text, marginBottom: 2 },
+    catSubtitle: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
+    catChips: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+    catChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: R.chip,
+      borderWidth: 1,
+      borderColor: T.borderStrong,
+    },
+    catChipText: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
+  });
+}

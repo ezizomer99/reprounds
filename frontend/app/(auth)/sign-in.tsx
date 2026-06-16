@@ -1,12 +1,13 @@
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { apiPost } from '../../src/lib/api';
 import { setSessionToken } from '../../src/lib/auth';
 import { GlimaMark } from '../../src/components/GlimaMark';
-import { T, F, R } from '../../src/theme/colors';
+import { F, R, ThemeColors } from '../../src/theme/colors';
+import { useTheme } from '../../src/theme/ThemeContext';
 import type { User } from '@app/shared';
 
 interface AuthResponse {
@@ -17,6 +18,8 @@ interface AuthResponse {
 export default function SignInScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,7 +60,7 @@ export default function SignInScreen() {
         <GlimaMark size={72} color={T.text} />
         <View style={styles.rule} />
         <Text style={styles.wordmark}>GLIMA</Text>
-        <Text style={styles.tagline}>Movement Tracker</Text>
+        <Text style={styles.tagline}>Martial Arts & Workout Tracker</Text>
       </View>
 
       <View style={styles.bottom}>
@@ -80,67 +83,69 @@ export default function SignInScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: T.bg,
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 32,
-  },
-  lockup: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-  },
-  rule: {
-    width: 32,
-    height: 1,
-    backgroundColor: T.text,
-    opacity: 0.18,
-  },
-  wordmark: {
-    fontFamily: F.wordmark,
-    fontSize: 52,
-    color: T.text,
-    letterSpacing: 12,
-    paddingLeft: 12,
-  },
-  tagline: {
-    fontFamily: F.uiMed,
-    fontSize: 12,
-    color: T.textDim,
-    letterSpacing: 3,
-    textTransform: 'uppercase',
-    paddingLeft: 3,
-  },
-  bottom: {
-    width: '100%',
-    gap: 12,
-  },
-  error: {
-    fontFamily: F.ui,
-    fontSize: 14,
-    color: T.danger,
-    textAlign: 'center',
-  },
-  googleBtn: {
-    height: 54,
-    backgroundColor: T.surface,
-    borderWidth: 1,
-    borderColor: T.borderStrong,
-    borderRadius: R.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  googleBtnDisabled: {
-    opacity: 0.5,
-  },
-  googleBtnText: {
-    fontFamily: F.uiSemi,
-    fontSize: 16,
-    color: T.text,
-    letterSpacing: -0.2,
-  },
-});
+function makeStyles(T: ThemeColors) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: T.bg,
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 32,
+    },
+    lockup: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 16,
+    },
+    rule: {
+      width: 32,
+      height: 1,
+      backgroundColor: T.text,
+      opacity: 0.18,
+    },
+    wordmark: {
+      fontFamily: F.wordmark,
+      fontSize: 52,
+      color: T.text,
+      letterSpacing: 12,
+      paddingLeft: 12,
+    },
+    tagline: {
+      fontFamily: F.uiMed,
+      fontSize: 12,
+      color: T.textDim,
+      letterSpacing: 3,
+      textTransform: 'uppercase',
+      paddingLeft: 3,
+    },
+    bottom: {
+      width: '100%',
+      gap: 12,
+    },
+    error: {
+      fontFamily: F.ui,
+      fontSize: 14,
+      color: T.danger,
+      textAlign: 'center',
+    },
+    googleBtn: {
+      height: 54,
+      backgroundColor: T.surface,
+      borderWidth: 1,
+      borderColor: T.borderStrong,
+      borderRadius: R.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    googleBtnDisabled: {
+      opacity: 0.5,
+    },
+    googleBtnText: {
+      fontFamily: F.uiSemi,
+      fontSize: 16,
+      color: T.text,
+      letterSpacing: -0.2,
+    },
+  });
+}

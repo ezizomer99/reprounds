@@ -32,7 +32,8 @@ import {
   useUpdateRoutine,
   useUpdateRoutineItem,
 } from '../../../src/hooks/useRoutines';
-import { T, F, R, D } from '../../../src/theme/colors';
+import { F, R, D, ThemeColors } from '../../../src/theme/colors';
+import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
 
 type ExerciseType = 'strength' | 'conditioning';
@@ -70,9 +71,9 @@ const WORKING_TYPE_CYCLE: SetType[] = ['normal', 'drop', 'failure', 'amrap'];
 const SET_TYPE_LABEL: Record<SetType, string> = {
   warmup: 'Warm-up', normal: 'Normal', drop: 'Drop', failure: 'Failure', amrap: 'AMRAP',
 };
-const SET_TYPE_COLOR: Record<SetType, string> = {
-  warmup: T.textDim, normal: T.primary, drop: '#a78bfa', failure: T.danger, amrap: T.gold,
-};
+function setTypeColors(T: ThemeColors): Record<SetType, string> {
+  return { warmup: T.textDim, normal: T.primary, drop: T.grappling, failure: T.danger, amrap: T.gold };
+}
 
 function plannedSetsOf(target: RoutineItemTarget | null): PlannedSet[] {
   return Array.isArray(target?.sets) ? (target!.sets as PlannedSet[]) : [];
@@ -115,6 +116,8 @@ interface ItemRowProps {
 }
 
 function ItemRow({ name, kind, targetSummary, onPress, onRemove }: ItemRowProps) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   const tappable = kind === 'exercise' && !!onPress;
   return (
     <View style={styles.itemRow}>
@@ -123,7 +126,7 @@ function ItemRow({ name, kind, targetSummary, onPress, onRemove }: ItemRowProps)
       </View>
       <View style={[styles.kindBadge, kind === 'martial_arts' && styles.kindBadgeMat]}>
         {kind === 'martial_arts' ? (
-          <Ionicons name="flash" size={13} color="#a78bfa" />
+          <Ionicons name="flash" size={13} color={T.grappling} />
         ) : (
           <Ionicons name="barbell" size={13} color={T.textDim} />
         )}
@@ -171,6 +174,9 @@ function PlanSetRow({ row, index, type, onChange, onCycleType, onRemove }: {
   onCycleType: () => void;
   onRemove: () => void;
 }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const SET_TYPE_COLOR = useMemo(() => setTypeColors(T), [T]);
   const isWarm = row.setType === 'warmup';
   const isTime = type === 'conditioning';
   const [reps, setReps] = useState(row.reps != null ? String(row.reps) : '');
@@ -267,6 +273,8 @@ interface PlannedSetsModalProps {
 }
 
 function PlannedSetsModal({ visible, name, type, initial, onClose, onSave }: PlannedSetsModalProps) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   const [rows, setRows] = useState<PlanRow[]>([]);
 
   function handleOpen() {
@@ -371,6 +379,8 @@ interface PickExerciseModalProps {
 }
 
 function PickExerciseModal({ visible, onClose, onPick }: PickExerciseModalProps) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   const [search, setSearch] = useState('');
   const { data: exercises, isLoading } = useExercises({ search: search.trim() || undefined });
 
@@ -445,6 +455,8 @@ interface PickDisciplineModalProps {
 }
 
 function PickDisciplineModal({ visible, onClose, onPick }: PickDisciplineModalProps) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   const { data: disciplines, isLoading } = useDisciplines();
 
   return (
@@ -496,6 +508,8 @@ function PickDisciplineModal({ visible, onClose, onPick }: PickDisciplineModalPr
 // ---- Main Screen ----
 
 export default function RoutineEditorScreen() {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -804,7 +818,8 @@ export default function RoutineEditorScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(T: ThemeColors) {
+  return StyleSheet.create({
   screen: { flex: 1, backgroundColor: T.bg },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: T.bg },
 
@@ -860,7 +875,7 @@ const styles = StyleSheet.create({
     width: 30, height: 30, borderRadius: R.sm,
     backgroundColor: T.surface2, alignItems: 'center', justifyContent: 'center',
   },
-  kindBadgeMat: { backgroundColor: withAlpha('#a78bfa', 0.12) },
+  kindBadgeMat: { backgroundColor: withAlpha(T.grappling, 0.12) },
   itemMain: { flex: 1 },
   itemName: { fontFamily: F.uiMed, fontSize: 15, color: T.text },
   itemTarget: { fontFamily: F.uiMed, fontSize: 12, color: T.primary, marginTop: 2 },
@@ -936,4 +951,5 @@ const styles = StyleSheet.create({
   separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad },
   modalCentered: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
   emptyText: { fontFamily: F.uiMed, fontSize: 15, color: T.muted },
-});
+  });
+}

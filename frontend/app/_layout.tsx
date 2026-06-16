@@ -16,6 +16,7 @@ import {
 } from '@expo-google-fonts/jetbrains-mono';
 import { BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
 
 GoogleSignin.configure({
   webClientId: '255150095703-33en546bo9f3h3hsi0mqhgb70ipn5d6f.apps.googleusercontent.com',
@@ -23,6 +24,16 @@ GoogleSignin.configure({
 });
 
 const queryClient = new QueryClient();
+
+function AppShell() {
+  const { isDark } = useTheme();
+  return (
+    <>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <Slot />
+    </>
+  );
+}
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -40,8 +51,9 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
-        <StatusBar style="light" />
-        <Slot />
+        <ThemeProvider>
+          <AppShell />
+        </ThemeProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>
   );

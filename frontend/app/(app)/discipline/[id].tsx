@@ -7,17 +7,12 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import type { DisciplineCat } from '@app/shared';
 import { useDisciplineHistory } from '../../../src/hooks/useDisciplines';
-import { T, F, R, D } from '../../../src/theme/colors';
-
-const CATEGORY_COLOR: Record<DisciplineCat, string> = {
-  grappling: '#a78bfa',
-  striking: T.danger,
-  mixed: T.gold,
-};
+import { F, R, D, ThemeColors } from '../../../src/theme/colors';
+import { useTheme } from '../../../src/theme/ThemeContext';
 
 function formatDate(dateStr: string): { day: string; month: string; year: string } {
   const d = new Date(dateStr + 'T00:00:00');
@@ -36,18 +31,17 @@ function getMaDetails(entry: { details: Record<string, unknown> | null }) {
 export default function DisciplineDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   const { id, name } = useLocalSearchParams<{ id: string; name: string }>();
 
   const { data, isLoading, isError, error } = useDisciplineHistory(id ?? null);
 
   const history = data?.history ?? [];
 
-  const categoryParam = useLocalSearchParams<{ category?: string }>().category as DisciplineCat | undefined;
-  const catColor = categoryParam ? (CATEGORY_COLOR[categoryParam] ?? T.primary) : T.primary;
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="chevron-back" size={22} color={T.text} />
@@ -64,7 +58,6 @@ export default function DisciplineDetailScreen() {
         keyExtractor={(item) => item.entry.id}
         ListHeaderComponent={
           <>
-            {/* Stats row */}
             <View style={styles.statsRow}>
               <View style={styles.statCard}>
                 <Text style={styles.statNum}>{history.length}</Text>
@@ -142,82 +135,82 @@ export default function DisciplineDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: T.bg },
+function makeStyles(T: ThemeColors) {
+  return StyleSheet.create({
+    screen: { flex: 1, backgroundColor: T.bg },
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: T.border,
-  },
-  backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontFamily: F.uiBold, fontSize: 19, color: T.text, letterSpacing: -0.2 },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: T.border,
+    },
+    backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+    headerTitle: { fontFamily: F.uiBold, fontSize: 19, color: T.text, letterSpacing: -0.2 },
 
-  // Stats
-  statsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    padding: D.pad,
-    paddingBottom: 8,
-  },
-  statCard: {
-    flex: 1,
-    backgroundColor: T.surface,
-    borderWidth: 1,
-    borderColor: T.border,
-    borderRadius: R.sm,
-    paddingVertical: 14,
-    alignItems: 'center',
-    gap: 4,
-  },
-  statNum: { fontFamily: F.monoBold, fontSize: 22, color: T.text },
-  statKey: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.4 },
+    statsRow: {
+      flexDirection: 'row',
+      gap: 10,
+      padding: D.pad,
+      paddingBottom: 8,
+    },
+    statCard: {
+      flex: 1,
+      backgroundColor: T.surface,
+      borderWidth: 1,
+      borderColor: T.border,
+      borderRadius: R.sm,
+      paddingVertical: 14,
+      alignItems: 'center',
+      gap: 4,
+    },
+    statNum: { fontFamily: F.monoBold, fontSize: 22, color: T.text },
+    statKey: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.4 },
 
-  sectionLabel: {
-    fontFamily: F.uiBold,
-    fontSize: 11,
-    color: T.textDim,
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    paddingHorizontal: D.pad,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
+    sectionLabel: {
+      fontFamily: F.uiBold,
+      fontSize: 11,
+      color: T.textDim,
+      textTransform: 'uppercase',
+      letterSpacing: 1.2,
+      paddingHorizontal: D.pad,
+      paddingTop: 8,
+      paddingBottom: 4,
+    },
 
-  // History cards
-  historyCard: {
-    backgroundColor: T.surface,
-    borderWidth: 1,
-    borderColor: T.border,
-    borderRadius: R.card,
-    padding: D.cardPad,
-    gap: 6,
-  },
-  historyCardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  dateBlock: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
-  dateDay: { fontFamily: F.monoBold, fontSize: 22, color: T.text },
-  dateMonth: { fontFamily: F.uiBold, fontSize: 11, color: T.textDim, letterSpacing: 0.6 },
-  dateYear: { fontFamily: F.uiMed, fontSize: 11, color: T.muted },
-  historyTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text, letterSpacing: -0.1 },
-  historyNotes: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim, lineHeight: 19 },
-  historyEmpty: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, fontStyle: 'italic' },
-  centered: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 48,
-    gap: 10,
-    paddingHorizontal: 32,
-  },
-  emptyText: { fontFamily: F.uiSemi, fontSize: 15, color: T.textDim },
-  emptySub: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, textAlign: 'center' },
-  errorText: { fontFamily: F.uiMed, fontSize: 15, color: T.danger, textAlign: 'center' },
-});
+    historyCard: {
+      backgroundColor: T.surface,
+      borderWidth: 1,
+      borderColor: T.border,
+      borderRadius: R.card,
+      padding: D.cardPad,
+      gap: 6,
+    },
+    historyCardTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    dateBlock: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
+    dateDay: { fontFamily: F.monoBold, fontSize: 22, color: T.text },
+    dateMonth: { fontFamily: F.uiBold, fontSize: 11, color: T.textDim, letterSpacing: 0.6 },
+    dateYear: { fontFamily: F.uiMed, fontSize: 11, color: T.muted },
+    historyTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text, letterSpacing: -0.1 },
+    historyNotes: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim, lineHeight: 19 },
+    historyEmpty: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, fontStyle: 'italic' },
+    centered: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 48,
+      gap: 10,
+      paddingHorizontal: 32,
+    },
+    emptyText: { fontFamily: F.uiSemi, fontSize: 15, color: T.textDim },
+    emptySub: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, textAlign: 'center' },
+    errorText: { fontFamily: F.uiMed, fontSize: 15, color: T.danger, textAlign: 'center' },
+  });
+}

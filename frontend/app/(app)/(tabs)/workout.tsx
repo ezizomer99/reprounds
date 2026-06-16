@@ -14,7 +14,8 @@ import type { RoutineWithItems } from '@app/shared';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useSessions } from '../../../src/hooks/useSession';
 import { useRoutines } from '../../../src/hooks/useRoutines';
-import { T, F, R, D } from '../../../src/theme/colors';
+import { F, R, D, ThemeColors } from '../../../src/theme/colors';
+import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
 
 function greeting(name: string | null): string {
@@ -73,6 +74,8 @@ function RoutineCard({
   routine: RoutineWithItems;
   onPress: () => void;
 }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   return (
     <TouchableOpacity style={styles.routineCard} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.routineIconBox}>
@@ -91,6 +94,8 @@ function RoutineCard({
 export default function WorkoutTab() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   const { data: user } = useCurrentUser();
   const { data: sessions } = useSessions('completed');
   const { data: routines } = useRoutines();
@@ -157,17 +162,11 @@ export default function WorkoutTab() {
               const hasSession = sessionDates.has(wd.isoDate);
               return (
                 <View key={wd.isoDate} style={styles.weekDayCol}>
-                  <Text
-                    style={[styles.weekDayAbbrev, today && styles.weekDayAbbrevActive]}
-                  >
+                  <Text style={[styles.weekDayAbbrev, today && styles.weekDayAbbrevActive]}>
                     {wd.abbrev}
                   </Text>
-                  <View
-                    style={[styles.weekDayCircle, today && styles.weekDayCircleActive]}
-                  >
-                    <Text
-                      style={[styles.weekDayNum, today && styles.weekDayNumActive]}
-                    >
+                  <View style={[styles.weekDayCircle, today && styles.weekDayCircleActive]}>
+                    <Text style={[styles.weekDayNum, today && styles.weekDayNumActive]}>
                       {wd.dayNum}
                     </Text>
                   </View>
@@ -245,157 +244,151 @@ export default function WorkoutTab() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: T.bg },
+function makeStyles(T: ThemeColors) {
+  return StyleSheet.create({
+    screen: { flex: 1, backgroundColor: T.bg },
 
-  header: {
-    paddingHorizontal: D.pad,
-    paddingTop: 14,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: T.border,
-  },
-  greeting: { fontFamily: F.uiBold, fontSize: 22, color: T.text, letterSpacing: -0.3 },
-  todayLabel: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim, marginTop: 3 },
+    header: {
+      paddingHorizontal: D.pad,
+      paddingTop: 14,
+      paddingBottom: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: T.border,
+    },
+    greeting: { fontFamily: F.uiBold, fontSize: 22, color: T.text, letterSpacing: -0.3 },
+    todayLabel: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim, marginTop: 3 },
 
-  scroll: { flex: 1 },
-  body: { padding: D.pad, gap: D.stack },
+    scroll: { flex: 1 },
+    body: { padding: D.pad, gap: D.stack },
 
-  card: {
-    backgroundColor: T.surface,
-    borderWidth: 1,
-    borderColor: T.border,
-    borderRadius: R.card,
-    padding: D.cardPad,
-  },
+    card: {
+      backgroundColor: T.surface,
+      borderWidth: 1,
+      borderColor: T.border,
+      borderRadius: R.card,
+      padding: D.cardPad,
+    },
 
-  // Quick start
-  quickStartRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    marginBottom: 14,
-  },
-  quickIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: R.sm,
-    backgroundColor: withAlpha(T.primary, 0.14),
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  quickTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text, marginBottom: 2 },
-  quickSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
-  startBtn: {
-    backgroundColor: T.primary,
-    borderRadius: R.card,
-    paddingVertical: 14,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  startBtnText: { fontFamily: F.uiBold, fontSize: 16, color: T.onPrimary },
+    quickStartRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+      marginBottom: 14,
+    },
+    quickIconBox: {
+      width: 32,
+      height: 32,
+      borderRadius: R.sm,
+      backgroundColor: withAlpha(T.primary, 0.14),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    quickTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text, marginBottom: 2 },
+    quickSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
+    startBtn: {
+      backgroundColor: T.primary,
+      borderRadius: R.card,
+      paddingVertical: 14,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+    },
+    startBtnText: { fontFamily: F.uiBold, fontSize: 16, color: T.onPrimary },
 
-  // My Week
-  weekHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  weekHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  calIconBox: {
-    width: 28,
-    height: 28,
-    borderRadius: R.sm,
-    backgroundColor: T.surface2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  weekTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text },
-  weekSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginBottom: 14 },
+    weekHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 4,
+    },
+    weekHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    calIconBox: {
+      width: 28,
+      height: 28,
+      borderRadius: R.sm,
+      backgroundColor: T.surface2,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    weekTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text },
+    weekSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginBottom: 14 },
 
-  weekStrip: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
-  weekDayCol: { alignItems: 'center', gap: 5, flex: 1 },
-  weekDayAbbrev: {
-    fontFamily: F.uiMed,
-    fontSize: 10,
-    color: T.textDim,
-    letterSpacing: 0.3,
-  },
-  weekDayAbbrevActive: { color: T.primary, fontFamily: F.uiBold },
-  weekDayCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  weekDayCircleActive: { backgroundColor: T.primary },
-  weekDayNum: { fontFamily: F.monoBold, fontSize: 14, color: T.text },
-  weekDayNumActive: { color: T.onPrimary },
-  sessionDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: T.primary,
-    marginTop: -2,
-  },
+    weekStrip: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
+    weekDayCol: { alignItems: 'center', gap: 5, flex: 1 },
+    weekDayAbbrev: { fontFamily: F.uiMed, fontSize: 10, color: T.textDim, letterSpacing: 0.3 },
+    weekDayAbbrevActive: { color: T.primary, fontFamily: F.uiBold },
+    weekDayCircle: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    weekDayCircleActive: { backgroundColor: T.primary },
+    weekDayNum: { fontFamily: F.monoBold, fontSize: 14, color: T.text },
+    weekDayNumActive: { color: T.onPrimary },
+    sessionDot: {
+      width: 5,
+      height: 5,
+      borderRadius: 3,
+      backgroundColor: T.primary,
+      marginTop: -2,
+    },
 
-  streakRow: { flexDirection: 'row', gap: 10 },
-  streakChip: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: T.surface2,
-    borderRadius: R.card,
-    padding: 10,
-  },
-  streakIconBg: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: withAlpha(T.primary, 0.15),
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  shieldIconBg: { backgroundColor: T.surface },
-  streakNum: { fontFamily: F.uiSemi, fontSize: 14, color: T.text },
-  streakLabel: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim },
+    streakRow: { flexDirection: 'row', gap: 10 },
+    streakChip: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: T.surface2,
+      borderRadius: R.card,
+      padding: 10,
+    },
+    streakIconBg: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: withAlpha(T.primary, 0.15),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    shieldIconBg: { backgroundColor: T.surface },
+    streakNum: { fontFamily: F.uiSemi, fontSize: 14, color: T.text },
+    streakLabel: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim },
 
-  // Routines
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  sectionTitle: { fontFamily: F.uiBold, fontSize: 17, color: T.text },
-  viewAll: { fontFamily: F.uiMed, fontSize: 13, color: T.primary },
+    sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    sectionTitle: { fontFamily: F.uiBold, fontSize: 17, color: T.text },
+    viewAll: { fontFamily: F.uiMed, fontSize: 13, color: T.primary },
 
-  routinesList: { gap: 10, paddingVertical: 2 },
-  routineCard: {
-    width: 160,
-    backgroundColor: T.surface,
-    borderWidth: 1,
-    borderColor: T.border,
-    borderRadius: R.card,
-    padding: D.cardPad,
-    gap: 8,
-  },
-  routineIconBox: {
-    width: 36,
-    height: 36,
-    borderRadius: R.sm,
-    backgroundColor: withAlpha(T.primary, 0.12),
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  routineName: { fontFamily: F.uiSemi, fontSize: 14, color: T.text },
-  routineMeta: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
+    routinesList: { gap: 10, paddingVertical: 2 },
+    routineCard: {
+      width: 160,
+      backgroundColor: T.surface,
+      borderWidth: 1,
+      borderColor: T.border,
+      borderRadius: R.card,
+      padding: D.cardPad,
+      gap: 8,
+    },
+    routineIconBox: {
+      width: 36,
+      height: 36,
+      borderRadius: R.sm,
+      backgroundColor: withAlpha(T.primary, 0.12),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    routineName: { fontFamily: F.uiSemi, fontSize: 14, color: T.text },
+    routineMeta: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
 
-  emptyCard: { alignItems: 'center', paddingVertical: 24, gap: 8 },
-  emptyText: { fontFamily: F.uiMed, fontSize: 14, color: T.textDim },
-  emptyLink: { fontFamily: F.uiMed, fontSize: 13, color: T.primary },
-});
+    emptyCard: { alignItems: 'center', paddingVertical: 24, gap: 8 },
+    emptyText: { fontFamily: F.uiMed, fontSize: 14, color: T.textDim },
+    emptyLink: { fontFamily: F.uiMed, fontSize: 13, color: T.primary },
+  });
+}

@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type {
@@ -20,6 +20,7 @@ import type {
   EnumFieldDef,
   Exercise,
   SessionEntryWithSets,
+  SessionWithEntries,
   SetType,
   StrengthSet,
 } from '@app/shared';
@@ -28,6 +29,7 @@ import { useDisciplines } from '../../../src/hooks/useDisciplines';
 import {
   useSession,
   useCompleteSession,
+  useUpdateSession,
   useAddSessionEntry,
   useUpdateSessionEntry,
   useAddStrengthSet,
@@ -35,8 +37,10 @@ import {
   useDeleteStrengthSet,
   useExerciseHistory,
 } from '../../../src/hooks/useSession';
+import { useRoutines } from '../../../src/hooks/useRoutines';
 import { RestTimer } from '../../../src/components/RestTimer';
-import { T, F, R, D } from '../../../src/theme/colors';
+import { F, R, D, ThemeColors } from '../../../src/theme/colors';
+import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
 
 const SET_TYPE_CYCLE: SetType[] = ['warmup', 'normal', 'drop', 'failure', 'amrap'];
@@ -47,13 +51,9 @@ const SET_TYPE_LABEL: Record<SetType, string> = {
   failure: 'Failure',
   amrap: 'AMRAP',
 };
-const SET_TYPE_COLOR: Record<SetType, string> = {
-  warmup: T.textDim,
-  normal: T.primary,
-  drop: '#a78bfa',
-  failure: T.danger,
-  amrap: T.gold,
-};
+function setTypeColors(T: ThemeColors): Record<SetType, string> {
+  return { warmup: T.textDim, normal: T.primary, drop: T.grappling, failure: T.danger, amrap: T.gold };
+}
 const SET_TYPE_SHORT: Record<SetType, string> = {
   warmup:  'WU',
   normal:  '',
@@ -81,6 +81,14 @@ function parseDuration(val: string): number | null {
   return isNaN(n) ? null : n;
 }
 
+function formatElapsed(secs: number): string {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
 // ─── Exercise picker modal ────────────────────────────────────────────────────
 
 function PickExerciseModal({ visible, onClose, onPick }: {
@@ -88,6 +96,8 @@ function PickExerciseModal({ visible, onClose, onPick }: {
   onClose: () => void;
   onPick: (e: Exercise) => void;
 }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   const [search, setSearch] = useState('');
   const { data: exercises, isLoading } = useExercises({ search: search.trim() || undefined });
 
@@ -138,6 +148,8 @@ function PickDisciplineModal({ visible, onClose, onPick }: {
   onClose: () => void;
   onPick: (d: Discipline) => void;
 }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   const { data: disciplines, isLoading } = useDisciplines();
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -178,6 +190,9 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   onOpenMenu: () => void;
   exerciseType?: 'strength' | 'conditioning';
 }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const SET_TYPE_COLOR = useMemo(() => setTypeColors(T), [T]);
   const isTime = exerciseType === 'conditioning';
   const isWarm = set.setType === 'warmup';
   const updateSet = useUpdateStrengthSet();
@@ -331,6 +346,9 @@ function SetActionsMenu({ set, onSetType, onDuplicate, onDelete, onClose }: {
   onDelete: () => void;
   onClose: () => void;
 }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const SET_TYPE_COLOR = useMemo(() => setTypeColors(T), [T]);
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={styles.menuBackdrop} activeOpacity={1} onPress={onClose}>
@@ -360,6 +378,8 @@ function SetActionsMenu({ set, onSetType, onDuplicate, onDelete, onClose }: {
 // ─── Last time summary ────────────────────────────────────────────────────────
 
 function LastTime({ exerciseId }: { exerciseId: string }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   const { data } = useExerciseHistory(exerciseId);
   const summary = useMemo(() => {
     if (!data?.history.length) return null;
@@ -381,6 +401,8 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, exerciseType }: {
   onSetCompleted: (restSecs: number) => void;
   exerciseType?: 'strength' | 'conditioning';
 }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   const isTime = exerciseType === 'conditioning';
   const addSet = useAddStrengthSet();
   const updateSet = useUpdateStrengthSet();
@@ -502,6 +524,8 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
   sessionId: string;
   disciplines: Discipline[];
 }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   const updateEntry = useUpdateSessionEntry();
   const discipline = disciplines.find((d) => d.id === entry.disciplineId);
   const [details, setDetails] = useState<Record<string, unknown>>((entry.details as Record<string, unknown>) ?? {});
@@ -526,8 +550,8 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
       <View style={styles.entryCard}>
         <View style={styles.entryHead}>
           <Text style={styles.entryName}>{entry.disciplineName ?? 'Discipline'}</Text>
-          <View style={[styles.gymBadge, { backgroundColor: withAlpha('#a78bfa', 0.15), borderColor: withAlpha('#a78bfa', 0.3) }]}>
-            <Text style={[styles.gymBadgeText, { color: '#a78bfa' }]}>Martial Arts</Text>
+          <View style={[styles.gymBadge, { backgroundColor: withAlpha(T.grappling, 0.15), borderColor: withAlpha(T.grappling, 0.3) }]}>
+            <Text style={[styles.gymBadgeText, { color: T.grappling }]}>Martial Arts</Text>
           </View>
         </View>
         <ActivityIndicator style={{ margin: 12 }} color={T.primary} />
@@ -539,8 +563,8 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
     <View style={styles.entryCard}>
       <View style={styles.entryHead}>
         <Text style={styles.entryName}>{discipline.name}</Text>
-        <View style={[styles.gymBadge, { backgroundColor: withAlpha('#a78bfa', 0.15), borderColor: withAlpha('#a78bfa', 0.3) }]}>
-          <Text style={[styles.gymBadgeText, { color: '#a78bfa' }]}>Martial Arts</Text>
+        <View style={[styles.gymBadge, { backgroundColor: withAlpha(T.grappling, 0.15), borderColor: withAlpha(T.grappling, 0.3) }]}>
+          <Text style={[styles.gymBadgeText, { color: T.grappling }]}>Martial Arts</Text>
         </View>
       </View>
 
@@ -644,36 +668,322 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
   );
 }
 
+// ─── Wheel picker (shared) ───────────────────────────────────────────────────
+
+const HOURS_ITEMS = Array.from({ length: 24 }, (_, i) => i.toString().padStart(2, '0'));
+const MINUTES_ITEMS = Array.from({ length: 60 }, (_, i) => i.toString().padStart(2, '0'));
+const WHEEL_ITEM_H = 52;
+
+function WheelPicker({ items, initialIndex, onChange }: {
+  items: string[];
+  initialIndex: number;
+  onChange: (i: number) => void;
+}) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const ref = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      ref.current?.scrollTo({ y: initialIndex * WHEEL_ITEM_H, animated: false });
+    }, 50);
+    return () => clearTimeout(t);
+  }, []); // mount only
+
+  return (
+    <View style={styles.wheel}>
+      <ScrollView
+        ref={ref}
+        showsVerticalScrollIndicator={false}
+        snapToInterval={WHEEL_ITEM_H}
+        decelerationRate="fast"
+        nestedScrollEnabled
+        contentContainerStyle={{ paddingVertical: WHEEL_ITEM_H }}
+        onMomentumScrollEnd={(e) => {
+          const i = Math.round(e.nativeEvent.contentOffset.y / WHEEL_ITEM_H);
+          onChange(Math.max(0, Math.min(items.length - 1, i)));
+        }}
+      >
+        {items.map((label, i) => (
+          <View key={i} style={styles.wheelItemRow}>
+            <Text style={styles.wheelItemText}>{label}</Text>
+          </View>
+        ))}
+      </ScrollView>
+      <View style={styles.wheelHighlight} pointerEvents="none" />
+    </View>
+  );
+}
+
+// ─── Calendar date picker ────────────────────────────────────────────────────
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DAY_LABELS  = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+
+function CalendarPicker({ value, onChange }: { value: string; onChange: (d: string) => void }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const [selY, selM, selD] = value.split('-').map(Number);
+  const [viewYear, setViewYear]  = useState(selY);
+  const [viewMonth, setViewMonth] = useState(selM - 1); // 0-indexed
+
+  function prevMonth() {
+    if (viewMonth === 0) { setViewYear((y) => y - 1); setViewMonth(11); }
+    else setViewMonth((m) => m - 1);
+  }
+  function nextMonth() {
+    if (viewMonth === 11) { setViewYear((y) => y + 1); setViewMonth(0); }
+    else setViewMonth((m) => m + 1);
+  }
+  function toISO(year: number, month: number, day: number): string {
+    return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+
+  const firstDayOffset = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth    = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const cells: (number | null)[] = [
+    ...Array<null>(firstDayOffset).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  // pad to complete last row
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const today = new Date();
+
+  return (
+    <View style={styles.calContainer}>
+      {/* Month navigation */}
+      <View style={styles.calHeader}>
+        <TouchableOpacity onPress={prevMonth} style={styles.calNavBtn}>
+          <Ionicons name="chevron-back" size={20} color={T.text} />
+        </TouchableOpacity>
+        <Text style={styles.calMonthLabel}>{MONTH_NAMES[viewMonth]} {viewYear}</Text>
+        <TouchableOpacity onPress={nextMonth} style={styles.calNavBtn}>
+          <Ionicons name="chevron-forward" size={20} color={T.text} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Day-of-week headers */}
+      <View style={styles.calRow}>
+        {DAY_LABELS.map((d) => (
+          <Text key={d} style={styles.calDayLabel}>{d}</Text>
+        ))}
+      </View>
+
+      {/* Day grid */}
+      {Array.from({ length: cells.length / 7 }, (_, week) => (
+        <View key={week} style={styles.calRow}>
+          {cells.slice(week * 7, week * 7 + 7).map((day, col) => {
+            if (day === null) return <View key={col} style={styles.calCell} />;
+            const isSelected = viewYear === selY && viewMonth === selM - 1 && day === selD;
+            const isTdy = viewYear === today.getFullYear() && viewMonth === today.getMonth() && day === today.getDate();
+            return (
+              <TouchableOpacity
+                key={col}
+                style={[styles.calCell, isSelected && styles.calCellSelected]}
+                onPress={() => onChange(toISO(viewYear, viewMonth, day))}
+              >
+                <Text style={[
+                  styles.calDayNum,
+                  isTdy && styles.calDayToday,
+                  isSelected && styles.calDaySelectedText,
+                ]}>{day}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// ─── Session settings sheet ──────────────────────────────────────────────────
+
+function SessionSettingsSheet({ session, routineName, onSave, onFinish, isPending }: {
+  session: SessionWithEntries;
+  routineName: string | null;
+  onSave: (name: string, notes: string) => void;
+  onFinish: (name: string, notes: string, date: string, durationMinutes: number) => void;
+  isPending: boolean;
+}) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const now = new Date();
+
+  // Parse startedAt into local hours/minutes
+  const startDate = session.startedAt ? new Date(session.startedAt) : now;
+  const [name, setName] = useState(session.name ?? routineName ?? '');
+  const [notes, setNotes] = useState(session.notes ?? '');
+  const [date, setDate] = useState(session.date);
+  const [startH, setStartH] = useState(startDate.getHours());
+  const [startM, setStartM] = useState(startDate.getMinutes());
+  const [endH, setEndH] = useState(now.getHours());
+  const [endM, setEndM] = useState(now.getMinutes());
+
+  const durationMinutes = useMemo(() => {
+    let mins = (endH * 60 + endM) - (startH * 60 + startM);
+    if (mins < 0) mins += 1440; // crossed midnight
+    return mins;
+  }, [startH, startM, endH, endM]);
+
+  function formatDuration(mins: number): string {
+    if (mins === 0) return '0 min';
+    const h = Math.floor(mins / 60);
+    const m = mins % 60;
+    if (h === 0) return `${m} min`;
+    if (m === 0) return `${h}h`;
+    return `${h}h ${m}min`;
+  }
+
+  function handleClose() {
+    onSave(name, notes);
+  }
+
+  function handleFinish() {
+    onFinish(name, notes, date, durationMinutes);
+  }
+
+  return (
+    <Modal visible animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
+      <View style={styles.settingsContainer}>
+        {/* Sheet header */}
+        <View style={styles.settingsHeader}>
+          <TouchableOpacity onPress={handleClose} style={styles.settingsCloseBtn}>
+            <Ionicons name="close" size={22} color={T.text} />
+          </TouchableOpacity>
+          <Text style={styles.settingsTitle}>Session Settings</Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <ScrollView
+          style={{ flex: 1 }}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.settingsBody}
+        >
+          {/* Name */}
+          <Text style={styles.settingsSectionLabel}>Name the workout</Text>
+          <TextInput
+            style={styles.settingsInput}
+            value={name}
+            onChangeText={setName}
+            placeholder={routineName ?? 'Workout name'}
+            placeholderTextColor={T.muted}
+            returnKeyType="done"
+          />
+
+          {/* Date */}
+          <Text style={styles.settingsSectionLabel}>Select date</Text>
+          <CalendarPicker value={date} onChange={setDate} />
+
+          {/* Start time */}
+          <Text style={styles.settingsSectionLabel}>Start</Text>
+          <View style={[styles.settingsCard, styles.settingsTimeCard]}>
+            <View style={styles.wheelCol}>
+              <WheelPicker items={HOURS_ITEMS} initialIndex={startH} onChange={setStartH} />
+              <Text style={styles.wheelColLabel}>hrs</Text>
+            </View>
+            <Text style={styles.wheelColon}>:</Text>
+            <View style={styles.wheelCol}>
+              <WheelPicker items={MINUTES_ITEMS} initialIndex={startM} onChange={setStartM} />
+              <Text style={styles.wheelColLabel}>min</Text>
+            </View>
+          </View>
+
+          {/* End time */}
+          <Text style={styles.settingsSectionLabel}>End</Text>
+          <View style={[styles.settingsCard, styles.settingsTimeCard]}>
+            <View style={styles.wheelCol}>
+              <WheelPicker items={HOURS_ITEMS} initialIndex={endH} onChange={setEndH} />
+              <Text style={styles.wheelColLabel}>hrs</Text>
+            </View>
+            <Text style={styles.wheelColon}>:</Text>
+            <View style={styles.wheelCol}>
+              <WheelPicker items={MINUTES_ITEMS} initialIndex={endM} onChange={setEndM} />
+              <Text style={styles.wheelColLabel}>min</Text>
+            </View>
+          </View>
+          <Text style={styles.settingsDurationHint}>
+            Duration: {formatDuration(durationMinutes)}
+          </Text>
+
+          {/* Notes */}
+          <Text style={styles.settingsSectionLabel}>Would you like to add a comment?</Text>
+          <TextInput
+            style={[styles.settingsInput, styles.settingsTextarea]}
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Add comment"
+            placeholderTextColor={T.muted}
+            multiline
+            textAlignVertical="top"
+          />
+
+          {/* Finish button */}
+          <TouchableOpacity
+            style={[styles.settingsFinishBtn, isPending && { opacity: 0.5 }]}
+            onPress={handleFinish}
+            disabled={isPending}
+          >
+            {isPending
+              ? <ActivityIndicator size="small" color={T.onPrimary} />
+              : <Text style={styles.settingsFinishBtnText}>Finish Workout</Text>}
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 const REST_DEFAULT = 120;
 
 export default function SessionScreen() {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const { data: session, isLoading, isError } = useSession(id ?? null);
   const completeSession = useCompleteSession();
+  const updateSession = useUpdateSession();
   const addEntry = useAddSessionEntry();
   const { data: disciplines } = useDisciplines();
   const { data: allExercises } = useExercises();
+  const { data: routines } = useRoutines();
+
   const exerciseTypeMap = useMemo(() => {
     const m = new Map<string, 'strength' | 'conditioning'>();
     allExercises?.forEach((e) => m.set(e.id, e.type));
     return m;
   }, [allExercises]);
 
+  const routineName = useMemo(() => {
+    if (!session?.routineId) return null;
+    return routines?.find((r) => r.id === session.routineId)?.name ?? null;
+  }, [session?.routineId, routines]);
+
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [showDisciplinePicker, setShowDisciplinePicker] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [restSeconds, setRestSeconds] = useState<number | null>(null);
   const [restTotal, setRestTotal] = useState(REST_DEFAULT);
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
     if (restSeconds === null || restSeconds <= 0) return;
     const t = setTimeout(() => setRestSeconds((s) => (s !== null && s > 0 ? s - 1 : null)), 1000);
     return () => clearTimeout(t);
   }, [restSeconds]);
+
+  useEffect(() => {
+    if (!session?.startedAt || session.status !== 'in_progress') return;
+    const tick = () => setElapsed(Math.floor((Date.now() - new Date(session.startedAt!).getTime()) / 1000));
+    tick();
+    const intervalId = setInterval(tick, 1000);
+    return () => clearInterval(intervalId);
+  }, [session?.startedAt, session?.status]);
 
   function handleSetCompleted(secs: number) {
     setRestTotal(secs);
@@ -682,26 +992,45 @@ export default function SessionScreen() {
 
   function handleBack() {
     if (session?.status !== 'completed') {
-      Alert.alert('Leave Session?', 'Your session is in progress. Come back from History.', [
-        { text: 'Stay', style: 'cancel' },
-        { text: 'Leave', style: 'destructive', onPress: () => router.back() },
-      ]);
+      Alert.alert(
+        'Leave Session?',
+        'Your session will still be in progress. Use the Resume button to return.',
+        [
+          { text: 'Stay', style: 'cancel' },
+          { text: 'Leave', style: 'destructive', onPress: () => router.back() },
+        ],
+      );
     } else {
       router.back();
     }
   }
 
-  async function handleFinish() {
+  async function doFinish(name: string, notes: string, date: string, durationMinutes: number) {
     if (!id) return;
     try {
-      await completeSession.mutateAsync({ id });
+      await completeSession.mutateAsync({
+        id,
+        name: name.trim() || null,
+        notes: notes.trim() || null,
+        durationMinutes: durationMinutes || null,
+        date,
+      });
+      setShowSettings(false);
       router.back();
     } catch (err) {
       Alert.alert('Error', (err as Error).message ?? 'Failed to complete session.');
     }
   }
 
-  const sessionName = useMemo(() => (session?.routineId ? 'Session' : 'Ad-hoc Session'), [session]);
+  async function handleSaveSettings(name: string, notes: string) {
+    if (!id) return;
+    try {
+      await updateSession.mutateAsync({ id, name: name.trim() || null, notes: notes.trim() || null });
+    } catch {
+      // silent — non-critical
+    }
+    setShowSettings(false);
+  }
 
   if (isLoading) {
     return <View style={styles.loadingScreen}><ActivityIndicator size="large" color={T.primary} /></View>;
@@ -721,27 +1050,48 @@ export default function SessionScreen() {
   const doneCount = session.entries.reduce((n, e) => n + e.sets.filter((s) => s.completed).length, 0);
   const hasMartialArts = session.entries.some((e) => e.kind === 'martial_arts');
   const canFinish = doneCount > 0 || hasMartialArts;
+  const isActive = session.status !== 'completed';
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
-      {/* Header */}
+      {/* StrengthLog-style header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack} style={styles.headerBack}>
-          <Ionicons name="chevron-back" size={22} color={T.text} />
+        {/* Left: X button */}
+        <TouchableOpacity onPress={handleBack} style={styles.headerIconBtn}>
+          <Ionicons name="close" size={20} color={T.danger} />
         </TouchableOpacity>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle} numberOfLines={1}>{sessionName}</Text>
+
+        {/* Center: timer or session name when done */}
+        <View style={styles.headerCenter}>
+          {isActive ? (
+            <Text style={styles.headerTimer}>{formatElapsed(elapsed)}</Text>
+          ) : (
+            <Text style={styles.headerDoneLabel} numberOfLines={1}>
+              {session.name ?? routineName ?? 'Session'}
+            </Text>
+          )}
         </View>
-        {session.status !== 'completed' ? (
-          <TouchableOpacity
-            style={[styles.finishBtn, (!canFinish || completeSession.isPending) && { opacity: 0.4 }]}
-            onPress={handleFinish}
-            disabled={!canFinish || completeSession.isPending}
-          >
-            {completeSession.isPending
-              ? <ActivityIndicator size="small" color={T.onPrimary} />
-              : <Text style={styles.finishBtnText}>Finish</Text>}
-          </TouchableOpacity>
+
+        {/* Right: settings + finish (or done badge) */}
+        {isActive ? (
+          <View style={styles.headerActions}>
+            <TouchableOpacity style={styles.headerIconBtn} onPress={() => setShowSettings(true)}>
+              <Ionicons name="settings-outline" size={20} color={T.textDim} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.headerIconBtn,
+                styles.headerFinishBtn,
+                (!canFinish || completeSession.isPending) && { opacity: 0.4 },
+              ]}
+              onPress={() => setShowSettings(true)}
+              disabled={!canFinish || completeSession.isPending}
+            >
+              {completeSession.isPending
+                ? <ActivityIndicator size="small" color={T.onPrimary} />
+                : <Ionicons name="checkmark" size={20} color={T.onPrimary} />}
+            </TouchableOpacity>
+          </View>
         ) : (
           <View style={styles.doneBadge}><Text style={styles.doneBadgeText}>Done</Text></View>
         )}
@@ -818,16 +1168,27 @@ export default function SessionScreen() {
         onClose={() => setShowDisciplinePicker(false)}
         onPick={(d) => { if (id) addEntry.mutate({ sessionId: id, kind: 'martial_arts', disciplineId: d.id }); }}
       />
+
+      {showSettings && session && (
+        <SessionSettingsSheet
+          session={session}
+          routineName={routineName}
+          onSave={handleSaveSettings}
+          onFinish={doFinish}
+          isPending={completeSession.isPending}
+        />
+      )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+function makeStyles(T: ThemeColors) {
+  return StyleSheet.create({
   screen: { flex: 1, backgroundColor: T.bg },
   loadingScreen: { flex: 1, backgroundColor: T.bg, alignItems: 'center', justifyContent: 'center' },
   errorText: { fontFamily: F.ui, fontSize: 15, color: T.danger, textAlign: 'center' },
 
-  // Header
+  // StrengthLog-style header
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -837,15 +1198,21 @@ const styles = StyleSheet.create({
     borderBottomColor: T.border,
     gap: 8,
   },
-  headerBack: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontFamily: F.uiSemi, fontSize: 19, color: T.text, letterSpacing: -0.2 },
-  finishBtn: {
-    height: 38, paddingHorizontal: 16, backgroundColor: T.primary,
-    borderRadius: R.sm, alignItems: 'center', justifyContent: 'center',
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerTimer: { fontFamily: F.mono, fontSize: 22, color: T.text, letterSpacing: 1 },
+  headerDoneLabel: { fontFamily: F.uiSemi, fontSize: 17, color: T.text, letterSpacing: -0.2 },
+  headerActions: { flexDirection: 'row', gap: 6 },
+  headerIconBtn: {
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: T.surface2, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: T.border,
   },
-  finishBtnText: { fontFamily: F.uiSemi, fontSize: 13, color: T.onPrimary },
+  headerFinishBtn: {
+    backgroundColor: T.primary,
+    borderColor: T.primary,
+  },
   doneBadge: {
-    height: 38, paddingHorizontal: 16, backgroundColor: withAlpha(T.primary, 0.15),
+    height: 40, paddingHorizontal: 16, backgroundColor: withAlpha(T.primary, 0.15),
     borderRadius: R.sm, alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: withAlpha(T.primary, 0.3),
   },
@@ -1020,4 +1387,81 @@ const styles = StyleSheet.create({
   separator: { height: 1, backgroundColor: T.border, marginLeft: 16 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
   emptyText: { fontFamily: F.uiMed, fontSize: 15, color: T.muted },
-});
+
+  // Wheel picker
+  wheel: { height: WHEEL_ITEM_H * 3, overflow: 'hidden' },
+  wheelHighlight: {
+    position: 'absolute', left: 0, right: 0,
+    top: WHEEL_ITEM_H, height: WHEEL_ITEM_H,
+    borderTopWidth: 1, borderBottomWidth: 1, borderColor: T.borderStrong,
+  },
+  wheelItemRow: { height: WHEEL_ITEM_H, alignItems: 'center', justifyContent: 'center' },
+  wheelItemText: { fontFamily: F.mono, fontSize: 30, color: T.text },
+  wheelCol: { alignItems: 'center', gap: 4 },
+  wheelColLabel: { fontFamily: F.uiSemi, fontSize: 11, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.8 },
+  wheelColon: { fontFamily: F.mono, fontSize: 34, color: T.textDim, marginBottom: 20 },
+
+  // Session settings sheet
+  settingsContainer: { flex: 1, backgroundColor: T.bg },
+  settingsHeader: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 12, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: T.border,
+  },
+  settingsCloseBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  settingsTitle: { fontFamily: F.uiSemi, fontSize: 17, color: T.text },
+  settingsBody: { padding: D.pad, gap: 12, paddingBottom: 40 },
+  settingsSectionLabel: {
+    fontFamily: F.uiBold, fontSize: 11, color: T.textDim,
+    textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 8,
+  },
+  settingsCard: {
+    backgroundColor: T.surface, borderRadius: R.card,
+    borderWidth: 1, borderColor: T.border,
+    overflow: 'hidden',
+  },
+  settingsTimeCard: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 4, paddingVertical: 8,
+  },
+  settingsInput: {
+    backgroundColor: T.surface, borderWidth: 1, borderColor: T.border,
+    borderRadius: R.sm, paddingHorizontal: 14, paddingVertical: 12,
+    fontFamily: F.uiMed, fontSize: 16, color: T.text,
+  },
+  settingsTextarea: { minHeight: 80, textAlignVertical: 'top' },
+  settingsDateRow: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 14,
+  },
+  settingsDateLabel: { fontFamily: F.uiSemi, fontSize: 13, color: T.textDim, width: 48 },
+  settingsDateRight: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end' },
+  settingsDateValue: { fontFamily: F.uiMed, fontSize: 14, color: T.text, flex: 1, textAlign: 'center' },
+  dateArrow: { padding: 8 },
+  settingsDurationHint: {
+    fontFamily: F.uiMed, fontSize: 13, color: T.primary,
+    textAlign: 'center', marginTop: 2,
+  },
+  settingsFinishBtn: {
+    backgroundColor: T.primary, borderRadius: R.sm,
+    paddingVertical: 16, alignItems: 'center', marginTop: 16,
+  },
+  settingsFinishBtnText: { fontFamily: F.uiSemi, fontSize: 16, color: T.onPrimary },
+
+  // Calendar picker
+  calContainer: {
+    backgroundColor: T.surface, borderRadius: R.card,
+    borderWidth: 1, borderColor: T.border, padding: 12,
+  },
+  calHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
+  calNavBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  calMonthLabel: { fontFamily: F.uiSemi, fontSize: 15, color: T.text },
+  calRow: { flexDirection: 'row' },
+  calCell: { flex: 1, height: 38, alignItems: 'center', justifyContent: 'center', borderRadius: R.sm },
+  calCellSelected: { backgroundColor: T.primary },
+  calDayLabel: { flex: 1, fontFamily: F.uiBold, fontSize: 11, color: T.textDim, textAlign: 'center', textTransform: 'uppercase', marginBottom: 4 },
+  calDayNum: { fontFamily: F.uiMed, fontSize: 14, color: T.text },
+  calDayToday: { color: T.primary, fontFamily: F.uiBold },
+  calDaySelectedText: { color: T.onPrimary, fontFamily: F.uiBold },
+  });
+}

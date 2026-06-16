@@ -1,11 +1,13 @@
 import { ActivityIndicator, FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { ExerciseHistoryEntry, StrengthSet } from '@app/shared';
 import { useExerciseHistory, useExercisePRs } from '../../../../src/hooks/useSession';
 import { Sparkline } from '../../../../src/components/Sparkline';
-import { T, F, R, D } from '../../../../src/theme/colors';
+import { F, R, D, ThemeColors } from '../../../../src/theme/colors';
+import { useTheme } from '../../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../../src/lib/color';
 
 function formatDate(dateStr: string): { day: string; month: string } {
@@ -43,6 +45,8 @@ function topWeight(sets: StrengthSet[]): number | null {
 }
 
 function HistoryRow({ entry, isLast }: { entry: ExerciseHistoryEntry; isLast: boolean }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   const { day } = formatDate(entry.date);
   const top = topWeight(entry.entry.sets);
   return (
@@ -59,6 +63,8 @@ function HistoryRow({ entry, isLast }: { entry: ExerciseHistoryEntry; isLast: bo
 export default function ExerciseHistoryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
 
   const { data: prsData, isLoading: prsLoading } = useExercisePRs(id ?? null);
@@ -68,7 +74,6 @@ export default function ExerciseHistoryScreen() {
   const headerTitle = name ?? history[0]?.entry.exerciseName ?? 'Exercise';
   const isLoading = prsLoading || histLoading;
 
-  // Sparkline: top weight per session (chronological order)
   const topWeights = history
     .map((e) => topWeight(e.entry.sets))
     .filter((v): v is number => v !== null)
@@ -106,7 +111,6 @@ export default function ExerciseHistoryScreen() {
           contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 32 }]}
           showsVerticalScrollIndicator={false}
         >
-          {/* PR Card */}
           {prsData && (
             <View style={styles.prCard}>
               <View style={styles.prHeader}>
@@ -133,7 +137,6 @@ export default function ExerciseHistoryScreen() {
             </View>
           )}
 
-          {/* Sparkline */}
           {topWeights.length >= 2 && (
             <View style={styles.card}>
               <View style={styles.sparklineHeader}>
@@ -144,7 +147,6 @@ export default function ExerciseHistoryScreen() {
             </View>
           )}
 
-          {/* History list */}
           <Text style={styles.eyebrow}>History</Text>
           {history.length === 0 ? (
             <View style={styles.centered}>
@@ -163,54 +165,52 @@ export default function ExerciseHistoryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: T.bg },
-  header: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 12, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: T.border,
-  },
-  backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontFamily: F.uiSemi, fontSize: 19, color: T.text, letterSpacing: -0.2 },
-  headerSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 1 },
+function makeStyles(T: ThemeColors) {
+  return StyleSheet.create({
+    screen: { flex: 1, backgroundColor: T.bg },
+    header: {
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      paddingHorizontal: 12, paddingVertical: 10,
+      borderBottomWidth: 1, borderBottomColor: T.border,
+    },
+    backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+    headerTitle: { fontFamily: F.uiSemi, fontSize: 19, color: T.text, letterSpacing: -0.2 },
+    headerSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 1 },
 
-  body: { padding: D.pad, gap: D.stack },
+    body: { padding: D.pad, gap: D.stack },
 
-  // PR Card
-  prCard: {
-    backgroundColor: T.surface,
-    borderWidth: 1, borderColor: withAlpha(T.gold, 0.35),
-    borderRadius: R.card, padding: D.cardPad,
-    gap: 12,
-    // subtle gold gradient hint via overlay
-  },
-  prHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  prEyebrow: { fontFamily: F.uiBold, fontSize: 11, color: T.gold, textTransform: 'uppercase', letterSpacing: 0.8, flex: 1 },
-  prDate: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim },
-  prSplit: { flexDirection: 'row', gap: 0 },
-  prStat: { flex: 1, alignItems: 'center', gap: 4 },
-  prDivider: { width: 1, backgroundColor: T.border, marginVertical: 4 },
-  prKey: { fontFamily: F.uiBold, fontSize: 10, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.6 },
-  prVal: { fontFamily: F.monoBold, fontSize: 24, color: T.text, letterSpacing: -0.5 },
-  prValGold: { color: T.gold },
-  prTotal: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, textAlign: 'center' },
+    prCard: {
+      backgroundColor: T.surface,
+      borderWidth: 1, borderColor: withAlpha(T.gold, 0.35),
+      borderRadius: R.card, padding: D.cardPad,
+      gap: 12,
+    },
+    prHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    prEyebrow: { fontFamily: F.uiBold, fontSize: 11, color: T.gold, textTransform: 'uppercase', letterSpacing: 0.8, flex: 1 },
+    prDate: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim },
+    prSplit: { flexDirection: 'row', gap: 0 },
+    prStat: { flex: 1, alignItems: 'center', gap: 4 },
+    prDivider: { width: 1, backgroundColor: T.border, marginVertical: 4 },
+    prKey: { fontFamily: F.uiBold, fontSize: 10, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.6 },
+    prVal: { fontFamily: F.monoBold, fontSize: 24, color: T.text, letterSpacing: -0.5 },
+    prValGold: { color: T.gold },
+    prTotal: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, textAlign: 'center' },
 
-  // Sparkline card
-  card: { backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.card, padding: D.cardPad, paddingBottom: 10, overflow: 'hidden' },
-  sparklineHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
-  sparklineRange: { fontFamily: F.mono, fontSize: 12, color: T.textDim },
+    card: { backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.card, padding: D.cardPad, paddingBottom: 10, overflow: 'hidden' },
+    sparklineHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+    sparklineRange: { fontFamily: F.mono, fontSize: 12, color: T.textDim },
 
-  eyebrow: { fontFamily: F.uiBold, fontSize: 11, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1.2 },
+    eyebrow: { fontFamily: F.uiBold, fontSize: 11, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1.2 },
 
-  // History card
-  historyCard: { backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.card, overflow: 'hidden' },
-  historyRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: D.cardPad, paddingVertical: 12, gap: 10 },
-  historyDate: { fontFamily: F.uiSemi, fontSize: 14, color: T.text, width: 76 },
-  historySets: { flex: 1, fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
-  historyTop: { fontFamily: F.monoBold, fontSize: 16, color: T.text },
-  historyTopUnit: { fontFamily: F.uiMed, fontSize: 11, color: T.muted },
+    historyCard: { backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.card, overflow: 'hidden' },
+    historyRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: D.cardPad, paddingVertical: 12, gap: 10 },
+    historyDate: { fontFamily: F.uiSemi, fontSize: 14, color: T.text, width: 76 },
+    historySets: { flex: 1, fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
+    historyTop: { fontFamily: F.monoBold, fontSize: 16, color: T.text },
+    historyTopUnit: { fontFamily: F.uiMed, fontSize: 11, color: T.muted },
 
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
-  emptyText: { fontFamily: F.uiMed, fontSize: 15, color: T.muted },
-  errorText: { fontFamily: F.uiMed, fontSize: 15, color: T.danger, textAlign: 'center' },
-});
+    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
+    emptyText: { fontFamily: F.uiMed, fontSize: 15, color: T.muted },
+    errorText: { fontFamily: F.uiMed, fontSize: 15, color: T.danger, textAlign: 'center' },
+  });
+}
