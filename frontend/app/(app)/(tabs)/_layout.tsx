@@ -48,7 +48,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="mat"
         options={{
-          title: 'Mat',
+          title: 'Martial Arts',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="body-outline" size={size} color={color} />
           ),

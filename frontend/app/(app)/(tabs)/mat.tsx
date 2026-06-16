@@ -227,7 +227,7 @@ export default function MatTab() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Mat</Text>
+          <Text style={styles.headerTitle}>Martial Arts</Text>
           {list.length > 0 && (
             <Text style={styles.headerSub}>
               {list.length} discipline{list.length !== 1 ? 's' : ''}
