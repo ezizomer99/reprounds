@@ -54,6 +54,13 @@ const SET_TYPE_COLOR: Record<SetType, string> = {
   failure: T.danger,
   amrap: T.gold,
 };
+const SET_TYPE_SHORT: Record<SetType, string> = {
+  warmup:  'WU',
+  normal:  '',
+  drop:    'DROP',
+  failure: 'FAIL',
+  amrap:   'AMRAP',
+};
 
 function fmtDuration(secs: number): string {
   const m = Math.floor(secs / 60);
@@ -177,6 +184,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   const [reps, setReps] = useState(set.reps !== null ? String(set.reps) : '');
   const [weight, setWeight] = useState(set.weight !== null ? String(set.weight) : '');
   const [duration, setDuration] = useState(set.reps !== null ? fmtDuration(set.reps) : '');
+  const [rpe, setRpe] = useState(set.rpe !== null ? String(set.rpe) : '');
 
   function handleBlurReps() {
     const parsed = reps.trim() === '' ? null : Number(reps);
@@ -194,6 +202,11 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
     updateSet.mutate({ sessionId, entryId, setId: set.id, reps: secs });
   }
 
+  function handleBlurRpe() {
+    const parsed = rpe.trim() === '' ? null : Number(rpe);
+    updateSet.mutate({ sessionId, entryId, setId: set.id, rpe: isNaN(parsed as number) ? null : parsed });
+  }
+
   const isDone = set.completed;
 
   function toggleComplete() {
@@ -207,23 +220,30 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   return (
     <View style={[styles.setRow, isDone && { backgroundColor: withAlpha(T.primary, 0.08) }]}>
       {/* Number circle / warm-up — tap to toggle complete */}
-      <TouchableOpacity
-        style={[
-          styles.setCircle,
-          isWarm && styles.setCircleWarm,
-          isDone && styles.setCircleDone,
-        ]}
-        onPress={toggleComplete}
-        disabled={updateSet.isPending}
-      >
-        {isDone ? (
-          <Ionicons name="checkmark" size={16} color={T.onPrimary} />
-        ) : isWarm ? (
-          <Ionicons name="flame-outline" size={14} color={T.gold} />
-        ) : (
-          <Text style={styles.setCircleText}>{displayNumber}</Text>
+      <View style={styles.setCircleCol}>
+        <TouchableOpacity
+          style={[
+            styles.setCircle,
+            { borderColor: SET_TYPE_COLOR[set.setType] },
+            isDone && styles.setCircleDone,
+          ]}
+          onPress={toggleComplete}
+          disabled={updateSet.isPending}
+        >
+          {isDone ? (
+            <Ionicons name="checkmark" size={16} color={T.onPrimary} />
+          ) : isWarm ? (
+            <Ionicons name="flame-outline" size={14} color={T.gold} />
+          ) : (
+            <Text style={styles.setCircleText}>{displayNumber}</Text>
+          )}
+        </TouchableOpacity>
+        {!isDone && set.setType !== 'normal' && (
+          <Text style={[styles.setTypeLabel, { color: SET_TYPE_COLOR[set.setType] }]}>
+            {SET_TYPE_SHORT[set.setType]}
+          </Text>
         )}
-      </TouchableOpacity>
+      </View>
 
       {isTime ? (
         <View style={[styles.cell, { flex: 2 }, isDone && styles.cellDone]}>
@@ -274,6 +294,24 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
             />
             <Text style={styles.cellUnit}>reps</Text>
           </View>
+
+          {!isWarm && (
+            <View style={[styles.cellRpe, isDone && styles.cellDone]}>
+              <TextInput
+                style={[styles.cellValue, { fontSize: 15 }]}
+                value={rpe}
+                onChangeText={setRpe}
+                onBlur={handleBlurRpe}
+                placeholder="—"
+                placeholderTextColor={T.muted}
+                keyboardType="decimal-pad"
+                returnKeyType="done"
+                editable={!isDone}
+                textAlign="center"
+              />
+              <Text style={styles.cellUnit}>RPE</Text>
+            </View>
+          )}
         </>
       )}
 
@@ -414,6 +452,7 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, exerciseType }: {
           <>
             <Text style={styles.colHeader}>Weight</Text>
             <Text style={styles.colHeader}>Reps</Text>
+            <Text style={[styles.colHeader, { width: 52 }]}>RPE</Text>
           </>
         )}
         <View style={{ width: 32 }} />
@@ -853,6 +892,7 @@ const styles = StyleSheet.create({
   },
   setNum: { width: 28, alignItems: 'center', justifyContent: 'center' },
   setNumText: { fontFamily: F.uiSemi, fontSize: 13, color: T.muted },
+  setCircleCol: { width: 30, alignItems: 'center', gap: 2 },
   setCircle: {
     width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, borderColor: T.borderStrong,
     backgroundColor: T.surface2, alignItems: 'center', justifyContent: 'center',
@@ -860,6 +900,7 @@ const styles = StyleSheet.create({
   setCircleWarm: { borderColor: withAlpha(T.gold, 0.5) },
   setCircleDone: { backgroundColor: T.primary, borderColor: T.primary },
   setCircleText: { fontFamily: F.monoBold, fontSize: 14, color: T.text },
+  setTypeLabel: { fontSize: 7, fontFamily: F.uiBold, letterSpacing: 0.4 },
   setCirclePlaceholder: { width: 30 },
   menuBtn: { width: 28, height: 32, alignItems: 'center', justifyContent: 'center' },
   typeChip: {
@@ -883,6 +924,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   cellDone: { backgroundColor: 'transparent', borderColor: 'transparent' },
+  cellRpe: {
+    width: 52,
+    height: D.rowH - 12,
+    backgroundColor: T.surface2,
+    borderWidth: 1,
+    borderColor: T.border,
+    borderRadius: R.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
   cellValue: {
     fontFamily: F.mono,
     fontSize: 17,

@@ -28,6 +28,11 @@ function formatDate(dateStr: string): { day: string; month: string; year: string
   };
 }
 
+function getMaDetails(entry: { details: Record<string, unknown> | null }) {
+  const d = entry.details as Record<string, string> | null;
+  return { title: d?.title?.trim() || null, notes: d?.notes?.trim() || null };
+}
+
 export default function DisciplineDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -73,10 +78,11 @@ export default function DisciplineDetailScreen() {
           </>
         }
         renderItem={({ item }) => {
-          const { day, month } = formatDate(item.date);
+          const { day, month, year } = formatDate(item.date);
+          const { title, notes } = getMaDetails(item.entry);
           return (
             <TouchableOpacity
-              style={styles.row}
+              style={styles.historyCard}
               onPress={() =>
                 router.push({
                   pathname: '/sessions/[id]',
@@ -85,25 +91,26 @@ export default function DisciplineDetailScreen() {
               }
               activeOpacity={0.7}
             >
-              <View style={styles.dateBlock}>
-                <Text style={styles.dateDay}>{day}</Text>
-                <Text style={styles.dateMonth}>{month}</Text>
+              <View style={styles.historyCardTop}>
+                <View style={styles.dateBlock}>
+                  <Text style={styles.dateDay}>{day}</Text>
+                  <Text style={styles.dateMonth}>{month}</Text>
+                  <Text style={styles.dateYear}>{year}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={T.muted} />
               </View>
-              <View style={styles.rowDivider} />
-              <View style={styles.rowContent}>
-                {item.entry.notes ? (
-                  <Text style={styles.rowNotes} numberOfLines={2}>
-                    {item.entry.notes}
-                  </Text>
-                ) : (
-                  <Text style={styles.rowNoNotes}>No notes</Text>
-                )}
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={T.muted} />
+              {title && (
+                <Text style={styles.historyTitle} numberOfLines={1}>{title}</Text>
+              )}
+              {notes ? (
+                <Text style={styles.historyNotes} numberOfLines={3}>{notes}</Text>
+              ) : !title ? (
+                <Text style={styles.historyEmpty}>No notes recorded.</Text>
+              ) : null}
             </TouchableOpacity>
           );
         }}
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ItemSeparatorComponent={() => <View style={{ height: D.gap }} />}
         ListEmptyComponent={
           isLoading ? (
             <View style={styles.centered}>
@@ -127,7 +134,7 @@ export default function DisciplineDetailScreen() {
         }
         contentContainerStyle={[
           history.length === 0 && !isLoading && { flex: 1 },
-          { paddingBottom: insets.bottom + 32 },
+          { paddingBottom: insets.bottom + 32, paddingHorizontal: D.pad, gap: D.gap },
         ]}
         showsVerticalScrollIndicator={false}
       />
@@ -181,24 +188,27 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
 
-  // History rows
-  row: {
+  // History cards
+  historyCard: {
+    backgroundColor: T.surface,
+    borderWidth: 1,
+    borderColor: T.border,
+    borderRadius: R.card,
+    padding: D.cardPad,
+    gap: 6,
+  },
+  historyCardTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: D.pad,
-    paddingVertical: 14,
-    gap: 12,
+    justifyContent: 'space-between',
   },
-  dateBlock: { width: 42, alignItems: 'center', flexShrink: 0 },
-  dateDay: { fontFamily: F.monoBold, fontSize: 19, color: T.text },
-  dateMonth: { fontFamily: F.uiBold, fontSize: 10, color: T.textDim, letterSpacing: 0.6 },
-  rowDivider: { width: 1, height: 36, backgroundColor: T.border, flexShrink: 0 },
-  rowContent: { flex: 1, gap: 4 },
-
-  rowNotes: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim },
-  rowNoNotes: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, fontStyle: 'italic' },
-
-  separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad + 42 + 12 + 1 + 12 },
+  dateBlock: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
+  dateDay: { fontFamily: F.monoBold, fontSize: 22, color: T.text },
+  dateMonth: { fontFamily: F.uiBold, fontSize: 11, color: T.textDim, letterSpacing: 0.6 },
+  dateYear: { fontFamily: F.uiMed, fontSize: 11, color: T.muted },
+  historyTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text, letterSpacing: -0.1 },
+  historyNotes: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim, lineHeight: 19 },
+  historyEmpty: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, fontStyle: 'italic' },
   centered: {
     flex: 1,
     alignItems: 'center',
