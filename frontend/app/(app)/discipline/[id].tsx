@@ -9,25 +9,14 @@ import {
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import type { DisciplineCat, GiType } from '@app/shared';
+import type { DisciplineCat } from '@app/shared';
 import { useDisciplineHistory } from '../../../src/hooks/useDisciplines';
 import { T, F, R, D } from '../../../src/theme/colors';
-import { withAlpha } from '../../../src/lib/color';
 
 const CATEGORY_COLOR: Record<DisciplineCat, string> = {
   grappling: '#a78bfa',
   striking: T.danger,
   mixed: T.gold,
-};
-
-const GI_LABEL: Record<GiType, string> = {
-  gi: 'Gi',
-  no_gi: 'No-Gi',
-};
-
-const GI_COLOR: Record<GiType, string> = {
-  gi: '#3b82f6',
-  no_gi: '#10b981',
 };
 
 function formatDate(dateStr: string): { day: string; month: string; year: string } {
@@ -47,14 +36,6 @@ export default function DisciplineDetailScreen() {
   const { data, isLoading, isError, error } = useDisciplineHistory(id ?? null);
 
   const history = data?.history ?? [];
-
-  // Compute gi/no-gi counts from history
-  let giCount = 0;
-  let noGiCount = 0;
-  for (const h of history) {
-    if (h.entry.gi === 'gi') giCount++;
-    else if (h.entry.gi === 'no_gi') noGiCount++;
-  }
 
   const categoryParam = useLocalSearchParams<{ category?: string }>().category as DisciplineCat | undefined;
   const catColor = categoryParam ? (CATEGORY_COLOR[categoryParam] ?? T.primary) : T.primary;
@@ -84,18 +65,6 @@ export default function DisciplineDetailScreen() {
                 <Text style={styles.statNum}>{history.length}</Text>
                 <Text style={styles.statKey}>Total sessions</Text>
               </View>
-              {giCount > 0 && (
-                <View style={[styles.statCard, { backgroundColor: withAlpha('#3b82f6', 0.1) }]}>
-                  <Text style={[styles.statNum, { color: '#3b82f6' }]}>{giCount}</Text>
-                  <Text style={styles.statKey}>Gi</Text>
-                </View>
-              )}
-              {noGiCount > 0 && (
-                <View style={[styles.statCard, { backgroundColor: withAlpha('#10b981', 0.1) }]}>
-                  <Text style={[styles.statNum, { color: '#10b981' }]}>{noGiCount}</Text>
-                  <Text style={styles.statKey}>No-Gi</Text>
-                </View>
-              )}
             </View>
 
             {history.length > 0 && (
@@ -105,7 +74,6 @@ export default function DisciplineDetailScreen() {
         }
         renderItem={({ item }) => {
           const { day, month } = formatDate(item.date);
-          const gi = item.entry.gi;
           return (
             <TouchableOpacity
               style={styles.row}
@@ -123,18 +91,6 @@ export default function DisciplineDetailScreen() {
               </View>
               <View style={styles.rowDivider} />
               <View style={styles.rowContent}>
-                {gi ? (
-                  <View
-                    style={[
-                      styles.giBadge,
-                      { backgroundColor: withAlpha(GI_COLOR[gi], 0.15) },
-                    ]}
-                  >
-                    <Text style={[styles.giBadgeText, { color: GI_COLOR[gi] }]}>
-                      {GI_LABEL[gi]}
-                    </Text>
-                  </View>
-                ) : null}
                 {item.entry.notes ? (
                   <Text style={styles.rowNotes} numberOfLines={2}>
                     {item.entry.notes}
@@ -238,14 +194,6 @@ const styles = StyleSheet.create({
   dateMonth: { fontFamily: F.uiBold, fontSize: 10, color: T.textDim, letterSpacing: 0.6 },
   rowDivider: { width: 1, height: 36, backgroundColor: T.border, flexShrink: 0 },
   rowContent: { flex: 1, gap: 4 },
-
-  giBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: R.chip,
-  },
-  giBadgeText: { fontFamily: F.uiBold, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.4 },
 
   rowNotes: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim },
   rowNoNotes: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, fontStyle: 'italic' },

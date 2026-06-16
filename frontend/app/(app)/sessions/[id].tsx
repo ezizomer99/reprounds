@@ -19,7 +19,6 @@ import type {
   Discipline,
   EnumFieldDef,
   Exercise,
-  GiType,
   SessionEntryWithSets,
   SetType,
   StrengthSet,
@@ -466,12 +465,18 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
 }) {
   const updateEntry = useUpdateSessionEntry();
   const discipline = disciplines.find((d) => d.id === entry.disciplineId);
-  const [gi, setGi] = useState<GiType | null>(entry.gi ?? null);
   const [details, setDetails] = useState<Record<string, unknown>>((entry.details as Record<string, unknown>) ?? {});
+  const [justSaved, setJustSaved] = useState(false);
 
-  const handleSave = useCallback(() => {
-    updateEntry.mutate({ sessionId, entryId: entry.id, gi, details });
-  }, [sessionId, entry.id, gi, details, updateEntry]);
+  const handleSave = useCallback(async () => {
+    try {
+      await updateEntry.mutateAsync({ sessionId, entryId: entry.id, details });
+      setJustSaved(true);
+      setTimeout(() => setJustSaved(false), 1500);
+    } catch (err) {
+      Alert.alert('Error', (err as Error).message ?? 'Failed to save.');
+    }
+  }, [sessionId, entry.id, details, updateEntry]);
 
   function setField(key: string, value: unknown) {
     setDetails((prev) => ({ ...prev, [key]: value }));
@@ -483,7 +488,7 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
         <View style={styles.entryHead}>
           <Text style={styles.entryName}>{entry.disciplineName ?? 'Discipline'}</Text>
           <View style={[styles.gymBadge, { backgroundColor: withAlpha('#a78bfa', 0.15), borderColor: withAlpha('#a78bfa', 0.3) }]}>
-            <Text style={[styles.gymBadgeText, { color: '#a78bfa' }]}>Mat</Text>
+            <Text style={[styles.gymBadgeText, { color: '#a78bfa' }]}>Martial Arts</Text>
           </View>
         </View>
         <ActivityIndicator style={{ margin: 12 }} color={T.primary} />
@@ -496,16 +501,14 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
       <View style={styles.entryHead}>
         <Text style={styles.entryName}>{discipline.name}</Text>
         <View style={[styles.gymBadge, { backgroundColor: withAlpha('#a78bfa', 0.15), borderColor: withAlpha('#a78bfa', 0.3) }]}>
-          <Text style={[styles.gymBadgeText, { color: '#a78bfa' }]}>Mat</Text>
+          <Text style={[styles.gymBadgeText, { color: '#a78bfa' }]}>Martial Arts</Text>
         </View>
       </View>
 
       {discipline.fieldConfig.map((field) => {
-        const isGiField = 'column' in field && field.column === 'gi';
-
         if (field.type === 'enum') {
           const enumField = field as EnumFieldDef;
-          const current = isGiField ? gi : (details[field.key] as string | undefined);
+          const current = details[field.key] as string | undefined;
           return (
             <View key={field.key} style={styles.maField}>
               <Text style={styles.maLabel}>{field.label}</Text>
@@ -514,7 +517,7 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
                   <TouchableOpacity
                     key={opt}
                     style={[styles.enumOpt, current === opt && styles.enumOptActive]}
-                    onPress={() => isGiField ? setGi(opt as GiType) : setField(field.key, opt)}
+                    onPress={() => setField(field.key, opt)}
                   >
                     <Text style={[styles.enumOptText, current === opt && styles.enumOptTextActive]}>{opt}</Text>
                   </TouchableOpacity>
@@ -525,13 +528,13 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
         }
 
         if (field.type === 'boolean') {
-          const boolVal = isGiField ? gi !== null : Boolean(details[field.key]);
+          const boolVal = Boolean(details[field.key]);
           return (
             <View key={field.key} style={[styles.maField, styles.maFieldRow]}>
               <Text style={styles.maLabel}>{field.label}</Text>
               <Switch
                 value={boolVal}
-                onValueChange={(v) => isGiField ? setGi(v ? 'gi' : null) : setField(field.key, v)}
+                onValueChange={(v) => setField(field.key, v)}
                 trackColor={{ true: T.primary }}
               />
             </View>
@@ -590,11 +593,13 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
       })}
 
       <TouchableOpacity
-        style={[styles.maSaveBtn, updateEntry.isPending && { opacity: 0.5 }]}
+        style={[styles.maSaveBtn, (updateEntry.isPending || justSaved) && { opacity: 0.6 }]}
         onPress={handleSave}
         disabled={updateEntry.isPending}
       >
-        {updateEntry.isPending ? <ActivityIndicator size="small" color={T.onPrimary} /> : <Text style={styles.maSaveBtnText}>Save</Text>}
+        {updateEntry.isPending
+          ? <ActivityIndicator size="small" color={T.onPrimary} />
+          : <Text style={styles.maSaveBtnText}>{justSaved ? 'Saved ✓' : 'Save'}</Text>}
       </TouchableOpacity>
     </View>
   );
@@ -675,6 +680,8 @@ export default function SessionScreen() {
   }
 
   const doneCount = session.entries.reduce((n, e) => n + e.sets.filter((s) => s.completed).length, 0);
+  const hasMartialArts = session.entries.some((e) => e.kind === 'martial_arts');
+  const canFinish = doneCount > 0 || hasMartialArts;
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -688,9 +695,9 @@ export default function SessionScreen() {
         </View>
         {session.status !== 'completed' ? (
           <TouchableOpacity
-            style={[styles.finishBtn, (doneCount === 0 || completeSession.isPending) && { opacity: 0.4 }]}
+            style={[styles.finishBtn, (!canFinish || completeSession.isPending) && { opacity: 0.4 }]}
             onPress={handleFinish}
-            disabled={doneCount === 0 || completeSession.isPending}
+            disabled={!canFinish || completeSession.isPending}
           >
             {completeSession.isPending
               ? <ActivityIndicator size="small" color={T.onPrimary} />
