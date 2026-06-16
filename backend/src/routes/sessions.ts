@@ -136,6 +136,7 @@ async function fetchSessionWithEntries(
     id: session.id,
     userId: session.userId,
     routineId: session.routineId,
+    name: session.name,
     date: session.date,
     status: session.status,
     startedAt: session.startedAt?.toISOString() ?? null,
@@ -292,6 +293,16 @@ sessionRoutes.post('/', async (c) => {
     return c.json({ error: 'date is required' }, 400);
   }
 
+  const [existing] = await db
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(and(eq(sessions.userId, userId), eq(sessions.status, 'in_progress')))
+    .limit(1);
+
+  if (existing) {
+    return c.json({ error: 'active_session_exists', sessionId: existing.id }, 409);
+  }
+
   const newSession = await db.transaction(async (tx) => {
     const [sess] = await tx
       .insert(sessions)
@@ -381,6 +392,7 @@ sessionRoutes.patch('/:id', async (c) => {
   }
 
   const updates: Partial<typeof sessions.$inferInsert> = {};
+  if ('name' in body) updates.name = body.name ?? null;
   if ('notes' in body) updates.notes = body.notes ?? null;
   if ('durationMinutes' in body) updates.durationMinutes = body.durationMinutes ?? null;
 
@@ -441,8 +453,10 @@ sessionRoutes.post('/:id/complete', async (c) => {
     status: 'completed',
     completedAt: new Date(),
   };
+  if (body.name !== undefined) updates.name = body.name ?? null;
   if (body.durationMinutes !== undefined) updates.durationMinutes = body.durationMinutes ?? null;
   if (body.notes !== undefined) updates.notes = body.notes ?? null;
+  if (body.date !== undefined) updates.date = body.date;
 
   await db
     .update(sessions)

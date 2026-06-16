@@ -89,6 +89,7 @@ export const sessions = pgTable('sessions', {
   id:              uuid('id').primaryKey().defaultRandom(),
   userId:          uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   routineId:       uuid('routine_id').references(() => routines.id),
+  name:            text('name'),
   date:            date('date').notNull(),
   status:          sessionStatusEnum('status').notNull().default('planned'),
   startedAt:       timestamp('started_at', { withTimezone: true }),
