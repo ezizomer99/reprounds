@@ -75,6 +75,7 @@ export interface Session {
   id: string;
   userId: string;
   routineId: string | null;
+  name: string | null;
   date: string;
   status: SessionStatus;
   startedAt: string | null;
@@ -220,13 +221,16 @@ export interface CreateSessionRequest {
 }
 
 export interface UpdateSessionRequest {
+  name?: string | null;
   notes?: string | null;
   durationMinutes?: number | null;
 }
 
 export interface CompleteSessionRequest {
+  name?: string | null;
   durationMinutes?: number | null;
   notes?: string | null;
+  date?: string; // ISO date YYYY-MM-DD — allows backdating
 }
 
 export interface CreateSessionEntryRequest {
