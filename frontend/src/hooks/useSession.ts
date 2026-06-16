@@ -10,6 +10,7 @@ import type {
   SessionListResponse,
   SessionWithEntries,
   UpdateSessionEntryRequest,
+  UpdateSessionRequest,
   UpdateStrengthSetRequest,
 } from '@app/shared';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../lib/api';
@@ -21,6 +22,22 @@ export function useSessions(status?: string) {
       const path = status ? `/sessions?status=${status}` : '/sessions';
       const data = await apiGet<SessionListResponse>(path);
       return data.sessions;
+    },
+  });
+}
+
+export function useActiveSession() {
+  const { data, ...rest } = useSessions('in_progress');
+  return { activeSession: data?.[0] ?? null, ...rest };
+}
+
+export function useDeleteSession() {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, { id: string }>({
+    mutationFn: ({ id }) => apiDelete(`/sessions/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['session'] });
     },
   });
 }
@@ -51,6 +68,17 @@ export function useCreateSession() {
     mutationFn: (body) =>
       apiPost<{ session: SessionWithEntries }>('/sessions', body).then((r) => r.session),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+    },
+  });
+}
+
+export function useUpdateSession() {
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, { id: string } & UpdateSessionRequest>({
+    mutationFn: ({ id, ...body }) => apiPatch<void>(`/sessions/${id}`, body),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['session', variables.id] });
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
     },
   });

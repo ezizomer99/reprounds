@@ -43,9 +43,10 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Request failed' }));
-    const err = new Error((error as { error?: string }).error ?? 'Request failed');
-    (err as Error & { status: number }).status = response.status;
+    const errorBody = await response.json().catch(() => ({ error: 'Request failed' }));
+    const err = new Error((errorBody as { error?: string }).error ?? 'Request failed') as Error & { status: number; body: unknown };
+    err.status = response.status;
+    err.body = errorBody;
     throw err;
   }
 
