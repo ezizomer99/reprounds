@@ -13,9 +13,11 @@ const config: ExpoConfig = {
   },
   android: {
     adaptiveIcon: {
-      backgroundColor: '#ffffff',
+      backgroundColor: '#0d0f14',
     },
     package: 'com.glima.app',
+    versionCode: 1,
+    permissions: ['com.android.vending.BILLING'],
   },
   plugins: [
     'expo-router',
