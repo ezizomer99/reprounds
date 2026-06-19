@@ -1,41 +1,30 @@
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import { statusCodes } from '@react-native-google-signin/google-signin';
 import { useState, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { apiPost } from '../../src/lib/api';
-import { setSessionToken } from '../../src/lib/auth';
 import { GlimaMark } from '../../src/components/GlimaMark';
+import { useSignIn } from '../../src/hooks/useAuth';
 import { F, R, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
-import type { User } from '@app/shared';
-
-interface AuthResponse {
-  sessionToken: string;
-  user: User;
-}
 
 export default function SignInScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const [loading, setLoading] = useState(false);
+  const { signInWithGoogle, signInAsGuest } = useSignIn();
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSignIn() {
-    setLoading(true);
+  const isLoading = googleLoading || guestLoading;
+
+  async function handleGoogle() {
+    setGoogleLoading(true);
     setError(null);
-
     try {
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      await GoogleSignin.signIn();
-      const { idToken } = await GoogleSignin.getTokens();
-      if (!idToken) throw new Error('No ID token returned from Google');
-
-      const data = await apiPost<AuthResponse>('/auth/google', { idToken });
-      await setSessionToken(data.sessionToken);
-
+      await signInWithGoogle();
       router.replace('/(app)');
     } catch (err: unknown) {
       const e = err as { code?: string; message?: string };
@@ -46,11 +35,24 @@ export default function SignInScreen() {
       } else if (e.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
         setError('Google Play Services not available.');
       } else {
-        console.error('[SignIn] error code:', e.code, 'message:', e.message);
         setError(`Sign-in failed: ${e.message ?? 'unknown error'}`);
       }
     } finally {
-      setLoading(false);
+      setGoogleLoading(false);
+    }
+  }
+
+  async function handleGuest() {
+    setGuestLoading(true);
+    setError(null);
+    try {
+      await signInAsGuest();
+      router.replace('/(app)');
+    } catch (err: unknown) {
+      const e = err as { message?: string };
+      setError(`Could not continue as guest: ${e.message ?? 'unknown error'}`);
+    } finally {
+      setGuestLoading(false);
     }
   }
 
@@ -67,17 +69,34 @@ export default function SignInScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <TouchableOpacity
-          style={[styles.googleBtn, loading && styles.googleBtnDisabled]}
-          onPress={handleSignIn}
-          disabled={loading}
+          style={[styles.googleBtn, isLoading && styles.btnDisabled]}
+          onPress={handleGoogle}
+          disabled={isLoading}
           activeOpacity={0.75}
         >
-          {loading ? (
+          {googleLoading ? (
             <ActivityIndicator color={T.text} />
           ) : (
             <Text style={styles.googleBtnText}>Continue with Google</Text>
           )}
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.guestBtn, isLoading && styles.btnDisabled]}
+          onPress={handleGuest}
+          disabled={isLoading}
+          activeOpacity={0.75}
+        >
+          {guestLoading ? (
+            <ActivityIndicator color={T.textDim} />
+          ) : (
+            <Text style={styles.guestBtnText}>Continue as Guest</Text>
+          )}
+        </TouchableOpacity>
+
+        <Text style={styles.guestDisclaimer}>
+          Guest data is saved to this device only. Sign in with Google to protect your history across devices.
+        </Text>
       </View>
     </View>
   );
@@ -121,7 +140,7 @@ function makeStyles(T: ThemeColors) {
     },
     bottom: {
       width: '100%',
-      gap: 12,
+      gap: 10,
     },
     error: {
       fontFamily: F.ui,
@@ -129,6 +148,7 @@ function makeStyles(T: ThemeColors) {
       color: T.danger,
       textAlign: 'center',
     },
+    btnDisabled: { opacity: 0.5 },
     googleBtn: {
       height: 54,
       backgroundColor: T.surface,
@@ -138,14 +158,30 @@ function makeStyles(T: ThemeColors) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    googleBtnDisabled: {
-      opacity: 0.5,
-    },
     googleBtnText: {
       fontFamily: F.uiSemi,
       fontSize: 16,
       color: T.text,
       letterSpacing: -0.2,
+    },
+    guestBtn: {
+      height: 46,
+      borderRadius: R.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    guestBtnText: {
+      fontFamily: F.uiMed,
+      fontSize: 15,
+      color: T.textDim,
+    },
+    guestDisclaimer: {
+      fontFamily: F.uiMed,
+      fontSize: 11,
+      color: T.muted,
+      textAlign: 'center',
+      lineHeight: 16,
+      paddingHorizontal: 8,
     },
   });
 }

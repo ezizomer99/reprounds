@@ -1,4 +1,5 @@
 import {
+  ActivityIndicator,
   Alert,
   ScrollView,
   StyleSheet,
@@ -7,14 +8,13 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { GoogleSignin } from '@react-native-google-signin/google-signin';
-import { useCurrentUser } from '../../../src/hooks/useAuth';
+import { statusCodes } from '@react-native-google-signin/google-signin';
+import { useCurrentUser, useSignIn, useSignOut } from '../../../src/hooks/useAuth';
 import { useSessions } from '../../../src/hooks/useSession';
-import { clearSessionToken } from '../../../src/lib/auth';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -51,10 +51,14 @@ export default function ProfileTab() {
   const queryClient = useQueryClient();
   const { data: user } = useCurrentUser();
   const { data: sessions } = useSessions('completed');
+  const { signInWithGoogle } = useSignIn();
+  const { signOut } = useSignOut();
+  const [googleLinking, setGoogleLinking] = useState(false);
 
+  const isGuest = user?.isGuest ?? false;
   const completedCount = sessions?.length ?? 0;
   const displayName = user?.name ?? user?.email ?? 'Athlete';
-  const firstName = displayName.split(' ')[0];
+  const firstName = isGuest ? 'Guest' : displayName.split(' ')[0];
 
   async function handleSignOut() {
     Alert.alert('Sign out', 'Are you sure you want to sign out?', [
@@ -63,13 +67,25 @@ export default function ProfileTab() {
         text: 'Sign out',
         style: 'destructive',
         onPress: async () => {
-          await clearSessionToken();
-          await GoogleSignin.signOut();
-          queryClient.clear();
+          await signOut();
           router.replace('/(auth)/sign-in' as never);
         },
       },
     ]);
+  }
+
+  async function handleLinkGoogle() {
+    setGoogleLinking(true);
+    try {
+      await signInWithGoogle();
+      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+    } catch (err: unknown) {
+      const e = err as { code?: string; message?: string };
+      if (e.code === statusCodes.SIGN_IN_CANCELLED) return;
+      Alert.alert('Sign-in failed', e.message ?? 'Please try again.');
+    } finally {
+      setGoogleLinking(false);
+    }
   }
 
   return (
@@ -94,13 +110,38 @@ export default function ProfileTab() {
         {/* User card */}
         <View style={styles.userCard}>
           <View style={styles.avatarCircle}>
-            <Ionicons name="person" size={28} color={T.textDim} />
+            <Ionicons name={isGuest ? 'person-outline' : 'person'} size={28} color={T.textDim} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.userName}>Hi, {firstName}!</Text>
-            <Text style={styles.userSub}>Member</Text>
+            <Text style={styles.userSub}>{isGuest ? 'Guest' : 'Member'}</Text>
           </View>
         </View>
+
+        {/* Guest banner */}
+        {isGuest && (
+          <View style={styles.guestBanner}>
+            <View style={styles.guestBannerTop}>
+              <Ionicons name="cloud-outline" size={18} color={T.primary} />
+              <Text style={styles.guestBannerTitle}>Save Your Data</Text>
+            </View>
+            <Text style={styles.guestBannerBody}>
+              Sign in with Google to protect your workout history and access it from any device.
+            </Text>
+            <TouchableOpacity
+              style={[styles.guestBannerBtn, googleLinking && { opacity: 0.6 }]}
+              onPress={handleLinkGoogle}
+              disabled={googleLinking}
+              activeOpacity={0.8}
+            >
+              {googleLinking ? (
+                <ActivityIndicator color={T.onPrimary} size="small" />
+              ) : (
+                <Text style={styles.guestBannerBtnText}>Sign in with Google</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Workouts card */}
         <View style={styles.card}>
@@ -168,7 +209,7 @@ export default function ProfileTab() {
           activeOpacity={0.7}
         >
           <Ionicons name="log-out-outline" size={16} color={T.danger} />
-          <Text style={styles.signOutText}>Sign Out</Text>
+          <Text style={styles.signOutText}>{isGuest ? 'Exit Guest Mode' : 'Sign Out'}</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
@@ -217,6 +258,27 @@ function makeStyles(T: ThemeColors) {
     },
     userName: { fontFamily: F.uiBold, fontSize: 18, color: T.text, marginBottom: 3 },
     userSub: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim },
+
+    // Guest banner
+    guestBanner: {
+      backgroundColor: withAlpha(T.primary, 0.08),
+      borderWidth: 1,
+      borderColor: withAlpha(T.primary, 0.25),
+      borderRadius: R.card,
+      padding: D.cardPad,
+      gap: 10,
+    },
+    guestBannerTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    guestBannerTitle: { fontFamily: F.uiBold, fontSize: 15, color: T.text },
+    guestBannerBody: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim, lineHeight: 19 },
+    guestBannerBtn: {
+      backgroundColor: T.primary,
+      borderRadius: R.sm,
+      paddingVertical: 11,
+      alignItems: 'center',
+      marginTop: 2,
+    },
+    guestBannerBtnText: { fontFamily: F.uiBold, fontSize: 14, color: T.onPrimary },
 
     // Card
     card: {
