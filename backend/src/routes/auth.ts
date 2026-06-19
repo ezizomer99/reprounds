@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { createDb } from '../db';
-import { users } from '../db/schema';
+import { users, exercises, disciplines, routines, sessions } from '../db/schema';
 import { verifyGoogleIdToken } from '../lib/googleAuth';
 import { signJwt } from '../lib/jwt';
 import { authMiddleware } from '../middleware/auth';
@@ -21,10 +21,57 @@ type Env = {
 
 const SESSION_EXPIRY_SECONDS = 7 * 24 * 60 * 60;
 
+function toUserShape(dbUser: { id: string; email: string | null; name: string | null; avatarUrl: string | null; isGuest: boolean }): User {
+  return {
+    id: dbUser.id,
+    email: dbUser.email,
+    name: dbUser.name ?? null,
+    avatarUrl: dbUser.avatarUrl ?? null,
+    isGuest: dbUser.isGuest,
+  };
+}
+
 const authRoutes = new Hono<Env>();
 
+// ── Guest sign-in ──────────────────────────────────────────────────────────
+authRoutes.post('/guest', async (c) => {
+  let body: { deviceId?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid request body' }, 400);
+  }
+
+  if (!body.deviceId || typeof body.deviceId !== 'string' || body.deviceId.length < 8) {
+    return c.json({ error: 'deviceId is required' }, 400);
+  }
+
+  const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+
+  // Upsert: find existing guest user by deviceId or create a new one
+  const [dbUser] = await db
+    .insert(users)
+    .values({
+      deviceId: body.deviceId,
+      isGuest: true,
+      email: null,
+      name: null,
+      avatarUrl: null,
+    })
+    .onConflictDoUpdate({
+      target: users.deviceId,
+      set: { isGuest: true }, // no-op update so RETURNING works
+    })
+    .returning();
+
+  const sessionToken = await signJwt({ sub: dbUser.id }, c.env.JWT_SECRET, SESSION_EXPIRY_SECONDS);
+
+  return c.json({ sessionToken, user: toUserShape(dbUser) });
+});
+
+// ── Google sign-in (with optional guest migration) ─────────────────────────
 authRoutes.post('/google', async (c) => {
-  let body: { idToken?: string };
+  let body: { idToken?: string; guestUserId?: string | null };
   try {
     body = await c.req.json();
   } catch {
@@ -44,10 +91,12 @@ authRoutes.post('/google', async (c) => {
 
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
+  // Upsert the real Google user
   const [dbUser] = await db
     .insert(users)
     .values({
       googleSub: googlePayload.sub,
+      isGuest: false,
       email: googlePayload.email,
       name: googlePayload.name || null,
       avatarUrl: googlePayload.picture || null,
@@ -55,6 +104,7 @@ authRoutes.post('/google', async (c) => {
     .onConflictDoUpdate({
       target: users.googleSub,
       set: {
+        isGuest: false,
         email: googlePayload.email,
         name: googlePayload.name || null,
         avatarUrl: googlePayload.picture || null,
@@ -62,18 +112,29 @@ authRoutes.post('/google', async (c) => {
     })
     .returning();
 
+  // Migrate guest data if a guestUserId was provided
+  if (body.guestUserId && typeof body.guestUserId === 'string') {
+    const guestUser = await db.query.users.findFirst({
+      where: eq(users.id, body.guestUserId),
+    });
+
+    if (guestUser?.isGuest && guestUser.id !== dbUser.id) {
+      // Reassign all guest-owned data to the real user
+      await db.update(exercises).set({ userId: dbUser.id }).where(eq(exercises.userId, guestUser.id));
+      await db.update(disciplines).set({ userId: dbUser.id }).where(eq(disciplines.userId, guestUser.id));
+      await db.update(routines).set({ userId: dbUser.id }).where(eq(routines.userId, guestUser.id));
+      await db.update(sessions).set({ userId: dbUser.id }).where(eq(sessions.userId, guestUser.id));
+      // session_entries and strength_sets cascade through sessions/routines — no direct user_id
+      await db.delete(users).where(eq(users.id, guestUser.id));
+    }
+  }
+
   const sessionToken = await signJwt({ sub: dbUser.id }, c.env.JWT_SECRET, SESSION_EXPIRY_SECONDS);
 
-  const user: User = {
-    id: dbUser.id,
-    email: dbUser.email,
-    name: dbUser.name ?? null,
-    avatarUrl: dbUser.avatarUrl ?? null,
-  };
-
-  return c.json({ sessionToken, user });
+  return c.json({ sessionToken, user: toUserShape(dbUser) });
 });
 
+// ── Current user ───────────────────────────────────────────────────────────
 authRoutes.get('/me', authMiddleware, async (c) => {
   const userId = c.get('userId');
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
@@ -86,14 +147,7 @@ authRoutes.get('/me', authMiddleware, async (c) => {
     return c.json({ error: 'User not found' }, 404);
   }
 
-  const user: User = {
-    id: dbUser.id,
-    email: dbUser.email,
-    name: dbUser.name ?? null,
-    avatarUrl: dbUser.avatarUrl ?? null,
-  };
-
-  return c.json({ user });
+  return c.json({ user: toUserShape(dbUser) });
 });
 
 export { authRoutes };

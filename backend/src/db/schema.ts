@@ -24,8 +24,10 @@ export const giTypeEnum       = pgEnum('gi_type',       ['gi', 'no_gi']);
 
 export const users = pgTable('users', {
   id:         uuid('id').primaryKey().defaultRandom(),
-  googleSub:  text('google_sub').unique().notNull(),
-  email:      text('email').notNull(),
+  googleSub:  text('google_sub').unique(),
+  deviceId:   text('device_id').unique(),
+  isGuest:    boolean('is_guest').notNull().default(false),
+  email:      text('email'),
   name:       text('name'),
   avatarUrl:  text('avatar_url'),
   createdAt:  timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
