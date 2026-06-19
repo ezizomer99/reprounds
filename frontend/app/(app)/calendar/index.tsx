@@ -1,10 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { CalendarItem, RoutineWithItems } from '@app/shared';
 import { useCalendar } from '../../../src/hooks/useCalendar';
+import { useProGate } from '../../../src/hooks/useProGate';
 import { useRoutines, useSkipOccurrence, useUpdateRoutine } from '../../../src/hooks/useRoutines';
 import { useCreateSession, useDeleteSession } from '../../../src/hooks/useSession';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
@@ -347,7 +348,14 @@ export default function CalendarScreen() {
   const insets = useSafeAreaInsets();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+  const { isPro, isLoading: subLoading } = useProGate();
   const [weekStart, setWeekStart] = useState<Date>(() => startOfWeek(new Date()));
+
+  useEffect(() => {
+    if (!subLoading && !isPro) {
+      router.replace('/paywall' as never);
+    }
+  }, [isPro, subLoading, router]);
   const [scheduleMode, setScheduleMode] = useState<'create' | 'edit'>('create');
   const [showSchedule, setShowSchedule] = useState(false);
   const [editRoutine, setEditRoutine] = useState<RoutineWithItems | null>(null);

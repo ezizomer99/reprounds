@@ -11,8 +11,10 @@ import { useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDisciplineHistory } from '../../../src/hooks/useDisciplines';
+import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
+import { withAlpha } from '../../../src/lib/color';
 
 function formatDate(dateStr: string): { day: string; month: string; year: string } {
   const d = new Date(dateStr + 'T00:00:00');
@@ -33,11 +35,39 @@ export default function DisciplineDetailScreen() {
   const insets = useSafeAreaInsets();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+  const { isPro, showPaywall } = useProGate();
   const { id, name } = useLocalSearchParams<{ id: string; name: string }>();
 
   const { data, isLoading, isError, error } = useDisciplineHistory(id ?? null);
 
   const history = data?.history ?? [];
+
+  if (!isPro) {
+    return (
+      <View style={[styles.screen, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+            <Ionicons name="chevron-back" size={22} color={T.text} />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle} numberOfLines={1}>{name ?? 'Discipline'}</Text>
+          </View>
+        </View>
+        <View style={styles.proGateCentered}>
+          <View style={styles.proGateCircle}>
+            <Ionicons name="trophy" size={28} color={T.gold} />
+          </View>
+          <Text style={styles.proGateTitle}>Glima Pro Feature</Text>
+          <Text style={styles.proGateSub}>
+            Discipline history and session logs are available with Glima Pro.
+          </Text>
+          <TouchableOpacity style={styles.proGateBtn} onPress={showPaywall} activeOpacity={0.8}>
+            <Text style={styles.proGateBtnText}>Upgrade to Pro</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
 
   return (
@@ -212,5 +242,22 @@ function makeStyles(T: ThemeColors) {
     emptyText: { fontFamily: F.uiSemi, fontSize: 15, color: T.textDim },
     emptySub: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, textAlign: 'center' },
     errorText: { fontFamily: F.uiMed, fontSize: 15, color: T.danger, textAlign: 'center' },
+    proGateCentered: {
+      flex: 1, alignItems: 'center', justifyContent: 'center',
+      paddingHorizontal: 32, gap: 12,
+    },
+    proGateCircle: {
+      width: 64, height: 64, borderRadius: 32,
+      backgroundColor: withAlpha(T.gold, 0.15),
+      borderWidth: 1, borderColor: withAlpha(T.gold, 0.3),
+      alignItems: 'center', justifyContent: 'center',
+    },
+    proGateTitle: { fontFamily: F.uiBold, fontSize: 20, color: T.text, letterSpacing: -0.3 },
+    proGateSub: { fontFamily: F.uiMed, fontSize: 14, color: T.textDim, textAlign: 'center', lineHeight: 21 },
+    proGateBtn: {
+      marginTop: 8, backgroundColor: T.primary, borderRadius: R.card,
+      paddingVertical: 13, paddingHorizontal: 28,
+    },
+    proGateBtnText: { fontFamily: F.uiBold, fontSize: 15, color: T.onPrimary },
   });
 }

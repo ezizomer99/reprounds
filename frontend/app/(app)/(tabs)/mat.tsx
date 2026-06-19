@@ -20,9 +20,12 @@ import {
   useDisciplines,
 } from '../../../src/hooks/useDisciplines';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
+import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
+
+const FREE_CUSTOM_DISCIPLINE_LIMIT = 1;
 
 const CATEGORY_OPTIONS: { label: string; value: DisciplineCat }[] = [
   { label: 'Grappling', value: 'grappling' },
@@ -213,6 +216,7 @@ export default function MatTab() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { data: currentUser } = useCurrentUser();
+  const { isPro, showPaywall } = useProGate();
   const [showAdd, setShowAdd] = useState(false);
 
   const { data: disciplines, isLoading, isError, error } = useDisciplines();
@@ -225,7 +229,24 @@ export default function MatTab() {
   }
 
   function handlePress(id: string, name: string) {
+    if (!isPro) { showPaywall(); return; }
     router.push({ pathname: '/discipline/[id]', params: { id, name } } as never);
+  }
+
+  function handleAddPress() {
+    const customCount = (disciplines ?? []).filter((d) => d.userId === currentUser?.id).length;
+    if (!isPro && customCount >= FREE_CUSTOM_DISCIPLINE_LIMIT) {
+      Alert.alert(
+        'Limit reached',
+        `Free accounts can create up to ${FREE_CUSTOM_DISCIPLINE_LIMIT} custom discipline. Upgrade to Glima Pro for unlimited disciplines.`,
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Upgrade', onPress: showPaywall },
+        ],
+      );
+      return;
+    }
+    setShowAdd(true);
   }
 
   const list = disciplines ?? [];
@@ -241,7 +262,7 @@ export default function MatTab() {
             </Text>
           )}
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={() => setShowAdd(true)} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.addBtn} onPress={handleAddPress} activeOpacity={0.8}>
           <Ionicons name="add" size={20} color={T.onPrimary} />
         </TouchableOpacity>
       </View>
@@ -275,7 +296,7 @@ export default function MatTab() {
             <View style={styles.centered}>
               <Ionicons name="body-outline" size={40} color={T.muted} />
               <Text style={styles.emptyText}>No disciplines yet.</Text>
-              <TouchableOpacity onPress={() => setShowAdd(true)} activeOpacity={0.7}>
+              <TouchableOpacity onPress={handleAddPress} activeOpacity={0.7}>
                 <Text style={styles.emptyLink}>Add your first discipline →</Text>
               </TouchableOpacity>
             </View>

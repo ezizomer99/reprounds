@@ -17,6 +17,7 @@ import {
 import { BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
+import { SubscriptionProvider } from '../src/context/SubscriptionContext';
 
 GoogleSignin.configure({
   webClientId: '255150095703-33en546bo9f3h3hsi0mqhgb70ipn5d6f.apps.googleusercontent.com',
@@ -52,7 +53,9 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
-          <AppShell />
+          <SubscriptionProvider>
+            <AppShell />
+          </SubscriptionProvider>
         </ThemeProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>

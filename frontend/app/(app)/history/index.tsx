@@ -6,9 +6,12 @@ import { Ionicons } from '@expo/vector-icons';
 import type { Session, RoutineWithItems } from '@app/shared';
 import { useDeleteSession, useSessions } from '../../../src/hooks/useSession';
 import { useRoutines } from '../../../src/hooks/useRoutines';
+import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
+
+const FREE_HISTORY_DAYS = 30;
 
 function formatDateBlock(dateStr: string): { day: string; month: string } {
   const d = new Date(dateStr + 'T00:00:00');
@@ -71,12 +74,27 @@ export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+  const { isPro, showPaywall } = useProGate();
   const { data: sessions, isLoading, isError, error } = useSessions('completed');
   const { data: routines } = useRoutines();
   const deleteSession = useDeleteSession();
 
   const routineMap = buildRoutineMap(routines);
-  const list = sessions ?? [];
+  const allSessions = sessions ?? [];
+
+  const cutoff = useMemo(() => {
+    if (isPro) return null;
+    const d = new Date();
+    d.setDate(d.getDate() - FREE_HISTORY_DAYS);
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, [isPro]);
+
+  const list = cutoff
+    ? allSessions.filter((s) => new Date(s.date + 'T00:00:00') >= cutoff)
+    : allSessions;
+
+  const hiddenCount = cutoff ? allSessions.length - list.length : 0;
 
   function handleDelete(id: string, name: string) {
     Alert.alert(
@@ -137,6 +155,17 @@ export default function HistoryScreen() {
               <Text style={styles.emptySub}>Log a workout to see your history here.</Text>
             </View>
           }
+          ListFooterComponent={
+            hiddenCount > 0 ? (
+              <TouchableOpacity style={styles.upgradeFooter} onPress={showPaywall} activeOpacity={0.8}>
+                <Ionicons name="lock-closed" size={14} color={T.gold} />
+                <Text style={styles.upgradeFooterText}>
+                  {hiddenCount} older session{hiddenCount !== 1 ? 's' : ''} hidden — upgrade to see full history
+                </Text>
+                <Ionicons name="chevron-forward" size={14} color={T.gold} />
+              </TouchableOpacity>
+            ) : null
+          }
           contentContainerStyle={[
             list.length === 0 && { flex: 1 },
             { paddingBottom: insets.bottom + 32 },
@@ -179,5 +208,17 @@ function makeStyles(T: ThemeColors) {
     emptyText: { fontFamily: F.uiSemi, fontSize: 15, color: T.textDim, marginBottom: 4 },
     emptySub: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, textAlign: 'center', paddingHorizontal: 24 },
     errorText: { fontFamily: F.uiMed, fontSize: 15, color: T.danger, textAlign: 'center' },
+    upgradeFooter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      margin: D.pad,
+      padding: D.cardPad,
+      borderRadius: R.card,
+      backgroundColor: withAlpha(T.gold, 0.1),
+      borderWidth: 1,
+      borderColor: withAlpha(T.gold, 0.25),
+    },
+    upgradeFooterText: { flex: 1, fontFamily: F.uiMed, fontSize: 13, color: T.gold },
   });
 }

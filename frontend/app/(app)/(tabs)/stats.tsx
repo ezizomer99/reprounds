@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { Session } from '@app/shared';
 import { useSessions } from '../../../src/hooks/useSession';
+import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -94,6 +95,7 @@ export default function StatsTab() {
   const insets = useSafeAreaInsets();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+  const { isPro, showPaywall } = useProGate();
   const [activeTab, setActiveTab] = useState<StatsTab>('overview');
 
   const { data: sessions, isLoading } = useSessions('completed');
@@ -149,14 +151,40 @@ export default function StatsTab() {
                 <Text style={[styles.statCardNum, { color: T.primary }]}>{thisWeek}</Text>
                 <Text style={[styles.statCardLabel, { color: T.primary }]}>This Week</Text>
               </View>
-              <View style={[styles.statCard, { backgroundColor: withAlpha(T.conditioning, 0.12) }]}>
-                <Text style={[styles.statCardNum, { color: T.conditioning }]}>{avg}</Text>
-                <Text style={[styles.statCardLabel, { color: T.conditioning }]}>Avg/Week</Text>
-              </View>
-              <View style={[styles.statCard, { backgroundColor: withAlpha(T.gold, 0.12) }]}>
-                <Text style={[styles.statCardNum, { color: T.gold }]}>0</Text>
-                <Text style={[styles.statCardLabel, { color: T.gold }]}>PRs</Text>
-              </View>
+              <TouchableOpacity
+                style={[styles.statCard, { backgroundColor: withAlpha(T.conditioning, 0.12) }]}
+                onPress={isPro ? undefined : showPaywall}
+                activeOpacity={isPro ? 1 : 0.7}
+              >
+                {isPro ? (
+                  <>
+                    <Text style={[styles.statCardNum, { color: T.conditioning }]}>{avg}</Text>
+                    <Text style={[styles.statCardLabel, { color: T.conditioning }]}>Avg/Week</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="lock-closed" size={18} color={T.conditioning} />
+                    <Text style={[styles.statCardLabel, { color: T.conditioning }]}>Avg/Week</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.statCard, { backgroundColor: withAlpha(T.gold, 0.12) }]}
+                onPress={isPro ? undefined : showPaywall}
+                activeOpacity={isPro ? 1 : 0.7}
+              >
+                {isPro ? (
+                  <>
+                    <Text style={[styles.statCardNum, { color: T.gold }]}>0</Text>
+                    <Text style={[styles.statCardLabel, { color: T.gold }]}>PRs</Text>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="lock-closed" size={18} color={T.gold} />
+                    <Text style={[styles.statCardLabel, { color: T.gold }]}>PRs</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -168,8 +196,8 @@ export default function StatsTab() {
           iconColor={T.conditioning}
           title="Activity"
           subtitle="Workout frequency and streaks"
-          chips={['Frequency', 'Streaks']}
-          onPress={() => router.push('/history' as never)}
+          chips={isPro ? ['Frequency', 'Streaks'] : ['Frequency', 'Streaks 🔒']}
+          onPress={() => isPro ? router.push('/history' as never) : showPaywall()}
         />
 
         <CategoryCard
@@ -178,8 +206,8 @@ export default function StatsTab() {
           iconColor={T.performance}
           title="Performance"
           subtitle="Volume and personal records"
-          chips={['Volume', 'History']}
-          onPress={() => router.push('/history' as never)}
+          chips={isPro ? ['Volume', 'History'] : ['Volume 🔒', 'History 🔒']}
+          onPress={() => isPro ? router.push('/history' as never) : showPaywall()}
         />
 
         <CategoryCard

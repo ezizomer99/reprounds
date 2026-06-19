@@ -20,9 +20,12 @@ import {
   useExercises,
 } from '../../../src/hooks/useExercises';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
+import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
+
+const FREE_CUSTOM_EXERCISE_LIMIT = 3;
 
 type FilterType = 'all' | 'strength' | 'conditioning';
 
@@ -224,6 +227,7 @@ export default function ExercisesTab() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { data: currentUser } = useCurrentUser();
+  const { isPro, showPaywall } = useProGate();
   const [filterType, setFilterType] = useState<FilterType>('all');
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
@@ -245,7 +249,24 @@ export default function ExercisesTab() {
   }
 
   function handleHistory(id: string, name: string) {
+    if (!isPro) { showPaywall(); return; }
     router.push({ pathname: '/history/exercise/[id]', params: { id, name } } as never);
+  }
+
+  function handleAddPress() {
+    const customCount = (exercises ?? []).filter((e) => e.userId === currentUser?.id).length;
+    if (!isPro && customCount >= FREE_CUSTOM_EXERCISE_LIMIT) {
+      Alert.alert(
+        'Limit reached',
+        `Free accounts can create up to ${FREE_CUSTOM_EXERCISE_LIMIT} custom exercises. Upgrade to Glima Pro for unlimited exercises.`,
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Upgrade', onPress: showPaywall },
+        ],
+      );
+      return;
+    }
+    setShowAdd(true);
   }
 
   const filtered = exercises ?? [];
@@ -267,7 +288,7 @@ export default function ExercisesTab() {
           returnKeyType="search"
           selectionColor={T.primary}
         />
-        <TouchableOpacity style={styles.addBtn} onPress={() => setShowAdd(true)} activeOpacity={0.8}>
+        <TouchableOpacity style={styles.addBtn} onPress={handleAddPress} activeOpacity={0.8}>
           <Ionicons name="add" size={22} color={T.onPrimary} />
         </TouchableOpacity>
       </View>

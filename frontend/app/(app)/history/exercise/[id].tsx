@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { ExerciseHistoryEntry, StrengthSet } from '@app/shared';
 import { useExerciseHistory, useExercisePRs } from '../../../../src/hooks/useSession';
 import { Sparkline } from '../../../../src/components/Sparkline';
+import { useProGate } from '../../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../../src/theme/colors';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../../src/lib/color';
@@ -65,6 +66,7 @@ export default function ExerciseHistoryScreen() {
   const insets = useSafeAreaInsets();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+  const { isPro, showPaywall } = useProGate();
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
 
   const { data: prsData, isLoading: prsLoading } = useExercisePRs(id ?? null);
@@ -73,6 +75,34 @@ export default function ExerciseHistoryScreen() {
   const history = historyData?.history ?? [];
   const headerTitle = name ?? history[0]?.entry.exerciseName ?? 'Exercise';
   const isLoading = prsLoading || histLoading;
+
+  if (!isPro) {
+    return (
+      <View style={[styles.screen, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+            <Ionicons name="chevron-back" size={22} color={T.text} />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle} numberOfLines={1}>{name ?? 'Exercise History'}</Text>
+          </View>
+          <View style={{ width: 40 }} />
+        </View>
+        <View style={styles.centered}>
+          <View style={styles.proGateCircle}>
+            <Ionicons name="trophy" size={28} color={T.gold} />
+          </View>
+          <Text style={styles.proGateTitle}>Glima Pro Feature</Text>
+          <Text style={styles.proGateSub}>
+            Exercise history, PR tracking, and 1RM estimates are available with Glima Pro.
+          </Text>
+          <TouchableOpacity style={styles.proGateBtn} onPress={showPaywall} activeOpacity={0.8}>
+            <Text style={styles.proGateBtnText}>Upgrade to Pro</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   const topWeights = history
     .map((e) => topWeight(e.entry.sets))
@@ -209,8 +239,21 @@ function makeStyles(T: ThemeColors) {
     historyTop: { fontFamily: F.monoBold, fontSize: 16, color: T.text },
     historyTopUnit: { fontFamily: F.uiMed, fontSize: 11, color: T.muted },
 
-    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
+    centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48, gap: 12, paddingHorizontal: 32 },
     emptyText: { fontFamily: F.uiMed, fontSize: 15, color: T.muted },
     errorText: { fontFamily: F.uiMed, fontSize: 15, color: T.danger, textAlign: 'center' },
+    proGateCircle: {
+      width: 64, height: 64, borderRadius: 32,
+      backgroundColor: withAlpha(T.gold, 0.15),
+      borderWidth: 1, borderColor: withAlpha(T.gold, 0.3),
+      alignItems: 'center', justifyContent: 'center',
+    },
+    proGateTitle: { fontFamily: F.uiBold, fontSize: 20, color: T.text, letterSpacing: -0.3 },
+    proGateSub: { fontFamily: F.uiMed, fontSize: 14, color: T.textDim, textAlign: 'center', lineHeight: 21 },
+    proGateBtn: {
+      marginTop: 8, backgroundColor: T.primary, borderRadius: R.card,
+      paddingVertical: 13, paddingHorizontal: 28,
+    },
+    proGateBtnText: { fontFamily: F.uiBold, fontSize: 15, color: T.onPrimary },
   });
 }

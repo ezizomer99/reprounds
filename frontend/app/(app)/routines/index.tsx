@@ -13,9 +13,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { RoutineWithItems } from '@app/shared';
 import { useDeleteRoutine, useRoutines } from '../../../src/hooks/useRoutines';
+import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
+
+const FREE_ROUTINE_LIMIT = 2;
 
 interface RoutineRowProps {
   routine: RoutineWithItems;
@@ -59,6 +62,7 @@ export default function RoutinesScreen() {
   const insets = useSafeAreaInsets();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+  const { isPro, showPaywall } = useProGate();
   const { data: routines, isLoading, isError, error } = useRoutines();
   const deleteRoutine = useDeleteRoutine();
 
@@ -83,6 +87,21 @@ export default function RoutinesScreen() {
 
   const list = routines ?? [];
 
+  function handleNewRoutine() {
+    if (!isPro && list.length >= FREE_ROUTINE_LIMIT) {
+      Alert.alert(
+        'Limit reached',
+        `Free accounts can create up to ${FREE_ROUTINE_LIMIT} routines. Upgrade to Glima Pro for unlimited routines.`,
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Upgrade', onPress: showPaywall },
+        ],
+      );
+      return;
+    }
+    router.push({ pathname: '/routines/[id]', params: { id: 'new' } });
+  }
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
@@ -97,7 +116,7 @@ export default function RoutinesScreen() {
         </View>
         <TouchableOpacity
           style={styles.addBtn}
-          onPress={() => router.push({ pathname: '/routines/[id]', params: { id: 'new' } })}
+          onPress={handleNewRoutine}
         >
           <Ionicons name="add" size={18} color={T.onPrimary} />
         </TouchableOpacity>
