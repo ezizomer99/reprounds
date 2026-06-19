@@ -3,9 +3,24 @@ import type { FieldConfig } from './fieldConfig';
 
 export interface User {
   id: string;
-  email: string;
+  email: string | null;
   name: string | null;
   avatarUrl: string | null;
+  isGuest: boolean;
+}
+
+export interface GuestAuthRequest {
+  deviceId: string;
+}
+
+export interface GoogleAuthRequest {
+  idToken: string;
+  guestUserId?: string | null;
+}
+
+export interface AuthResponse {
+  sessionToken: string;
+  user: User;
 }
 
 export interface Exercise {
