@@ -39,6 +39,17 @@ export const exercises = pgTable('exercises', {
   name:               text('name').notNull(),
   type:               activityTypeEnum('type').notNull(),
   defaultRestSeconds: integer('default_rest_seconds'),
+  // Metadata columns — populated by seeding from exercises.json, null on user-created exercises
+  sourceId:           text('source_id').unique(),
+  category:           text('category'),
+  bodyPart:           text('body_part'),
+  equipment:          text('equipment'),
+  muscleGroup:        text('muscle_group'),
+  secondaryMuscles:   text('secondary_muscles').array(),
+  target:             text('target'),
+  instructions:       text('instructions'),
+  instructionSteps:   jsonb('instruction_steps'),
+  imageUrl:           text('image_url'),
   createdAt:          timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

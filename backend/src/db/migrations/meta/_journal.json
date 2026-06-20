@@ -29,6 +29,20 @@
       "when": 1781892526339,
       "tag": "0003_spooky_micromacro",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781910382019,
+      "tag": "0004_past_rumiko_fujikawa",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1781911767186,
+      "tag": "0005_hard_alex_power",
+      "breakpoints": true
     }
   ]
 }
