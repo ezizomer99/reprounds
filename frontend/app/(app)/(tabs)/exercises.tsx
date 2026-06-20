@@ -1,14 +1,16 @@
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Modal,
+  ScrollView,
+  SectionList,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Image } from 'react-native';
 import { useState, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,37 +29,61 @@ import { withAlpha } from '../../../src/lib/color';
 
 const FREE_CUSTOM_EXERCISE_LIMIT = 3;
 
-type FilterType = 'all' | 'strength' | 'conditioning';
+const OTHER_KEY = '__other__';
 
-const TYPE_FILTERS: { label: string; value: FilterType }[] = [
-  { label: 'All', value: 'all' },
-  { label: 'Strength', value: 'strength' },
-  { label: 'Conditioning', value: 'conditioning' },
-];
+interface ExerciseSection {
+  key: string;
+  title: string;
+  count: number;
+  data: Exercise[];
+}
 
-function TypeBadge({ type }: { type: Exclude<ActivityType, 'martial_arts'> }) {
-  const { T } = useTheme();
-  const styles = useMemo(() => makeStyles(T), [T]);
-  const bg = type === 'strength' ? withAlpha(T.primary, 0.18) : withAlpha(T.conditioning, 0.18);
-  const color = type === 'strength' ? T.primary : T.conditioning;
-  return (
-    <View style={[styles.badge, { backgroundColor: bg }]}>
-      <Text style={[styles.badgeText, { color }]}>{type}</Text>
-    </View>
-  );
+function titleForTarget(target: string): string {
+  if (target === 'cardiovascular system') return 'Cardio';
+  return target.replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
+// Raw `target` values — chosen to merge into the existing muscle sections.
+const MUSCLE_OPTIONS = [
+  'abs',
+  'biceps',
+  'triceps',
+  'forearms',
+  'pectorals',
+  'delts',
+  'lats',
+  'upper back',
+  'traps',
+  'glutes',
+  'quads',
+  'hamstrings',
+  'calves',
+  'cardiovascular system',
+] as const;
+
+function ExerciseThumbnail({ uri, styles }: { uri: string | null; styles: ReturnType<typeof makeStyles> }) {
+  if (uri) {
+    return (
+      <Image
+        source={{ uri }}
+        style={styles.thumbnail}
+        resizeMode="cover"
+      />
+    );
+  }
+  return <View style={[styles.thumbnail, styles.thumbnailPlaceholder]} />;
 }
 
 interface ExerciseRowProps {
   exercise: Exercise;
   isOwned: boolean;
+  onPress: (id: string) => void;
   onDelete: (id: string) => void;
-  onHistory: (id: string, name: string) => void;
+  styles: ReturnType<typeof makeStyles>;
+  T: ThemeColors;
 }
 
-function ExerciseRow({ exercise, isOwned, onDelete, onHistory }: ExerciseRowProps) {
-  const { T } = useTheme();
-  const styles = useMemo(() => makeStyles(T), [T]);
-
+function ExerciseRow({ exercise, isOwned, onPress, onDelete, styles, T }: ExerciseRowProps) {
   function handleDelete() {
     Alert.alert(
       'Delete exercise',
@@ -69,26 +95,32 @@ function ExerciseRow({ exercise, isOwned, onDelete, onHistory }: ExerciseRowProp
     );
   }
 
+  const meta = exercise.equipment ?? exercise.muscleGroup ?? exercise.category;
+
   return (
-    <View style={styles.row}>
-      <View style={styles.rowLeft}>
-        <Text style={styles.rowName}>{exercise.name}</Text>
-        <TypeBadge type={exercise.type} />
+    <TouchableOpacity
+      style={styles.row}
+      onPress={() => onPress(exercise.id)}
+      activeOpacity={0.7}
+    >
+      <ExerciseThumbnail uri={exercise.imageUrl} styles={styles} />
+      <View style={styles.rowContent}>
+        <Text style={styles.rowName} numberOfLines={1}>{exercise.name}</Text>
+        {meta ? (
+          <Text style={styles.rowMeta} numberOfLines={1}>{meta}</Text>
+        ) : null}
       </View>
-      <TouchableOpacity
-        onPress={() => onHistory(exercise.id, exercise.name)}
-        style={styles.historyButton}
-        activeOpacity={0.7}
-      >
-        <Ionicons name="time-outline" size={12} color={T.primary} />
-        <Text style={styles.historyText}>History</Text>
-      </TouchableOpacity>
       {isOwned && (
-        <TouchableOpacity onPress={handleDelete} style={styles.deleteButton} activeOpacity={0.7}>
+        <TouchableOpacity
+          onPress={handleDelete}
+          style={styles.deleteButton}
+          activeOpacity={0.7}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
           <Ionicons name="trash-outline" size={15} color={T.danger} />
         </TouchableOpacity>
       )}
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -102,13 +134,13 @@ function AddExerciseModal({ visible, onClose }: AddExerciseModalProps) {
   const styles = useMemo(() => makeStyles(T), [T]);
   const [name, setName] = useState('');
   const [type, setType] = useState<Exclude<ActivityType, 'martial_arts'>>('strength');
-  const [restSeconds, setRestSeconds] = useState('');
+  const [target, setTarget] = useState<string | null>(null);
   const createExercise = useCreateExercise();
 
   function reset() {
     setName('');
     setType('strength');
-    setRestSeconds('');
+    setTarget(null);
   }
 
   function handleClose() {
@@ -122,16 +154,11 @@ function AddExerciseModal({ visible, onClose }: AddExerciseModalProps) {
       Alert.alert('Validation', 'Name is required.');
       return;
     }
-    const parsedRest = restSeconds.trim() ? parseInt(restSeconds.trim(), 10) : null;
-    if (restSeconds.trim() && (isNaN(parsedRest!) || parsedRest! < 0)) {
-      Alert.alert('Validation', 'Rest seconds must be a positive number.');
-      return;
-    }
     try {
       await createExercise.mutateAsync({
         name: trimmed,
         type,
-        defaultRestSeconds: parsedRest,
+        target,
       });
       handleClose();
     } catch (err) {
@@ -146,7 +173,12 @@ function AddExerciseModal({ visible, onClose }: AddExerciseModalProps) {
       presentationStyle="pageSheet"
       onRequestClose={handleClose}
     >
-      <View style={styles.modalContainer}>
+      <ScrollView
+        style={styles.modalContainer}
+        contentContainerStyle={styles.modalContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Add Exercise</Text>
           <TouchableOpacity onPress={handleClose}>
@@ -191,17 +223,24 @@ function AddExerciseModal({ visible, onClose }: AddExerciseModalProps) {
         </View>
 
         <View style={styles.field}>
-          <Text style={styles.label}>Default Rest (seconds)</Text>
-          <TextInput
-            style={styles.input}
-            value={restSeconds}
-            onChangeText={setRestSeconds}
-            placeholder="e.g. 90"
-            placeholderTextColor={T.muted}
-            keyboardType="number-pad"
-            returnKeyType="done"
-            selectionColor={T.primary}
-          />
+          <Text style={styles.label}>Muscle group</Text>
+          <View style={styles.muscleWrap}>
+            {MUSCLE_OPTIONS.map((m) => {
+              const active = target === m;
+              return (
+                <TouchableOpacity
+                  key={m}
+                  style={[styles.musclePill, active && styles.musclePillActive]}
+                  onPress={() => setTarget(active ? null : m)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.musclePillText, active && styles.musclePillTextActive]}>
+                    {titleForTarget(m)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
         </View>
 
         <TouchableOpacity
@@ -216,7 +255,7 @@ function AddExerciseModal({ visible, onClose }: AddExerciseModalProps) {
             <Text style={styles.submitText}>Add Exercise</Text>
           )}
         </TouchableOpacity>
-      </View>
+      </ScrollView>
     </Modal>
   );
 }
@@ -228,19 +267,57 @@ export default function ExercisesTab() {
   const styles = useMemo(() => makeStyles(T), [T]);
   const { data: currentUser } = useCurrentUser();
   const { isPro, showPaywall } = useProGate();
-  const [filterType, setFilterType] = useState<FilterType>('all');
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
 
-  const queryType =
-    filterType === 'all' ? undefined : (filterType as Exclude<ActivityType, 'martial_arts'>);
-
   const { data: exercises, isLoading, isError, error } = useExercises({
-    type: queryType,
     search: search.trim() || undefined,
   });
 
   const deleteExercise = useDeleteExercise();
+
+  const isSearching = search.trim().length > 0;
+
+  const sections = useMemo<ExerciseSection[]>(() => {
+    if (!exercises) return [];
+
+    const groups = new Map<string, { title: string; items: Exercise[] }>();
+    for (const ex of exercises) {
+      const key = ex.target ?? OTHER_KEY;
+      const title = ex.target ? titleForTarget(ex.target) : 'Other';
+      let g = groups.get(key);
+      if (!g) {
+        g = { title, items: [] };
+        groups.set(key, g);
+      }
+      g.items.push(ex);
+    }
+
+    const built: ExerciseSection[] = [...groups.entries()].map(([key, g]) => ({
+      key,
+      title: g.title,
+      count: g.items.length,
+      data: expanded.has(key) || isSearching ? g.items : [],
+    }));
+
+    built.sort((a, b) => {
+      if (a.key === OTHER_KEY) return 1;
+      if (b.key === OTHER_KEY) return -1;
+      return a.title.localeCompare(b.title);
+    });
+
+    return built;
+  }, [exercises, expanded, isSearching]);
+
+  function toggleSection(key: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   function handleDelete(id: string) {
     deleteExercise.mutate(id, {
@@ -248,9 +325,8 @@ export default function ExercisesTab() {
     });
   }
 
-  function handleHistory(id: string, name: string) {
-    if (!isPro) { showPaywall(); return; }
-    router.push({ pathname: '/history/exercise/[id]', params: { id, name } } as never);
+  function handleRowPress(id: string) {
+    router.push({ pathname: '/exercises/[id]', params: { id } } as never);
   }
 
   function handleAddPress() {
@@ -268,8 +344,6 @@ export default function ExercisesTab() {
     }
     setShowAdd(true);
   }
-
-  const filtered = exercises ?? [];
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -293,20 +367,6 @@ export default function ExercisesTab() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.filterTabsRow}>
-        {TYPE_FILTERS.map(({ label, value }) => (
-          <TouchableOpacity
-            key={value}
-            style={[styles.filterTab, filterType === value && styles.filterTabActive]}
-            onPress={() => setFilterType(value)}
-          >
-            <Text style={[styles.filterTabText, filterType === value && styles.filterTabTextActive]}>
-              {label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
       {isLoading && (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={T.primary} />
@@ -320,15 +380,39 @@ export default function ExercisesTab() {
       )}
 
       {!isLoading && !isError && (
-        <FlatList
-          data={filtered}
+        <SectionList
+          sections={sections}
           keyExtractor={(item) => item.id}
+          stickySectionHeadersEnabled={false}
+          renderSectionHeader={({ section }) => {
+            const s = section as ExerciseSection;
+            const open = expanded.has(s.key) || isSearching;
+            return (
+              <TouchableOpacity
+                style={styles.sectionHeader}
+                onPress={() => toggleSection(s.key)}
+                activeOpacity={0.7}
+                disabled={isSearching}
+              >
+                <Text style={styles.sectionTitle}>{s.title}</Text>
+                <Text style={styles.sectionCount}>({s.count})</Text>
+                <View style={{ flex: 1 }} />
+                <Ionicons
+                  name={open ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color={T.textDim}
+                />
+              </TouchableOpacity>
+            );
+          }}
           renderItem={({ item }) => (
             <ExerciseRow
               exercise={item}
               isOwned={item.userId === currentUser?.id}
+              onPress={handleRowPress}
               onDelete={handleDelete}
-              onHistory={handleHistory}
+              styles={styles}
+              T={T}
             />
           )}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -338,7 +422,7 @@ export default function ExercisesTab() {
             </View>
           }
           contentContainerStyle={[
-            filtered.length === 0 && { flex: 1 },
+            sections.length === 0 && { flex: 1 },
             { paddingBottom: insets.bottom + 32 },
           ]}
           showsVerticalScrollIndicator={false}
@@ -391,52 +475,37 @@ function makeStyles(T: ThemeColors) {
       justifyContent: 'center',
     },
 
-    filterTabsRow: {
+    sectionHeader: {
       flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: D.pad,
+      paddingVertical: 14,
       backgroundColor: T.surface,
       borderBottomWidth: 1,
       borderBottomColor: T.border,
-      marginTop: D.pad,
     },
-    filterTab: {
-      flex: 1,
-      paddingVertical: 13,
-      alignItems: 'center',
-      borderBottomWidth: 2,
-      borderBottomColor: 'transparent',
-    },
-    filterTabActive: { borderBottomColor: T.primary },
-    filterTabText: { fontFamily: F.uiMed, fontSize: 14, color: T.textDim },
-    filterTabTextActive: { fontFamily: F.uiBold, color: T.text },
+    sectionTitle: { fontFamily: F.uiBold, fontSize: 16, color: T.text, letterSpacing: -0.2 },
+    sectionCount: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim },
 
     row: {
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: D.pad,
-      paddingVertical: 13,
-      gap: 10,
+      paddingVertical: 10,
+      gap: 12,
     },
-    rowLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
-    rowName: { fontFamily: F.uiMed, fontSize: 15, color: T.text },
-    badge: { paddingHorizontal: 7, paddingVertical: 2, borderRadius: R.sm },
-    badgeText: {
-      fontFamily: F.uiBold,
-      fontSize: 10,
-      textTransform: 'uppercase',
-      letterSpacing: 0.4,
-    },
-
-    historyButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
+    thumbnail: {
+      width: 52,
+      height: 52,
       borderRadius: R.sm,
-      borderWidth: 1,
-      borderColor: withAlpha(T.primary, 0.35),
     },
-    historyText: { fontFamily: F.uiMed, fontSize: 12, color: T.primary },
+    thumbnailPlaceholder: {
+      backgroundColor: T.surface2 ?? T.surface,
+    },
+    rowContent: { flex: 1, gap: 3 },
+    rowName: { fontFamily: F.uiMed, fontSize: 15, color: T.text },
+    rowMeta: { fontFamily: F.ui, fontSize: 12, color: T.textDim },
     deleteButton: {
       width: 32,
       height: 32,
@@ -446,7 +515,7 @@ function makeStyles(T: ThemeColors) {
       backgroundColor: withAlpha(T.danger, 0.1),
     },
 
-    separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad },
+    separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad + 52 + 12 },
     centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
     emptyText: { fontFamily: F.uiMed, fontSize: 15, color: T.muted },
     errorText: {
@@ -458,7 +527,8 @@ function makeStyles(T: ThemeColors) {
     },
 
     // Modal
-    modalContainer: { flex: 1, backgroundColor: T.bg, padding: 24, paddingTop: 32 },
+    modalContainer: { flex: 1, backgroundColor: T.bg },
+    modalContent: { padding: 24, paddingTop: 32, paddingBottom: 40 },
     modalHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
@@ -487,6 +557,26 @@ function makeStyles(T: ThemeColors) {
       fontSize: 15,
       color: T.text,
     },
+    muscleWrap: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    musclePill: {
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: T.borderStrong,
+      backgroundColor: T.surface,
+    },
+    musclePillActive: {
+      backgroundColor: T.primary,
+      borderColor: T.primary,
+    },
+    musclePillText: { fontFamily: F.uiMed, fontSize: 13, color: T.text },
+    musclePillTextActive: { color: T.onPrimary },
+
     segmented: {
       flexDirection: 'row',
       borderWidth: 1,
