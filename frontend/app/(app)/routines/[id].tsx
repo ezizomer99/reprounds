@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Image } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -429,8 +430,15 @@ function PickExerciseModal({ visible, onClose, onPick }: PickExerciseModalProps)
                 onPress={() => { onPick(item); handleClose(); }}
                 activeOpacity={0.7}
               >
-                <Text style={styles.pickRowName}>{item.name}</Text>
-                <Text style={styles.pickRowType}>{item.type}</Text>
+                {item.imageUrl ? (
+                  <Image source={{ uri: item.imageUrl }} style={styles.pickThumb} resizeMode="cover" />
+                ) : (
+                  <View style={[styles.pickThumb, styles.pickThumbPlaceholder]} />
+                )}
+                <View style={styles.pickRowInfo}>
+                  <Text style={styles.pickRowName}>{item.name}</Text>
+                  <Text style={styles.pickRowType}>{item.equipment ?? item.muscleGroup ?? item.type}</Text>
+                </View>
               </TouchableOpacity>
             )}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -943,11 +951,14 @@ function makeStyles(T: ThemeColors) {
     marginHorizontal: D.pad, marginBottom: 12,
   },
   pickRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: D.pad, paddingVertical: 14,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: D.pad, paddingVertical: 10, gap: 12,
   },
+  pickThumb: { width: 44, height: 44, borderRadius: R.sm },
+  pickThumbPlaceholder: { backgroundColor: T.surface2 },
+  pickRowInfo: { flex: 1 },
   pickRowName: { fontFamily: F.uiMed, fontSize: 15, color: T.text },
-  pickRowType: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
+  pickRowType: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 2, textTransform: 'capitalize' },
   separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad },
   modalCentered: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
   emptyText: { fontFamily: F.uiMed, fontSize: 15, color: T.muted },

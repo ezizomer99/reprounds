@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Image } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -128,8 +129,15 @@ function PickExerciseModal({ visible, onClose, onPick }: {
             keyExtractor={(i) => i.id}
             renderItem={({ item }) => (
               <TouchableOpacity style={styles.pickRow} onPress={() => { onPick(item); handleClose(); }}>
-                <Text style={styles.pickName}>{item.name}</Text>
-                <Text style={styles.pickMeta}>{item.type}</Text>
+                {item.imageUrl ? (
+                  <Image source={{ uri: item.imageUrl }} style={styles.pickThumb} resizeMode="cover" />
+                ) : (
+                  <View style={[styles.pickThumb, styles.pickThumbPlaceholder]} />
+                )}
+                <View style={styles.pickInfo}>
+                  <Text style={styles.pickName}>{item.name}</Text>
+                  <Text style={styles.pickMeta}>{item.equipment ?? item.muscleGroup ?? item.type}</Text>
+                </View>
               </TouchableOpacity>
             )}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -1381,9 +1389,12 @@ function makeStyles(T: ThemeColors) {
     borderRadius: R.sm, paddingHorizontal: 14, paddingVertical: 10,
     fontFamily: F.uiMed, fontSize: 15, color: T.text, marginHorizontal: 16, marginBottom: 12,
   },
-  pickRow: { paddingHorizontal: 16, paddingVertical: 14 },
+  pickRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 12 },
+  pickThumb: { width: 44, height: 44, borderRadius: 8 },
+  pickThumbPlaceholder: { backgroundColor: T.surface2 },
+  pickInfo: { flex: 1 },
   pickName: { fontFamily: F.uiMed, fontSize: 16, color: T.text },
-  pickMeta: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim, marginTop: 2 },
+  pickMeta: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim, marginTop: 2, textTransform: 'capitalize' },
   separator: { height: 1, backgroundColor: T.border, marginLeft: 16 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
   emptyText: { fontFamily: F.uiMed, fontSize: 15, color: T.muted },
