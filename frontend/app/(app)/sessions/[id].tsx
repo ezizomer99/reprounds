@@ -40,6 +40,7 @@ import {
 } from '../../../src/hooks/useSession';
 import { useRoutines } from '../../../src/hooks/useRoutines';
 import { RestTimer } from '../../../src/components/RestTimer';
+import { Skeleton } from '../../../src/components/Skeleton';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -1041,7 +1042,40 @@ export default function SessionScreen() {
   }
 
   if (isLoading) {
-    return <View style={styles.loadingScreen}><ActivityIndicator size="large" color={T.primary} /></View>;
+    return (
+      <View style={[styles.screen, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <View style={styles.headerIconBtn}><Skeleton width={22} height={22} radius={6} /></View>
+          <View style={styles.headerCenter}><Skeleton width={92} height={20} /></View>
+          <View style={styles.headerActions}>
+            <View style={styles.headerIconBtn}><Skeleton width={22} height={22} radius={6} /></View>
+            <View style={styles.headerIconBtn}><Skeleton width={22} height={22} radius={6} /></View>
+          </View>
+        </View>
+        <View style={{ padding: 16, gap: 16 }}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <View key={i} style={styles.skeletonCard}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                <Skeleton width={44} height={44} radius={10} />
+                <View style={{ flex: 1, gap: 8 }}>
+                  <Skeleton width="60%" height={15} />
+                  <Skeleton width="30%" height={11} />
+                </View>
+              </View>
+              {Array.from({ length: 3 }).map((__, j) => (
+                <View key={j} style={styles.skeletonSetRow}>
+                  <Skeleton width={26} height={26} radius={8} />
+                  <Skeleton width={72} height={26} radius={8} />
+                  <Skeleton width={72} height={26} radius={8} />
+                  <View style={{ flex: 1 }} />
+                  <Skeleton width={26} height={26} radius={13} />
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      </View>
+    );
   }
 
   if (isError || !session) {
@@ -1194,6 +1228,8 @@ function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
   screen: { flex: 1, backgroundColor: T.bg },
   loadingScreen: { flex: 1, backgroundColor: T.bg, alignItems: 'center', justifyContent: 'center' },
+  skeletonCard: { backgroundColor: T.surface, borderRadius: R.card, borderWidth: 1, borderColor: T.border, padding: 14 },
+  skeletonSetRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
   errorText: { fontFamily: F.ui, fontSize: 15, color: T.danger, textAlign: 'center' },
 
   // StrengthLog-style header

@@ -1,4 +1,4 @@
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
+import { Skeleton } from '../../../src/components/Skeleton';
 
 const FREE_HISTORY_DAYS = 30;
 
@@ -121,7 +122,17 @@ export default function HistoryScreen() {
       </View>
 
       {isLoading && (
-        <View style={styles.centered}><ActivityIndicator size="large" color={T.primary} /></View>
+        <View style={{ paddingTop: 8 }}>
+          {Array.from({ length: 7 }).map((_, i) => (
+            <View key={i} style={styles.skeletonRow}>
+              <Skeleton width={40} height={40} radius={20} />
+              <View style={{ flex: 1, gap: 8 }}>
+                <Skeleton width="55%" height={14} />
+                <Skeleton width="32%" height={11} />
+              </View>
+            </View>
+          ))}
+        </View>
       )}
 
       {isError && (
@@ -190,6 +201,7 @@ function makeStyles(T: ThemeColors) {
     headerSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 1 },
 
     row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: D.pad, paddingVertical: 13, gap: 12 },
+    skeletonRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: D.pad, paddingVertical: 14, gap: 12 },
     dateBlock: { width: 46, alignItems: 'center', flexShrink: 0 },
     dateDay: { fontFamily: F.monoBold, fontSize: 19, color: T.text },
     dateMonth: { fontFamily: F.uiBold, fontSize: 10, color: T.textDim, letterSpacing: 0.6 },
