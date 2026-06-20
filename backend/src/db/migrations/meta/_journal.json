@@ -64,6 +64,13 @@
       "when": 1781950502098,
       "tag": "0008_normal_spitfire",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1781950834074,
+      "tag": "0009_broken_dexter_bennett",
+      "breakpoints": true
     }
   ]
 }

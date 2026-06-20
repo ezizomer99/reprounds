@@ -51,6 +51,15 @@ export interface Discipline {
   createdAt: string;
 }
 
+// A training partner the user rolls/spars with, referenced by id from
+// martial-arts rounds (RoundsSessionDetails). Name only.
+export interface Partner {
+  id: string;
+  userId: string;
+  name: string;
+  createdAt: string;
+}
+
 export interface Routine {
   id: string;
   userId: string;
@@ -148,6 +157,18 @@ export interface ExerciseListResponse {
 
 export interface DisciplineListResponse {
   disciplines: Discipline[];
+}
+
+export interface PartnerListResponse {
+  partners: Partner[];
+}
+
+export interface CreatePartnerRequest {
+  name: string;
+}
+
+export interface UpdatePartnerRequest {
+  name?: string;
 }
 
 export interface CreateExerciseRequest {
