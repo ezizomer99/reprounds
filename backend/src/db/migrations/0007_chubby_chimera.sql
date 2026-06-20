@@ -1,0 +1,4 @@
+ALTER TABLE "routine_items" ADD CONSTRAINT "routine_items_kind_check" CHECK (("routine_items"."kind" = 'exercise' AND "routine_items"."exercise_id" IS NOT NULL AND "routine_items"."discipline_id" IS NULL)
+     OR ("routine_items"."kind" = 'martial_arts' AND "routine_items"."discipline_id" IS NOT NULL AND "routine_items"."exercise_id" IS NULL));--> statement-breakpoint
+ALTER TABLE "session_entries" ADD CONSTRAINT "session_entries_kind_check" CHECK (("session_entries"."kind" = 'exercise' AND "session_entries"."exercise_id" IS NOT NULL AND "session_entries"."discipline_id" IS NULL)
+     OR ("session_entries"."kind" = 'martial_arts' AND "session_entries"."discipline_id" IS NOT NULL AND "session_entries"."exercise_id" IS NULL));

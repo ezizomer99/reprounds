@@ -38,7 +38,6 @@ export const exercises = pgTable('exercises', {
   userId:             uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
   name:               text('name').notNull(),
   type:               activityTypeEnum('type').notNull(),
-  defaultRestSeconds: integer('default_rest_seconds'),
   // Metadata columns — populated by seeding from exercises.json, null on user-created exercises
   sourceId:           text('source_id').unique(),
   category:           text('category'),

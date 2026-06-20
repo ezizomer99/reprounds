@@ -28,7 +28,6 @@ export interface Exercise {
   userId: string | null;
   name: string;
   type: Exclude<ActivityType, 'martial_arts'>;
-  defaultRestSeconds: number | null;
   createdAt: string;
   // Metadata — null on user-created custom exercises
   category: string | null;
@@ -154,14 +153,12 @@ export interface DisciplineListResponse {
 export interface CreateExerciseRequest {
   name: string;
   type: Exclude<ActivityType, 'martial_arts'>;
-  defaultRestSeconds?: number | null;
   target?: string | null;
 }
 
 export interface UpdateExerciseRequest {
   name?: string;
   type?: Exclude<ActivityType, 'martial_arts'>;
-  defaultRestSeconds?: number | null;
   target?: string | null;
 }
 

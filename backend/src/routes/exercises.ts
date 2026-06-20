@@ -42,7 +42,6 @@ function mapExercise(r: ExerciseRow, includeHeavy = false): Exercise {
     userId: r.userId,
     name: r.name,
     type: r.type as Exercise['type'],
-    defaultRestSeconds: r.defaultRestSeconds,
     createdAt: r.createdAt.toISOString(),
     category: r.category,
     bodyPart: r.bodyPart,
@@ -116,7 +115,6 @@ exerciseRoutes.post('/', async (c) => {
       userId,
       name: body.name,
       type: body.type,
-      defaultRestSeconds: body.defaultRestSeconds ?? null,
       target: body.target ?? null,
     })
     .returning();
@@ -167,7 +165,6 @@ exerciseRoutes.patch('/:id', async (c) => {
   const updates: Partial<typeof exercises.$inferInsert> = {};
   if (body.name !== undefined) updates.name = body.name;
   if (body.type !== undefined) updates.type = body.type;
-  if ('defaultRestSeconds' in body) updates.defaultRestSeconds = body.defaultRestSeconds ?? null;
   if ('target' in body) updates.target = body.target ?? null;
 
   if (Object.keys(updates).length === 0) {
