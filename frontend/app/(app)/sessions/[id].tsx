@@ -572,9 +572,8 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
 
   // Seeded (global) disciplines get the structured, category-aware round logger;
   // user-created custom disciplines keep their generic field_config form.
-  const useStructured =
-    discipline.userId === null &&
-    (discipline.category === 'grappling' || discipline.category === 'striking');
+  // All three categories now have a structured logger.
+  const useStructured = discipline.userId === null;
   const strikeWeapons = /muay thai|kickbox/i.test(discipline.name)
     ? MUAY_THAI_WEAPONS
     : BOXING_WEAPONS;

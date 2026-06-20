@@ -5,6 +5,7 @@ import type {
   ClassType,
   DisciplineCat,
   GrapplingRound,
+  MmaPhase,
   MmaRound,
   RoundIntensity,
   RoundsSessionDetails,
@@ -59,6 +60,12 @@ const WEAPON_LABEL: Record<StrikeWeapon, string> = {
   jab: 'Jab', cross: 'Cross', hook: 'Hook', uppercut: 'Uppercut',
   teep: 'Teep', roundhouse: 'Round kick', knee: 'Knee', elbow: 'Elbow',
 };
+
+const MMA_PHASES: { value: MmaPhase; label: string }[] = [
+  { value: 'standup', label: 'Standup' },
+  { value: 'clinch', label: 'Clinch' },
+  { value: 'ground', label: 'Ground' },
+];
 
 export function emptyRoundsSession(category: DisciplineCat): RoundsSessionDetails {
   return { schema: ROUNDS_SCHEMA, category, rounds: [] } as RoundsSessionDetails;
@@ -186,6 +193,10 @@ export function RoundLogger({
             />
           )}
 
+          {category === 'mixed' && (
+            <MmaCounters round={round} onChange={(patch) => updateRound(round.id, patch)} />
+          )}
+
           <TextInput
             style={styles.roundNotes}
             value={round.notes ?? ''}
@@ -298,6 +309,62 @@ function StrikingCounters({
           />
         ))}
       </View>
+    </View>
+  );
+}
+
+function MmaCounters({
+  round,
+  onChange,
+}: {
+  round: EditableRound;
+  onChange: (patch: Partial<EditableRound>) => void;
+}) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const phases = round.phases ?? [];
+  const togglePhase = (p: MmaPhase) =>
+    onChange({ phases: phases.includes(p) ? phases.filter((x) => x !== p) : [...phases, p] });
+
+  return (
+    <View style={{ gap: 10 }}>
+      <View>
+        <Text style={styles.miniLabel}>Phases</Text>
+        <View style={styles.chipRow}>
+          {MMA_PHASES.map((ph) => {
+            const active = phases.includes(ph.value);
+            return (
+              <TouchableOpacity
+                key={ph.value}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => togglePhase(ph.value)}
+              >
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{ph.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+      <Stepper
+        label="Takedowns landed"
+        value={round.takedownsLanded ?? 0}
+        onChange={(n) => onChange({ takedownsLanded: n })}
+      />
+      <Stepper
+        label="Takedowns defended"
+        value={round.takedownsDefended ?? 0}
+        onChange={(n) => onChange({ takedownsDefended: n })}
+      />
+      <Stepper
+        label="Submissions for"
+        value={round.submissionsFor ?? 0}
+        onChange={(n) => onChange({ submissionsFor: n })}
+      />
+      <Stepper
+        label="Submissions against"
+        value={round.submissionsAgainst ?? 0}
+        onChange={(n) => onChange({ submissionsAgainst: n })}
+      />
     </View>
   );
 }
