@@ -78,25 +78,44 @@ async function seed() {
 
   console.log('Exercises seeded.');
 
-  // 4. Seed disciplines (unchanged — skip if already present)
-  const [{ value: discCount }] = await db
-    .select({ value: sql<number>`count(*)` })
+  // 4. Seed global disciplines (idempotent per-name — adds any missing ones).
+  // Category drives the structured round-logging UI; field_config is the
+  // fallback generic form. Templates are sensible defaults per category.
+  const notes = { key: 'notes', label: 'Notes', type: 'textarea' as const };
+  const grapplingTemplate = [
+    { key: 'rounds', label: 'Rounds', type: 'number' as const },
+    { key: 'submissions', label: 'Submissions', type: 'number' as const },
+    notes,
+  ];
+  const strikingTemplate = [
+    { key: 'rounds', label: 'Rounds', type: 'number' as const },
+    notes,
+  ];
+  const mixedTemplate = [
+    { key: 'rounds', label: 'Rounds', type: 'number' as const },
+    notes,
+  ];
+
+  const globalDisciplines = [
+    { name: 'BJJ',       category: 'grappling' as const, fieldConfig: grapplingTemplate },
+    { name: 'Wrestling', category: 'grappling' as const, fieldConfig: grapplingTemplate },
+    { name: 'Boxing',    category: 'striking'  as const, fieldConfig: strikingTemplate },
+    { name: 'Muay Thai', category: 'striking'  as const, fieldConfig: strikingTemplate },
+    { name: 'MMA',       category: 'mixed'     as const, fieldConfig: mixedTemplate },
+  ];
+
+  const existingGlobal = await db
+    .select({ name: disciplines.name })
     .from(disciplines)
     .where(isNull(disciplines.userId));
+  const existingNames = new Set(existingGlobal.map((d) => d.name));
 
-  if (Number(discCount) === 0) {
-    const martialArtsFieldConfig = [
-      { key: 'title', label: 'Title', type: 'text' },
-      { key: 'notes', label: 'Notes', type: 'textarea' },
-    ];
-    await db.insert(disciplines).values([
-      { name: 'BJJ',    category: 'grappling', fieldConfig: martialArtsFieldConfig },
-      { name: 'Boxing', category: 'striking',  fieldConfig: martialArtsFieldConfig },
-      { name: 'MMA',    category: 'mixed',     fieldConfig: martialArtsFieldConfig },
-    ]);
-    console.log('Disciplines seeded.');
+  const toInsert = globalDisciplines.filter((d) => !existingNames.has(d.name));
+  if (toInsert.length > 0) {
+    await db.insert(disciplines).values(toInsert);
+    console.log(`Seeded ${toInsert.length} disciplines: ${toInsert.map((d) => d.name).join(', ')}`);
   } else {
-    console.log('Disciplines already present — skipping.');
+    console.log('All global disciplines already present — skipping.');
   }
 
   await client.end();
