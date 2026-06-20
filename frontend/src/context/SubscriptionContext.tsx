@@ -9,6 +9,7 @@ export const PRO_ENTITLEMENT = 'pro';
 type SubscriptionContextValue = {
   isPro: boolean;
   isLoading: boolean;
+  customerInfo: CustomerInfo | null;
   purchasePro: (packageId: 'glima_pro_monthly' | 'glima_pro_annual') => Promise<void>;
   restorePurchases: () => Promise<void>;
 };
@@ -16,6 +17,7 @@ type SubscriptionContextValue = {
 const SubscriptionContext = createContext<SubscriptionContextValue>({
   isPro: false,
   isLoading: true,
+  customerInfo: null,
   purchasePro: async () => {},
   restorePurchases: async () => {},
 });
@@ -27,6 +29,12 @@ function isProFromInfo(info: CustomerInfo): boolean {
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
   const [isPro, setIsPro] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
+
+  function applyInfo(info: CustomerInfo) {
+    setIsPro(isProFromInfo(info));
+    setCustomerInfo(info);
+  }
 
   useEffect(() => {
     const apiKey = Platform.OS === 'android' ? ANDROID_KEY : IOS_KEY;
@@ -39,13 +47,11 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     Purchases.configure({ apiKey });
 
     Purchases.getCustomerInfo()
-      .then((info) => setIsPro(isProFromInfo(info)))
+      .then(applyInfo)
       .catch(() => {})
       .finally(() => setIsLoading(false));
 
-    const listener = Purchases.addCustomerInfoUpdateListener((info) => {
-      setIsPro(isProFromInfo(info));
-    });
+    const listener = Purchases.addCustomerInfoUpdateListener(applyInfo);
 
     return () => { listener.remove(); };
   }, []);
@@ -56,17 +62,17 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     if (!current) throw new Error('No offerings available.');
     const pkg = current.availablePackages.find((p) => p.product.identifier === packageId);
     if (!pkg) throw new Error('Package not found.');
-    const { customerInfo } = await Purchases.purchasePackage(pkg);
-    setIsPro(isProFromInfo(customerInfo));
+    const { customerInfo: info } = await Purchases.purchasePackage(pkg);
+    applyInfo(info);
   }
 
   async function restorePurchases() {
     const info = await Purchases.restorePurchases();
-    setIsPro(isProFromInfo(info));
+    applyInfo(info);
   }
 
   return (
-    <SubscriptionContext.Provider value={{ isPro, isLoading, purchasePro, restorePurchases }}>
+    <SubscriptionContext.Provider value={{ isPro, isLoading, customerInfo, purchasePro, restorePurchases }}>
       {children}
     </SubscriptionContext.Provider>
   );

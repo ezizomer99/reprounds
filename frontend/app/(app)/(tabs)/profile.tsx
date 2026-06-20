@@ -24,16 +24,18 @@ interface NavRowProps {
   label: string;
   onPress: () => void;
   last?: boolean;
+  iconColor?: string;
+  iconBg?: string;
 }
 
-function NavRow({ icon, label, onPress, last }: NavRowProps) {
+function NavRow({ icon, label, onPress, last, iconColor, iconBg }: NavRowProps) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   return (
     <>
       <TouchableOpacity style={styles.navRow} onPress={onPress} activeOpacity={0.7}>
-        <View style={styles.navRowIcon}>
-          <Ionicons name={icon} size={18} color={T.textDim} />
+        <View style={[styles.navRowIcon, iconBg ? { backgroundColor: iconBg } : undefined]}>
+          <Ionicons name={icon} size={18} color={iconColor ?? T.textDim} />
         </View>
         <Text style={styles.navRowLabel}>{label}</Text>
         <Ionicons name="chevron-forward" size={16} color={T.muted} />
@@ -194,6 +196,13 @@ export default function ProfileTab() {
           <Text style={styles.eyebrow}>App</Text>
         </View>
         <View style={styles.listCard}>
+          <NavRow
+            icon="star-outline"
+            iconColor={T.gold}
+            iconBg={withAlpha(T.gold, 0.12)}
+            label="Glima Pro"
+            onPress={() => router.push('/subscription' as never)}
+          />
           <NavRow
             icon="color-palette-outline"
             label="Appearance"
