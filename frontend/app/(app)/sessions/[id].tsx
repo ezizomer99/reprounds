@@ -25,6 +25,7 @@ import type {
   SetType,
   StrengthSet,
 } from '@app/shared';
+import { isRoundsSession } from '@app/shared';
 import { useExercises } from '../../../src/hooks/useExercises';
 import { useDisciplines } from '../../../src/hooks/useDisciplines';
 import {
@@ -41,6 +42,7 @@ import {
 import { useRoutines } from '../../../src/hooks/useRoutines';
 import { RestTimer } from '../../../src/components/RestTimer';
 import { Skeleton } from '../../../src/components/Skeleton';
+import { RoundLogger } from '../../../src/components/RoundLogger';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -568,6 +570,10 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
     );
   }
 
+  // Seeded (global) disciplines get the structured, category-aware round logger;
+  // user-created custom disciplines keep their generic field_config form.
+  const useStructured = discipline.userId === null && discipline.category === 'grappling';
+
   return (
     <View style={styles.entryCard}>
       <View style={styles.entryHead}>
@@ -577,7 +583,13 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
         </View>
       </View>
 
-      {discipline.fieldConfig.map((field) => {
+      {useStructured ? (
+        <RoundLogger
+          category={discipline.category}
+          value={isRoundsSession(details) ? details : null}
+          onChange={(next) => setDetails(next as unknown as Record<string, unknown>)}
+        />
+      ) : discipline.fieldConfig.map((field) => {
         if (field.type === 'enum') {
           const enumField = field as EnumFieldDef;
           const current = details[field.key] as string | undefined;
