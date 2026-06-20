@@ -51,9 +51,9 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
       .catch(() => {})
       .finally(() => setIsLoading(false));
 
-    const listener = Purchases.addCustomerInfoUpdateListener(applyInfo);
+    Purchases.addCustomerInfoUpdateListener(applyInfo);
 
-    return () => { listener.remove(); };
+    return () => { Purchases.removeCustomerInfoUpdateListener(applyInfo); };
   }, []);
 
   async function purchasePro(packageId: 'glima_pro_monthly' | 'glima_pro_annual') {
