@@ -8,7 +8,9 @@ import type {
   MmaRound,
   RoundIntensity,
   RoundsSessionDetails,
+  StrikeWeapon,
   StrikingRound,
+  StrikingRoundType,
 } from '@app/shared';
 import { ROUNDS_SCHEMA } from '@app/shared';
 import { PartnerPicker } from './PartnerPicker';
@@ -40,6 +42,24 @@ const CLASS_TYPES: { value: ClassType; label: string }[] = [
   { value: 'conditioning', label: 'Conditioning' },
 ];
 
+const STRIKING_ROUND_TYPES: { value: StrikingRoundType; label: string }[] = [
+  { value: 'shadow', label: 'Shadow' },
+  { value: 'bag', label: 'Bag' },
+  { value: 'pads', label: 'Pads' },
+  { value: 'sparring', label: 'Spar' },
+  { value: 'clinch', label: 'Clinch' },
+  { value: 'drilling', label: 'Drill' },
+];
+
+export const BOXING_WEAPONS: StrikeWeapon[] = ['jab', 'cross', 'hook', 'uppercut'];
+export const MUAY_THAI_WEAPONS: StrikeWeapon[] = [
+  'jab', 'cross', 'hook', 'uppercut', 'teep', 'roundhouse', 'knee', 'elbow',
+];
+const WEAPON_LABEL: Record<StrikeWeapon, string> = {
+  jab: 'Jab', cross: 'Cross', hook: 'Hook', uppercut: 'Uppercut',
+  teep: 'Teep', roundhouse: 'Round kick', knee: 'Knee', elbow: 'Elbow',
+};
+
 export function emptyRoundsSession(category: DisciplineCat): RoundsSessionDetails {
   return { schema: ROUNDS_SCHEMA, category, rounds: [] } as RoundsSessionDetails;
 }
@@ -54,10 +74,13 @@ export function RoundLogger({
   category,
   value,
   onChange,
+  strikeWeapons = BOXING_WEAPONS,
 }: {
   category: DisciplineCat;
   value: RoundsSessionDetails | null;
   onChange: (next: RoundsSessionDetails) => void;
+  /** Which striking weapons to show as counters (boxing vs Muay Thai). */
+  strikeWeapons?: StrikeWeapon[];
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
@@ -155,6 +178,14 @@ export function RoundLogger({
             <GrapplingCounters round={round} onChange={(patch) => updateRound(round.id, patch)} />
           )}
 
+          {category === 'striking' && (
+            <StrikingCounters
+              round={round}
+              weapons={strikeWeapons}
+              onChange={(patch) => updateRound(round.id, patch)}
+            />
+          )}
+
           <TextInput
             style={styles.roundNotes}
             value={round.notes ?? ''}
@@ -217,6 +248,56 @@ function GrapplingCounters({
         value={round.submissionsAgainst ?? 0}
         onChange={(n) => onChange({ submissionsAgainst: n })}
       />
+    </View>
+  );
+}
+
+function StrikingCounters({
+  round,
+  weapons,
+  onChange,
+}: {
+  round: EditableRound;
+  weapons: StrikeWeapon[];
+  onChange: (patch: Partial<EditableRound>) => void;
+}) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const strikes = round.strikes ?? {};
+  const setStrike = (w: StrikeWeapon, n: number) =>
+    onChange({ strikes: { ...strikes, [w]: Math.max(0, n) } });
+
+  return (
+    <View style={{ gap: 10 }}>
+      <View>
+        <Text style={styles.miniLabel}>Round type</Text>
+        <View style={styles.chipRow}>
+          {STRIKING_ROUND_TYPES.map((rt) => {
+            const active = round.roundType === rt.value;
+            return (
+              <TouchableOpacity
+                key={rt.value}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => onChange({ roundType: active ? null : rt.value })}
+              >
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{rt.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
+      <View>
+        <Text style={styles.miniLabel}>Strikes</Text>
+        {weapons.map((w) => (
+          <Stepper
+            key={w}
+            label={WEAPON_LABEL[w]}
+            value={strikes[w] ?? 0}
+            onChange={(n) => setStrike(w, n)}
+          />
+        ))}
+      </View>
     </View>
   );
 }

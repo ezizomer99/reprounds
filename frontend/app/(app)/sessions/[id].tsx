@@ -42,7 +42,7 @@ import {
 import { useRoutines } from '../../../src/hooks/useRoutines';
 import { RestTimer } from '../../../src/components/RestTimer';
 import { Skeleton } from '../../../src/components/Skeleton';
-import { RoundLogger } from '../../../src/components/RoundLogger';
+import { RoundLogger, BOXING_WEAPONS, MUAY_THAI_WEAPONS } from '../../../src/components/RoundLogger';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -572,7 +572,12 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
 
   // Seeded (global) disciplines get the structured, category-aware round logger;
   // user-created custom disciplines keep their generic field_config form.
-  const useStructured = discipline.userId === null && discipline.category === 'grappling';
+  const useStructured =
+    discipline.userId === null &&
+    (discipline.category === 'grappling' || discipline.category === 'striking');
+  const strikeWeapons = /muay thai|kickbox/i.test(discipline.name)
+    ? MUAY_THAI_WEAPONS
+    : BOXING_WEAPONS;
 
   return (
     <View style={styles.entryCard}>
@@ -588,6 +593,7 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
           category={discipline.category}
           value={isRoundsSession(details) ? details : null}
           onChange={(next) => setDetails(next as unknown as Record<string, unknown>)}
+          strikeWeapons={strikeWeapons}
         />
       ) : discipline.fieldConfig.map((field) => {
         if (field.type === 'enum') {
