@@ -186,15 +186,6 @@ export default function WorkoutTab() {
                 <Text style={styles.streakLabel}>current streak</Text>
               </View>
             </View>
-            <View style={styles.streakChip}>
-              <View style={[styles.streakIconBg, styles.shieldIconBg]}>
-                <Ionicons name="shield-outline" size={14} color={T.textDim} />
-              </View>
-              <View>
-                <Text style={styles.streakNum}>1 streak</Text>
-                <Text style={styles.streakLabel}>shield</Text>
-              </View>
-            </View>
           </View>
         </TouchableOpacity>
 
@@ -354,7 +345,6 @@ function makeStyles(T: ThemeColors) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    shieldIconBg: { backgroundColor: T.surface },
     streakNum: { fontFamily: F.uiSemi, fontSize: 14, color: T.text },
     streakLabel: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim },
 
