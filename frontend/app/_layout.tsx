@@ -24,7 +24,23 @@ GoogleSignin.configure({
   iosClientId: process.env.EXPO_PUBLIC_IOS_CLIENT_ID,
 });
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      // Workout data doesn't change second-to-second; serve cached data across
+      // remounts/tab switches instead of refetching every time.
+      staleTime: 60_000,
+      gcTime: 5 * 60_000,
+      refetchOnReconnect: true,
+      retry: (failureCount, error) => {
+        // Don't retry client errors (auth/validation); they won't succeed on retry.
+        const status = (error as { status?: number })?.status;
+        if (status !== undefined && status >= 400 && status < 500) return false;
+        return failureCount < 2;
+      },
+    },
+  },
+});
 
 function AppShell() {
   const { isDark } = useTheme();
