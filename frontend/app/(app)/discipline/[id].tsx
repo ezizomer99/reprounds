@@ -1,16 +1,23 @@
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import type { Fight, FightMethod, FightResult } from '@app/shared';
 import { useDisciplineHistory } from '../../../src/hooks/useDisciplines';
+import { fightRecord, useCreateFight, useDeleteFight, useFights } from '../../../src/hooks/useFights';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
@@ -39,8 +46,13 @@ export default function DisciplineDetailScreen() {
   const { id, name } = useLocalSearchParams<{ id: string; name: string }>();
 
   const { data, isLoading, isError, error } = useDisciplineHistory(id ?? null);
+  const { data: fights } = useFights(id ?? null);
+  const deleteFight = useDeleteFight(id ?? null);
+  const [showAddFight, setShowAddFight] = useState(false);
 
   const history = data?.history ?? [];
+  const fightList = fights ?? [];
+  const record = fightRecord(fightList);
 
   if (!isPro) {
     return (
@@ -93,7 +105,37 @@ export default function DisciplineDetailScreen() {
                 <Text style={styles.statNum}>{history.length}</Text>
                 <Text style={styles.statKey}>Total sessions</Text>
               </View>
+              <View style={styles.statCard}>
+                <Text style={styles.statNum}>
+                  {record.wins}-{record.losses}-{record.draws}
+                </Text>
+                <Text style={styles.statKey}>Record (W-L-D)</Text>
+              </View>
             </View>
+
+            <View style={styles.compHead}>
+              <Text style={styles.sectionLabel}>Competition</Text>
+              <TouchableOpacity style={styles.logBtn} onPress={() => setShowAddFight(true)}>
+                <Ionicons name="add" size={15} color={T.primary} />
+                <Text style={styles.logBtnText}>Log result</Text>
+              </TouchableOpacity>
+            </View>
+            {fightList.length === 0 ? (
+              <Text style={styles.compEmpty}>No results logged yet.</Text>
+            ) : (
+              fightList.map((f) => (
+                <FightRow
+                  key={f.id}
+                  fight={f}
+                  onDelete={() =>
+                    Alert.alert('Delete result?', 'This cannot be undone.', [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Delete', style: 'destructive', onPress: () => deleteFight.mutate(f.id) },
+                    ])
+                  }
+                />
+              ))
+            )}
 
             {history.length > 0 && (
               <Text style={styles.sectionLabel}>Session history</Text>
@@ -161,7 +203,190 @@ export default function DisciplineDetailScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       />
+
+      {showAddFight && id && (
+        <AddFightModal disciplineId={id} onClose={() => setShowAddFight(false)} />
+      )}
     </View>
+  );
+}
+
+// ─── Fight log ───────────────────────────────────────────────────────────────
+
+const RESULTS: { value: FightResult; label: string }[] = [
+  { value: 'win', label: 'Win' },
+  { value: 'loss', label: 'Loss' },
+  { value: 'draw', label: 'Draw' },
+];
+
+const METHODS: { value: FightMethod; label: string }[] = [
+  { value: 'ko', label: 'KO' },
+  { value: 'tko', label: 'TKO' },
+  { value: 'submission', label: 'Submission' },
+  { value: 'decision', label: 'Decision' },
+  { value: 'points', label: 'Points' },
+  { value: 'other', label: 'Other' },
+];
+
+const METHOD_LABEL: Record<FightMethod, string> = {
+  ko: 'KO', tko: 'TKO', submission: 'Sub', decision: 'Decision', points: 'Points', other: 'Other',
+};
+
+function todayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function FightRow({ fight, onDelete }: { fight: Fight; onDelete: () => void }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const { day, month, year } = formatDate(fight.date);
+  const color = fight.result === 'win' ? T.conditioning : fight.result === 'loss' ? T.danger : T.muted;
+  const letter = fight.result === 'win' ? 'W' : fight.result === 'loss' ? 'L' : 'D';
+  const meta = [fight.method ? METHOD_LABEL[fight.method] : null, fight.round ? `R${fight.round}` : null]
+    .filter(Boolean)
+    .join(' · ');
+  return (
+    <View style={styles.fightRow}>
+      <View style={[styles.fightBadge, { backgroundColor: withAlpha(color, 0.15), borderColor: withAlpha(color, 0.35) }]}>
+        <Text style={[styles.fightBadgeText, { color }]}>{letter}</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.fightOpp} numberOfLines={1}>{fight.opponent || 'Opponent'}</Text>
+        <Text style={styles.fightMeta}>
+          {`${month} ${day}, ${year}`}{meta ? ` · ${meta}` : ''}
+        </Text>
+      </View>
+      <TouchableOpacity hitSlop={8} onPress={onDelete}>
+        <Ionicons name="trash-outline" size={16} color={T.muted} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function AddFightModal({ disciplineId, onClose }: { disciplineId: string; onClose: () => void }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const createFight = useCreateFight();
+  const [date, setDate] = useState(todayISO());
+  const [opponent, setOpponent] = useState('');
+  const [result, setResult] = useState<FightResult>('win');
+  const [method, setMethod] = useState<FightMethod | null>(null);
+  const [round, setRound] = useState('');
+  const [notes, setNotes] = useState('');
+
+  async function handleSave() {
+    try {
+      await createFight.mutateAsync({
+        disciplineId,
+        date,
+        opponent: opponent.trim() || null,
+        result,
+        method,
+        round: round.trim() ? Number(round) : null,
+        notes: notes.trim() || null,
+      });
+      onClose();
+    } catch (err) {
+      Alert.alert('Error', (err as Error).message ?? 'Failed to save result.');
+    }
+  }
+
+  return (
+    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} onPress={onClose} />
+      <View style={styles.sheet}>
+        <View style={styles.handle} />
+        <ScrollView keyboardShouldPersistTaps="handled">
+          <Text style={styles.sheetTitle}>Log result</Text>
+
+          <Text style={styles.sheetLabel}>Result</Text>
+          <View style={styles.chipRow}>
+            {RESULTS.map((r) => {
+              const active = result === r.value;
+              return (
+                <TouchableOpacity
+                  key={r.value}
+                  style={[styles.chip, active && styles.chipActive]}
+                  onPress={() => setResult(r.value)}
+                >
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{r.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={styles.sheetLabel}>Opponent</Text>
+          <TextInput
+            style={styles.sheetInput}
+            value={opponent}
+            onChangeText={setOpponent}
+            placeholder="Name (optional)"
+            placeholderTextColor={T.muted}
+            autoCapitalize="words"
+          />
+
+          <Text style={styles.sheetLabel}>Date</Text>
+          <TextInput
+            style={styles.sheetInput}
+            value={date}
+            onChangeText={setDate}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={T.muted}
+            autoCapitalize="none"
+          />
+
+          <Text style={styles.sheetLabel}>Method</Text>
+          <View style={styles.chipRow}>
+            {METHODS.map((m) => {
+              const active = method === m.value;
+              return (
+                <TouchableOpacity
+                  key={m.value}
+                  style={[styles.chip, active && styles.chipActive]}
+                  onPress={() => setMethod(active ? null : m.value)}
+                >
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{m.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={styles.sheetLabel}>Round (optional)</Text>
+          <TextInput
+            style={styles.sheetInput}
+            value={round}
+            onChangeText={setRound}
+            placeholder="e.g. 2"
+            placeholderTextColor={T.muted}
+            keyboardType="number-pad"
+          />
+
+          <Text style={styles.sheetLabel}>Notes</Text>
+          <TextInput
+            style={[styles.sheetInput, styles.sheetTextarea]}
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Optional"
+            placeholderTextColor={T.muted}
+            multiline
+            textAlignVertical="top"
+          />
+
+          <TouchableOpacity
+            style={[styles.saveBtn, createFight.isPending && { opacity: 0.6 }]}
+            onPress={handleSave}
+            disabled={createFight.isPending}
+          >
+            {createFight.isPending ? (
+              <ActivityIndicator size="small" color={T.onPrimary} />
+            ) : (
+              <Text style={styles.saveBtnText}>Save result</Text>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    </Modal>
   );
 }
 
@@ -259,5 +484,54 @@ function makeStyles(T: ThemeColors) {
       paddingVertical: 13, paddingHorizontal: 28,
     },
     proGateBtnText: { fontFamily: F.uiBold, fontSize: 15, color: T.onPrimary },
+
+    compHead: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingRight: D.pad,
+    },
+    logBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingVertical: 6 },
+    logBtnText: { fontFamily: F.uiSemi, fontSize: 13, color: T.primary },
+    compEmpty: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, paddingHorizontal: D.pad, paddingBottom: 4 },
+    fightRow: {
+      flexDirection: 'row', alignItems: 'center', gap: 12,
+      backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.sm,
+      paddingHorizontal: 12, paddingVertical: 10,
+    },
+    fightBadge: {
+      width: 32, height: 32, borderRadius: 16, borderWidth: 1,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    fightBadgeText: { fontFamily: F.monoBold, fontSize: 14 },
+    fightOpp: { fontFamily: F.uiSemi, fontSize: 14, color: T.text },
+    fightMeta: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 2 },
+
+    backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+    sheet: {
+      position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '88%',
+      backgroundColor: T.surface, borderTopLeftRadius: 18, borderTopRightRadius: 18,
+      paddingHorizontal: 18, paddingTop: 8, paddingBottom: 28,
+    },
+    handle: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: T.borderStrong, marginBottom: 12 },
+    sheetTitle: { fontFamily: F.uiBold, fontSize: 19, color: T.text, marginBottom: 14 },
+    sheetLabel: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 14, marginBottom: 6 },
+    sheetInput: {
+      fontFamily: F.uiMed, fontSize: 15, color: T.text,
+      backgroundColor: T.surface2, borderRadius: R.sm, borderWidth: 1, borderColor: T.border,
+      paddingHorizontal: 12, paddingVertical: 11,
+    },
+    sheetTextarea: { minHeight: 64, fontFamily: F.ui },
+    chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    chip: {
+      paddingHorizontal: 13, paddingVertical: 8,
+      borderRadius: R.chip, borderWidth: 1, borderColor: T.border, backgroundColor: T.surface2,
+    },
+    chipActive: { backgroundColor: T.primary, borderColor: T.primary },
+    chipText: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim },
+    chipTextActive: { color: T.onPrimary },
+    saveBtn: {
+      marginTop: 22, backgroundColor: T.primary, borderRadius: R.card,
+      paddingVertical: 14, alignItems: 'center',
+    },
+    saveBtnText: { fontFamily: F.uiBold, fontSize: 15, color: T.onPrimary },
   });
 }

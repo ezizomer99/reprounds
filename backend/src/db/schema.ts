@@ -21,6 +21,8 @@ export const disciplineCatEnum = pgEnum('discipline_cat', ['grappling', 'strikin
 export const sessionStatusEnum = pgEnum('session_status', ['planned', 'in_progress', 'completed', 'skipped']);
 export const setTypeEnum      = pgEnum('set_type',      ['warmup', 'normal', 'drop', 'failure', 'amrap']);
 export const giTypeEnum       = pgEnum('gi_type',       ['gi', 'no_gi']);
+export const fightResultEnum  = pgEnum('fight_result',  ['win', 'loss', 'draw']);
+export const fightMethodEnum  = pgEnum('fight_method',  ['ko', 'tko', 'submission', 'decision', 'points', 'other']);
 
 export const users = pgTable('users', {
   id:         uuid('id').primaryKey().defaultRandom(),
@@ -159,4 +161,22 @@ export const strengthSets = pgTable('strength_sets', {
   completed:       boolean('completed').notNull().default(false),
 }, (t) => ({
   sessionEntryIdIdx: index('strength_sets_session_entry_id_idx').on(t.sessionEntryId),
+}));
+
+// Competition / fight results, tagged to a discipline. Builds the user's
+// amateur/pro record (the striking/MMA equivalent of belt progression).
+export const fights = pgTable('fights', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  userId:       uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  disciplineId: uuid('discipline_id').notNull().references(() => disciplines.id, { onDelete: 'cascade' }),
+  date:         date('date').notNull(),
+  opponent:     text('opponent'),
+  result:       fightResultEnum('result').notNull(),
+  method:       fightMethodEnum('method'),
+  round:        integer('round'),
+  notes:        text('notes'),
+  createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdIdx: index('fights_user_id_idx').on(t.userId),
+  disciplineIdIdx: index('fights_discipline_id_idx').on(t.disciplineId),
 }));

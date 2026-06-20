@@ -1,4 +1,4 @@
-import type { ActivityType, DisciplineCat, EntryKind, GiType, SessionStatus, SetType } from './enums';
+import type { ActivityType, DisciplineCat, EntryKind, FightMethod, FightResult, GiType, SessionStatus, SetType } from './enums';
 import type { FieldConfig } from './fieldConfig';
 
 export interface User {
@@ -57,6 +57,21 @@ export interface Partner {
   id: string;
   userId: string;
   name: string;
+  createdAt: string;
+}
+
+// A competition / fight result, tagged to a discipline. Aggregates into the
+// user's win-loss-draw record on the discipline detail screen.
+export interface Fight {
+  id: string;
+  userId: string;
+  disciplineId: string;
+  date: string;
+  opponent: string | null;
+  result: FightResult;
+  method: FightMethod | null;
+  round: number | null;
+  notes: string | null;
   createdAt: string;
 }
 
@@ -169,6 +184,29 @@ export interface CreatePartnerRequest {
 
 export interface UpdatePartnerRequest {
   name?: string;
+}
+
+export interface FightListResponse {
+  fights: Fight[];
+}
+
+export interface CreateFightRequest {
+  disciplineId: string;
+  date: string;
+  opponent?: string | null;
+  result: FightResult;
+  method?: FightMethod | null;
+  round?: number | null;
+  notes?: string | null;
+}
+
+export interface UpdateFightRequest {
+  date?: string;
+  opponent?: string | null;
+  result?: FightResult;
+  method?: FightMethod | null;
+  round?: number | null;
+  notes?: string | null;
 }
 
 export interface CreateExerciseRequest {
