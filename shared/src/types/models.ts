@@ -30,6 +30,17 @@ export interface Exercise {
   type: Exclude<ActivityType, 'martial_arts'>;
   defaultRestSeconds: number | null;
   createdAt: string;
+  // Metadata — null on user-created custom exercises
+  category: string | null;
+  bodyPart: string | null;
+  equipment: string | null;
+  muscleGroup: string | null;
+  secondaryMuscles: string[] | null;
+  target: string | null;
+  imageUrl: string | null;
+  // Heavy fields — only populated by GET /exercises/:id, null in list responses
+  instructions: string | null;
+  instructionSteps: string[] | null;
 }
 
 export interface Discipline {
@@ -144,12 +155,14 @@ export interface CreateExerciseRequest {
   name: string;
   type: Exclude<ActivityType, 'martial_arts'>;
   defaultRestSeconds?: number | null;
+  target?: string | null;
 }
 
 export interface UpdateExerciseRequest {
   name?: string;
   type?: Exclude<ActivityType, 'martial_arts'>;
   defaultRestSeconds?: number | null;
+  target?: string | null;
 }
 
 export interface CreateDisciplineRequest {
