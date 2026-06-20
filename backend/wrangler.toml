@@ -7,7 +7,14 @@ compatibility_flags = ["nodejs_compat"]
 #   JWT_SECRET
 #   GOOGLE_CLIENT_ID
 
+[vars]
+# Replace with the actual pub-<hash>.r2.dev URL after enabling public access on the bucket
+R2_PUBLIC_BASE_URL = "https://pub-REPLACE_ME.r2.dev"
+
 [[hyperdrive]]
 binding = "HYPERDRIVE"
 id = "db7f181b10b5414c9b28ef51aa37cee3"
-localConnectionString = "postgresql://neondb_owner:npg_ZADy59hPbLdS@ep-super-poetry-a2l2wvue-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+
+[[r2_buckets]]
+binding = "EXERCISES_BUCKET"
+bucket_name = "ma-fitness-exercises"
