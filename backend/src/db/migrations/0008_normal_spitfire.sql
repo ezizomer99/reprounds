@@ -1,0 +1,1 @@
+CREATE INDEX "session_entries_discipline_id_idx" ON "session_entries" USING btree ("discipline_id");

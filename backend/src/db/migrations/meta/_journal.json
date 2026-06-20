@@ -57,6 +57,13 @@
       "when": 1781945683003,
       "tag": "0007_chubby_chimera",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1781950502098,
+      "tag": "0008_normal_spitfire",
+      "breakpoints": true
     }
   ]
 }

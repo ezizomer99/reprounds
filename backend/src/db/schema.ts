@@ -128,6 +128,7 @@ export const sessionEntries = pgTable('session_entries', {
 }, (t) => ({
   sessionIdIdx: index('session_entries_session_id_idx').on(t.sessionId),
   exerciseIdIdx: index('session_entries_exercise_id_idx').on(t.exerciseId),
+  disciplineIdIdx: index('session_entries_discipline_id_idx').on(t.disciplineId),
   kindCheck: check(
     'session_entries_kind_check',
     sql`(${t.kind} = 'exercise' AND ${t.exerciseId} IS NOT NULL AND ${t.disciplineId} IS NULL)
