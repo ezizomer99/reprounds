@@ -379,6 +379,7 @@ export interface UpdateSessionEntryRequest {
   restSeconds?: number | null;
   details?: Record<string, unknown> | null;
   notes?: string | null;
+  supersetGroup?: number | null;
 }
 
 export interface CreateStrengthSetRequest {

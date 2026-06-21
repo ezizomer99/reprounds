@@ -332,6 +332,7 @@ sessionRoutes.post('/', async (c) => {
             exerciseId: item.exerciseId ?? null,
             disciplineId: item.disciplineId ?? null,
             orderIndex: item.orderIndex,
+            supersetGroup: item.supersetGroup ?? null,
             restSeconds: item.defaultRestSeconds ?? null,
           })
           .returning();
@@ -552,6 +553,7 @@ sessionRoutes.patch('/:id/entries/:entryId', async (c) => {
   if ('restSeconds' in body) updates.restSeconds = body.restSeconds ?? null;
   if ('details' in body) updates.details = body.details ?? null;
   if ('notes' in body) updates.notes = body.notes ?? null;
+  if ('supersetGroup' in body) updates.supersetGroup = body.supersetGroup ?? null;
 
   if (Object.keys(updates).length > 0) {
     await db

@@ -995,6 +995,7 @@ export default function SessionScreen() {
   const { data: session, isLoading, isError } = useSession(id ?? null);
   const completeSession = useCompleteSession();
   const updateSession = useUpdateSession();
+  const updateEntry = useUpdateSessionEntry();
   const addEntry = useAddSessionEntry();
   const { data: disciplines } = useDisciplines();
   const { data: allExercises } = useExercises();
@@ -1133,6 +1134,22 @@ export default function SessionScreen() {
   const canFinish = doneCount > 0 || hasMartialArts;
   const isActive = session.status !== 'completed';
 
+  // Link/unlink an exercise into a superset with the entry above it.
+  const sessId = session.id;
+  const allEntries = session.entries;
+  function toggleSuperset(prev: SessionEntryWithSets, curr: SessionEntryWithSets, linked: boolean) {
+    if (linked) {
+      updateEntry.mutate({ sessionId: sessId, entryId: curr.id, supersetGroup: null });
+      return;
+    }
+    const maxGroup = Math.max(0, ...allEntries.map((e) => e.supersetGroup ?? 0));
+    const group = prev.supersetGroup ?? maxGroup + 1;
+    if (prev.supersetGroup == null) {
+      updateEntry.mutate({ sessionId: sessId, entryId: prev.id, supersetGroup: group });
+    }
+    updateEntry.mutate({ sessionId: sessId, entryId: curr.id, supersetGroup: group });
+  }
+
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       {/* StrengthLog-style header */}
@@ -1214,29 +1231,53 @@ export default function SessionScreen() {
           </View>
         )}
 
-        {session.entries.map((entry) => {
-          if (entry.kind === 'exercise') {
-            return (
-              <StrengthEntryCard
-                key={entry.id}
-                entry={entry}
-                sessionId={session.id}
-                onSetCompleted={handleSetCompleted}
-                exerciseType={entry.exerciseId ? exerciseTypeMap.get(entry.exerciseId) : undefined}
-              />
-            );
-          }
-          if (entry.kind === 'martial_arts') {
-            return (
-              <MartialArtsEntryCard
-                key={entry.id}
-                entry={entry}
-                sessionId={session.id}
-                disciplines={disciplines ?? []}
-              />
-            );
-          }
-          return null;
+        {session.entries.map((entry, i) => {
+          const prev = session.entries[i - 1];
+          const next = session.entries[i + 1];
+          const linkedAbove =
+            entry.kind === 'exercise' && prev?.kind === 'exercise' &&
+            entry.supersetGroup != null && entry.supersetGroup === prev.supersetGroup;
+          const grouped =
+            entry.supersetGroup != null &&
+            (entry.supersetGroup === prev?.supersetGroup || entry.supersetGroup === next?.supersetGroup);
+          const canLink = isActive && entry.kind === 'exercise' && prev?.kind === 'exercise';
+
+          return (
+            <View key={entry.id}>
+              {canLink && (
+                <TouchableOpacity
+                  style={styles.supersetLink}
+                  onPress={() => toggleSuperset(prev, entry, linkedAbove)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={linkedAbove ? 'link' : 'link-outline'}
+                    size={13}
+                    color={linkedAbove ? T.primary : T.muted}
+                  />
+                  <Text style={[styles.supersetLinkText, linkedAbove && { color: T.primary }]}>
+                    {linkedAbove ? 'Superset' : 'Superset with above'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <View style={grouped ? styles.supersetGrouped : undefined}>
+                {entry.kind === 'exercise' ? (
+                  <StrengthEntryCard
+                    entry={entry}
+                    sessionId={session.id}
+                    onSetCompleted={handleSetCompleted}
+                    exerciseType={entry.exerciseId ? exerciseTypeMap.get(entry.exerciseId) : undefined}
+                  />
+                ) : (
+                  <MartialArtsEntryCard
+                    entry={entry}
+                    sessionId={session.id}
+                    disciplines={disciplines ?? []}
+                  />
+                )}
+              </View>
+            </View>
+          );
         })}
 
         {session.status !== 'completed' && (
@@ -1327,6 +1368,9 @@ function makeStyles(T: ThemeColors) {
   summaryDivider: { width: 1, alignSelf: 'stretch', backgroundColor: T.border, marginVertical: 4 },
   summaryNum: { fontFamily: F.monoBold, fontSize: 20, color: T.text },
   summaryKey: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.4 },
+  supersetLink: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 6, paddingLeft: 4 },
+  supersetLinkText: { fontFamily: F.uiMed, fontSize: 12, color: T.muted },
+  supersetGrouped: { borderLeftWidth: 2, borderLeftColor: withAlpha(T.primary, 0.5), paddingLeft: 8, marginLeft: 2 },
   emptyTitle: { fontFamily: F.uiSemi, fontSize: 16, color: T.textDim, marginBottom: 4 },
   emptySub: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, textAlign: 'center' },
 
