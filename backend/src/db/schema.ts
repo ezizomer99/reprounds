@@ -197,3 +197,16 @@ export const rankPromotions = pgTable('rank_promotions', {
   userIdIdx: index('rank_promotions_user_id_idx').on(t.userId),
   disciplineIdIdx: index('rank_promotions_discipline_id_idx').on(t.disciplineId),
 }));
+
+// Body-weight log — one entry per weigh-in. Drives weight-cut tracking for
+// fight camps; weight stored in kg (display unit handled client-side).
+export const weightLogs = pgTable('weight_logs', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  userId:    uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  date:      date('date').notNull(),
+  weightKg:  numeric('weight_kg').notNull(),
+  notes:     text('notes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdDateIdx: index('weight_logs_user_id_date_idx').on(t.userId, t.date),
+}));

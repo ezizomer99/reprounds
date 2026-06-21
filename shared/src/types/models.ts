@@ -75,6 +75,17 @@ export interface Fight {
   createdAt: string;
 }
 
+// A single body-weight weigh-in. weightKg is the stored value; display unit is
+// handled client-side.
+export interface WeightLog {
+  id: string;
+  userId: string;
+  date: string;
+  weightKg: number;
+  notes: string | null;
+  createdAt: string;
+}
+
 // A belt/rank promotion, tagged to a discipline. The most recent by date is the
 // user's current rank.
 export interface RankPromotion {
@@ -231,6 +242,16 @@ export interface CreateRankPromotionRequest {
   rank: string;
   stripes?: number | null;
   date: string;
+  notes?: string | null;
+}
+
+export interface WeightLogListResponse {
+  weights: WeightLog[];
+}
+
+export interface CreateWeightLogRequest {
+  date: string;
+  weightKg: number;
   notes?: string | null;
 }
 

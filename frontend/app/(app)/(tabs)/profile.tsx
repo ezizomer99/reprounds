@@ -187,6 +187,11 @@ export default function ProfileTab() {
             icon="flash-outline"
             label="Disciplines"
             onPress={() => router.push('/library/disciplines' as never)}
+          />
+          <NavRow
+            icon="scale-outline"
+            label="Body weight"
+            onPress={() => router.push('/weight' as never)}
             last
           />
         </View>
