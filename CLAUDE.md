@@ -1,4 +1,4 @@
-# RepRounds Tracker
+# RepRounds
 
 A mobile app for tracking gym workouts and martial arts training. Reps for the gym, rounds for the mat — one log.
 

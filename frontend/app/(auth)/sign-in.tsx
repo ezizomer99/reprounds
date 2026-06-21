@@ -62,7 +62,7 @@ export default function SignInScreen() {
         <RepRoundsMark size={72} color={T.text} />
         <View style={styles.rule} />
         <Text style={styles.wordmark}>REPROUNDS</Text>
-        <Text style={styles.tagline}>Martial Arts & Workout Tracker</Text>
+        <Text style={styles.tagline}>Martial Arts & Workout Log</Text>
       </View>
 
       <View style={styles.bottom}>

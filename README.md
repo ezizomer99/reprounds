@@ -1,4 +1,4 @@
-# RepRounds Tracker
+# RepRounds
 
 A mobile app for tracking gym workouts (strength + conditioning) and martial arts training in one place, with a unified calendar and recurring weekly schedule. Reps for the gym, rounds for the mat — one log. Android/Samsung is the primary target; iOS is supported.
 
@@ -36,8 +36,8 @@ A mobile app for tracking gym workouts (strength + conditioning) and martial art
 
 1. Clone and install dependencies:
    ```bash
-   git clone https://github.com/ezizomer99/reprounds-tracker.git
-   cd reprounds-tracker
+   git clone https://github.com/ezizomer99/reprounds.git
+   cd reprounds
    pnpm install
    ```
 
@@ -80,7 +80,7 @@ Configure Google client IDs in `app.json` / `eas.json` at build time:
 ## Project structure
 
 ```
-reprounds-tracker/
+reprounds/
   frontend/          Expo RN app (Expo Router, React Query, expo-secure-store)
   backend/           Cloudflare Worker (Hono) + Hyperdrive
                      Drizzle schema, migrations, seed + RRULE projection
