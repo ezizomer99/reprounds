@@ -1,3 +1,10 @@
+---
+name: api-sync
+description: >-
+  Verify that the frontend, backend, and shared package agree on the API
+  contract — catch type drift before it hits runtime.
+---
+
 # api-sync
 
 Verify that the frontend, backend, and shared package are in agreement on the API contract — catch type drift before it hits runtime.

@@ -184,6 +184,11 @@ export default function ProfileTab() {
             onPress={() => router.push('/routines' as never)}
           />
           <NavRow
+            icon="barbell-outline"
+            label="Exercises"
+            onPress={() => router.push('/exercises' as never)}
+          />
+          <NavRow
             icon="flash-outline"
             label="Disciplines"
             onPress={() => router.push('/library/disciplines' as never)}

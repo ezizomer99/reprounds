@@ -157,6 +157,8 @@ export interface Session {
   notes: string | null;
   createdAt: string;
   entries?: SessionEntry[];
+  /** Distinct entry kinds present in this session (set on list responses). */
+  kinds?: EntryKind[];
 }
 
 export interface SessionEntry {
