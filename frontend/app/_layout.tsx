@@ -1,5 +1,9 @@
 import '../global.css';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, onlineManager } from '@tanstack/react-query';
+import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
+import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
 import { Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
@@ -25,13 +29,20 @@ GoogleSignin.configure({
   iosClientId: process.env.EXPO_PUBLIC_IOS_CLIENT_ID,
 });
 
+// Drive React Query's online state from the device network status so mutations
+// pause while offline and resume on reconnect.
+onlineManager.setEventListener((setOnline) =>
+  NetInfo.addEventListener((state) => setOnline(Boolean(state.isConnected))),
+);
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       // Workout data doesn't change second-to-second; serve cached data across
       // remounts/tab switches instead of refetching every time.
       staleTime: 60_000,
-      gcTime: 5 * 60_000,
+      // Long enough to survive an offline app restart (must exceed persist maxAge).
+      gcTime: 24 * 60 * 60_000,
       refetchOnReconnect: true,
       retry: (failureCount, error) => {
         // Don't retry client errors (auth/validation); they won't succeed on retry.
@@ -40,8 +51,15 @@ const queryClient = new QueryClient({
         return failureCount < 2;
       },
     },
+    mutations: {
+      // Queue writes made offline and fire them when connectivity returns.
+      networkMode: 'offlineFirst',
+      retry: 2,
+    },
   },
 });
+
+const asyncPersister = createAsyncStoragePersister({ storage: AsyncStorage });
 
 function AppShell() {
   const { isDark } = useTheme();
@@ -68,7 +86,14 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <QueryClientProvider client={queryClient}>
+      <PersistQueryClientProvider
+        client={queryClient}
+        persistOptions={{ persister: asyncPersister, maxAge: 24 * 60 * 60_000 }}
+        onSuccess={() => {
+          // Replay any mutations that were paused while offline.
+          void queryClient.resumePausedMutations();
+        }}
+      >
         <ThemeProvider>
           <UnitProvider>
             <SubscriptionProvider>
@@ -76,7 +101,7 @@ export default function RootLayout() {
             </SubscriptionProvider>
           </UnitProvider>
         </ThemeProvider>
-      </QueryClientProvider>
+      </PersistQueryClientProvider>
     </GestureHandlerRootView>
   );
 }
