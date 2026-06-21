@@ -260,7 +260,7 @@ function AddExerciseModal({ visible, onClose }: AddExerciseModalProps) {
   );
 }
 
-export default function ExercisesTab() {
+export default function ExercisesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { T } = useTheme();
@@ -348,6 +348,9 @@ export default function ExercisesTab() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <Ionicons name="chevron-back" size={22} color={T.text} />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Exercises</Text>
       </View>
 
@@ -439,12 +442,16 @@ function makeStyles(T: ThemeColors) {
     screen: { flex: 1, backgroundColor: T.bg },
 
     header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
       paddingHorizontal: D.pad,
       paddingTop: 14,
       paddingBottom: 14,
       borderBottomWidth: 1,
       borderBottomColor: T.border,
     },
+    backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', marginLeft: -8 },
     headerTitle: { fontFamily: F.uiBold, fontSize: 22, color: T.text, letterSpacing: -0.3 },
 
     searchRow: {
