@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { ExerciseHistoryEntry, StrengthSet } from '@app/shared';
+import { totalVolume } from '@app/shared';
 import { useExerciseHistory, useExercisePRs } from '../../../../src/hooks/useSession';
 import { Sparkline } from '../../../../src/components/Sparkline';
 import { useProGate } from '../../../../src/hooks/useProGate';
@@ -50,10 +51,16 @@ function HistoryRow({ entry, isLast }: { entry: ExerciseHistoryEntry; isLast: bo
   const styles = useMemo(() => makeStyles(T), [T]);
   const { day } = formatDate(entry.date);
   const top = topWeight(entry.entry.sets);
+  const vol = totalVolume(entry.entry.sets);
   return (
     <View style={[styles.historyRow, !isLast && { borderBottomWidth: 1, borderBottomColor: T.border }]}>
       <Text style={styles.historyDate}>{day}</Text>
-      <Text style={styles.historySets}>{formatSets(entry.entry.sets)}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.historySets}>{formatSets(entry.entry.sets)}</Text>
+        {vol > 0 && (
+          <Text style={styles.historyVol}>{Math.round(vol).toLocaleString()} kg volume</Text>
+        )}
+      </View>
       {top !== null && (
         <Text style={styles.historyTop}>{top}<Text style={styles.historyTopUnit}>kg</Text></Text>
       )}
@@ -111,6 +118,13 @@ export default function ExerciseHistoryScreen() {
 
   const sparkMin = topWeights.length ? Math.min(...topWeights) : 0;
   const sparkMax = topWeights.length ? Math.max(...topWeights) : 0;
+
+  const volumes = history
+    .map((e) => totalVolume(e.entry.sets))
+    .filter((v) => v > 0)
+    .reverse();
+  const volMin = volumes.length ? Math.round(Math.min(...volumes)) : 0;
+  const volMax = volumes.length ? Math.round(Math.max(...volumes)) : 0;
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -177,6 +191,16 @@ export default function ExerciseHistoryScreen() {
             </View>
           )}
 
+          {volumes.length >= 2 && (
+            <View style={styles.card}>
+              <View style={styles.sparklineHeader}>
+                <Text style={styles.eyebrow}>Volume · last {volumes.length}</Text>
+                <Text style={styles.sparklineRange}>{volMin.toLocaleString()}–{volMax.toLocaleString()} kg</Text>
+              </View>
+              <Sparkline values={volumes} width={320} height={60} color={T.gold} />
+            </View>
+          )}
+
           <Text style={styles.eyebrow}>History</Text>
           {history.length === 0 ? (
             <View style={styles.centered}>
@@ -235,7 +259,8 @@ function makeStyles(T: ThemeColors) {
     historyCard: { backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.card, overflow: 'hidden' },
     historyRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: D.cardPad, paddingVertical: 12, gap: 10 },
     historyDate: { fontFamily: F.uiSemi, fontSize: 14, color: T.text, width: 76 },
-    historySets: { flex: 1, fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
+    historySets: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
+    historyVol: { fontFamily: F.uiMed, fontSize: 11, color: T.muted, marginTop: 2 },
     historyTop: { fontFamily: F.monoBold, fontSize: 16, color: T.text },
     historyTopUnit: { fontFamily: F.uiMed, fontSize: 11, color: T.muted },
 

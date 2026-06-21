@@ -25,7 +25,7 @@ import type {
   SetType,
   StrengthSet,
 } from '@app/shared';
-import { isRoundsSession } from '@app/shared';
+import { isRoundsSession, totalVolume } from '@app/shared';
 import { useExercises } from '../../../src/hooks/useExercises';
 import { useDisciplines } from '../../../src/hooks/useDisciplines';
 import {
@@ -1107,6 +1107,7 @@ export default function SessionScreen() {
   }
 
   const doneCount = session.entries.reduce((n, e) => n + e.sets.filter((s) => s.completed).length, 0);
+  const sessionVolume = session.entries.reduce((sum, e) => sum + totalVolume(e.sets), 0);
   const hasMartialArts = session.entries.some((e) => e.kind === 'martial_arts');
   const canFinish = doneCount > 0 || hasMartialArts;
   const isActive = session.status !== 'completed';
@@ -1175,6 +1176,20 @@ export default function SessionScreen() {
           <View style={styles.emptyEntries}>
             <Text style={styles.emptyTitle}>No exercises yet</Text>
             <Text style={styles.emptySub}>Add exercises or disciplines below.</Text>
+          </View>
+        )}
+
+        {sessionVolume > 0 && (
+          <View style={styles.summaryBar}>
+            <View style={styles.summaryStat}>
+              <Text style={styles.summaryNum}>{doneCount}</Text>
+              <Text style={styles.summaryKey}>sets done</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryStat}>
+              <Text style={styles.summaryNum}>{Math.round(sessionVolume).toLocaleString()}</Text>
+              <Text style={styles.summaryKey}>kg volume</Text>
+            </View>
           </View>
         )}
 
@@ -1282,6 +1297,15 @@ function makeStyles(T: ThemeColors) {
   body: { padding: D.pad, gap: D.stack },
 
   emptyEntries: { alignItems: 'center', paddingVertical: 48 },
+  summaryBar: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.card,
+    paddingVertical: 12, marginBottom: 4,
+  },
+  summaryStat: { flex: 1, alignItems: 'center', gap: 2 },
+  summaryDivider: { width: 1, alignSelf: 'stretch', backgroundColor: T.border, marginVertical: 4 },
+  summaryNum: { fontFamily: F.monoBold, fontSize: 20, color: T.text },
+  summaryKey: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.4 },
   emptyTitle: { fontFamily: F.uiSemi, fontSize: 16, color: T.textDim, marginBottom: 4 },
   emptySub: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, textAlign: 'center' },
 
