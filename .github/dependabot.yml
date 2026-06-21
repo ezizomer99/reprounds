@@ -10,6 +10,18 @@ updates:
     # Check the npm registry for updates every day (weekdays)
     schedule:
       interval: "daily"
+    # Expo-managed packages are pinned by the installed Expo SDK and must only
+    # be bumped together via `expo install` during an SDK upgrade. Independent
+    # Dependabot bumps break Metro bundling (see project_expo_managed_deps note).
+    ignore:
+      - dependency-name: "expo"
+      - dependency-name: "expo-*"
+      - dependency-name: "react-native"
+      - dependency-name: "react-native-*"
+      - dependency-name: "@react-native/*"
+      - dependency-name: "react"
+      - dependency-name: "react-dom"
+      - dependency-name: "@babel/core"
 
   # Enable version updates for Docker
   - package-ecosystem: "docker"
