@@ -334,7 +334,7 @@ export default function ExercisesScreen() {
     if (!isPro && customCount >= FREE_CUSTOM_EXERCISE_LIMIT) {
       Alert.alert(
         'Limit reached',
-        `Free accounts can create up to ${FREE_CUSTOM_EXERCISE_LIMIT} custom exercises. Upgrade to Glima Pro for unlimited exercises.`,
+        `Free accounts can create up to ${FREE_CUSTOM_EXERCISE_LIMIT} custom exercises. Upgrade to RepRounds Pro for unlimited exercises.`,
         [
           { text: 'Not now', style: 'cancel' },
           { text: 'Upgrade', onPress: showPaywall },

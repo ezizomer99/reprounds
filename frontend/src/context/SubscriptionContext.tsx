@@ -10,7 +10,7 @@ type SubscriptionContextValue = {
   isPro: boolean;
   isLoading: boolean;
   customerInfo: CustomerInfo | null;
-  purchasePro: (packageId: 'glima_pro_monthly' | 'glima_pro_annual') => Promise<void>;
+  purchasePro: (packageId: 'reprounds_pro_monthly' | 'reprounds_pro_annual') => Promise<void>;
   restorePurchases: () => Promise<void>;
 };
 
@@ -56,7 +56,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     return () => { Purchases.removeCustomerInfoUpdateListener(applyInfo); };
   }, []);
 
-  async function purchasePro(packageId: 'glima_pro_monthly' | 'glima_pro_annual') {
+  async function purchasePro(packageId: 'reprounds_pro_monthly' | 'reprounds_pro_annual') {
     const offerings = await Purchases.getOfferings();
     const current = offerings.current;
     if (!current) throw new Error('No offerings available.');

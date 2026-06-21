@@ -1,6 +1,6 @@
-# Glima — Build Spec
+# RepRounds — Build Spec
 
-*Named for glíma, the centuries-old Norse grappling art.*
+*Reps for the gym, rounds for the mat — one log.*
 
 A mobile app for tracking **gym workouts** (strength + conditioning) and **martial arts** training (BJJ first, other arts later) in one place, with a unified calendar and recurring weekly schedule.
 

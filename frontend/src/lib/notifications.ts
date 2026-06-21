@@ -37,7 +37,7 @@ export async function ensureNotificationPermission(): Promise<boolean> {
     }
     if (granted && Platform.OS === 'android') {
       await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL, {
-        name: 'Glima',
+        name: 'RepRounds',
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
         sound: 'default',

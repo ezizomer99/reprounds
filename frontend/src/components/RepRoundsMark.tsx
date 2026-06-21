@@ -2,12 +2,12 @@ import { StyleSheet, Text, View } from 'react-native';
 import { F } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 
-interface GlimaMarkProps {
+interface RepRoundsMarkProps {
   size?: number;
   color?: string;
 }
 
-export function GlimaMark({ size = 48, color }: GlimaMarkProps) {
+export function RepRoundsMark({ size = 48, color }: RepRoundsMarkProps) {
   const { T } = useTheme();
   const resolvedColor = color ?? T.text;
   return (

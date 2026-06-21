@@ -24,7 +24,7 @@ type Env = {
 
 const app = new Hono<Env>();
 
-app.get('/', (c) => c.json({ status: 'ok', app: 'glima-api' }));
+app.get('/', (c) => c.json({ status: 'ok', app: 'reprounds-api' }));
 
 app.route('/v1/auth', authRoutes);
 app.route('/v1/exercises', exerciseRoutes);

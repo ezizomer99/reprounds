@@ -90,9 +90,9 @@ export default function DisciplineDetailScreen() {
           <View style={styles.proGateCircle}>
             <Ionicons name="trophy" size={28} color={T.gold} />
           </View>
-          <Text style={styles.proGateTitle}>Glima Pro Feature</Text>
+          <Text style={styles.proGateTitle}>RepRounds Pro Feature</Text>
           <Text style={styles.proGateSub}>
-            Discipline history and session logs are available with Glima Pro.
+            Discipline history and session logs are available with RepRounds Pro.
           </Text>
           <TouchableOpacity style={styles.proGateBtn} onPress={showPaywall} activeOpacity={0.8}>
             <Text style={styles.proGateBtnText}>Upgrade to Pro</Text>

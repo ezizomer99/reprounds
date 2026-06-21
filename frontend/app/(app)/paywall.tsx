@@ -34,8 +34,8 @@ export default function PaywallScreen() {
   const { purchasePro, restorePurchases } = useSubscription();
   const [loading, setLoading] = useState<'monthly' | 'annual' | 'restore' | null>(null);
 
-  async function handlePurchase(plan: 'glima_pro_monthly' | 'glima_pro_annual') {
-    const key = plan === 'glima_pro_monthly' ? 'monthly' : 'annual';
+  async function handlePurchase(plan: 'reprounds_pro_monthly' | 'reprounds_pro_annual') {
+    const key = plan === 'reprounds_pro_monthly' ? 'monthly' : 'annual';
     setLoading(key);
     try {
       await purchasePro(plan);
@@ -82,7 +82,7 @@ export default function PaywallScreen() {
           <View style={styles.crownCircle}>
             <Ionicons name="trophy" size={32} color={T.gold} />
           </View>
-          <Text style={styles.heroTitle}>Glima Pro</Text>
+          <Text style={styles.heroTitle}>RepRounds Pro</Text>
           <Text style={styles.heroSub}>
             The full toolkit for serious athletes — unlimited tracking, advanced analytics,
             and scheduled programming.
@@ -104,7 +104,7 @@ export default function PaywallScreen() {
         {/* Plans */}
         <TouchableOpacity
           style={[styles.planBtn, styles.planBtnAnnual, loading && styles.planBtnDisabled]}
-          onPress={() => handlePurchase('glima_pro_annual')}
+          onPress={() => handlePurchase('reprounds_pro_annual')}
           activeOpacity={0.8}
           disabled={!!loading}
         >
@@ -128,7 +128,7 @@ export default function PaywallScreen() {
 
         <TouchableOpacity
           style={[styles.planBtn, styles.planBtnMonthly, loading && styles.planBtnDisabled]}
-          onPress={() => handlePurchase('glima_pro_monthly')}
+          onPress={() => handlePurchase('reprounds_pro_monthly')}
           activeOpacity={0.8}
           disabled={!!loading}
         >

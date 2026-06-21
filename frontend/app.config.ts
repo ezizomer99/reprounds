@@ -1,21 +1,22 @@
 import { ExpoConfig } from 'expo/config';
 
 const config: ExpoConfig = {
-  name: 'Glima',
-  slug: 'glima',
+  name: 'RepRounds',
+  slug: 'reprounds',
+  owner: 'omerdigital',
   version: '1.0.0',
   orientation: 'portrait',
-  scheme: 'glima',
+  scheme: 'reprounds',
   userInterfaceStyle: 'automatic',
   ios: {
     supportsTablet: false,
-    bundleIdentifier: 'com.glima.app',
+    bundleIdentifier: 'com.reprounds.app',
   },
   android: {
     adaptiveIcon: {
       backgroundColor: '#0d0f14',
     },
-    package: 'com.glima.app',
+    package: 'com.reprounds.app',
     versionCode: 1,
     permissions: ['com.android.vending.BILLING'],
   },
@@ -30,7 +31,7 @@ const config: ExpoConfig = {
   },
   extra: {
     eas: {
-      projectId: 'b063c786-7b63-44a1-8b52-ea32fa9d563c',
+      projectId: '5fcf4e98-ac49-4e12-b47b-73fb59f868a9',
     },
   },
 };

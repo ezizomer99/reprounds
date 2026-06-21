@@ -31,7 +31,7 @@ Interrogate one question at a time, awaiting feedback before advancing. Prefer e
 
 **Reserve ADRs carefully** — only document architectural decisions meeting all three criteria: hard to reverse, surprising without context, and resulting from genuine trade-offs.
 
-## Glima-specific grilling angles
+## RepRounds-specific grilling angles
 
 - **Data model**: probe the `session` vs `schedule_rule` vs virtual projection distinction. When is a session real? What triggers materialization?
 - **Edit modes**: "this one" vs "this & following" vs "all" — what exactly changes in the DB for each?

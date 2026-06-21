@@ -1,6 +1,6 @@
-# Glima Tracker
+# RepRounds Tracker
 
-A mobile app for tracking gym workouts and martial arts training. Named for glíma, the Norse grappling art.
+A mobile app for tracking gym workouts and martial arts training. Reps for the gym, rounds for the mat — one log.
 
 Full spec: [docs/BUILD_SPEC.md](docs/BUILD_SPEC.md) — that file is the source of truth. Build phases in order; do not skip ahead.
 

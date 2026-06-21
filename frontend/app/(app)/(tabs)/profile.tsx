@@ -210,7 +210,7 @@ export default function ProfileTab() {
             icon="star-outline"
             iconColor={T.gold}
             iconBg={withAlpha(T.gold, 0.12)}
-            label="Glima Pro"
+            label="RepRounds Pro"
             onPress={() => router.push('/subscription' as never)}
           />
           <NavRow

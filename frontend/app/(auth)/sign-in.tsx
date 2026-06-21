@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { statusCodes } from '@react-native-google-signin/google-signin';
 import { useState, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { GlimaMark } from '../../src/components/GlimaMark';
+import { RepRoundsMark } from '../../src/components/RepRoundsMark';
 import { useSignIn } from '../../src/hooks/useAuth';
 import { F, R, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
@@ -59,9 +59,9 @@ export default function SignInScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
       <View style={styles.lockup}>
-        <GlimaMark size={72} color={T.text} />
+        <RepRoundsMark size={72} color={T.text} />
         <View style={styles.rule} />
-        <Text style={styles.wordmark}>GLIMA</Text>
+        <Text style={styles.wordmark}>REPROUNDS</Text>
         <Text style={styles.tagline}>Martial Arts & Workout Tracker</Text>
       </View>
 

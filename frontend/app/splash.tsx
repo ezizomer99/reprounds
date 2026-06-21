@@ -45,7 +45,7 @@ export default function SplashScreen() {
             letterSpacing: -1,
           }}
         >
-          glíma
+          RepRounds
         </Text>
       </MotiView>
     </View>

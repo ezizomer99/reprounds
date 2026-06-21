@@ -20,11 +20,11 @@ import { withAlpha } from '../../src/lib/color';
 
 const COMP_EMAILS = ['ezizomer1999@gmail.com'];
 const PLAY_STORE_SUBS_URL =
-  'https://play.google.com/store/account/subscriptions?package=com.glima.app';
+  'https://play.google.com/store/account/subscriptions?package=com.reprounds.app';
 
 const PRODUCT_NAMES: Record<string, string> = {
-  glima_pro_monthly: 'Pro Monthly',
-  glima_pro_annual: 'Pro Annual',
+  reprounds_pro_monthly: 'Pro Monthly',
+  reprounds_pro_annual: 'Pro Annual',
 };
 
 function formatDate(iso: string | null | undefined): string {
@@ -188,7 +188,7 @@ function CompedCard({ styles, T }: { styles: ReturnType<typeof makeStyles>; T: T
       <View style={[styles.statusIcon, { backgroundColor: withAlpha(T.gold, 0.15) }]}>
         <Ionicons name="star" size={26} color={T.gold} />
       </View>
-      <Text style={styles.statusTitle}>Glima Pro</Text>
+      <Text style={styles.statusTitle}>RepRounds Pro</Text>
       <View style={styles.badgeRow}>
         <View style={[styles.badge, { backgroundColor: withAlpha(T.gold, 0.15) }]}>
           <Text style={[styles.badgeText, { color: T.gold }]}>Complimentary</Text>
@@ -219,7 +219,7 @@ function ActiveCard({
       <View style={[styles.statusIcon, { backgroundColor: withAlpha(T.gold, 0.15) }]}>
         <Ionicons name="star" size={26} color={T.gold} />
       </View>
-      <Text style={styles.statusTitle}>Glima Pro</Text>
+      <Text style={styles.statusTitle}>RepRounds Pro</Text>
       <View style={styles.badgeRow}>
         {planLabel ? (
           <View style={[styles.badge, { backgroundColor: withAlpha(T.primary, 0.12) }]}>
@@ -260,7 +260,7 @@ function FreeCard({
       <Text style={styles.statusTitle}>Free Plan</Text>
       <Text style={styles.statusSub}>Unlock unlimited workouts, analytics, and more.</Text>
       <TouchableOpacity style={styles.upgradeBtn} onPress={onUpgrade} activeOpacity={0.8}>
-        <Text style={styles.upgradeBtnText}>Upgrade to Glima Pro</Text>
+        <Text style={styles.upgradeBtnText}>Upgrade to RepRounds Pro</Text>
       </TouchableOpacity>
     </View>
   );

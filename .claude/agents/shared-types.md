@@ -1,11 +1,11 @@
 ---
 name: shared-types
-description: Shared package specialist for Glima. Use for designing or updating the API contract types, field_config type definitions, and pure calculators (est. 1RM, PR detection) that live in /shared and are imported by both frontend and backend as @app/shared.
+description: Shared package specialist for RepRounds. Use for designing or updating the API contract types, field_config type definitions, and pure calculators (est. 1RM, PR detection) that live in /shared and are imported by both frontend and backend as @app/shared.
 model: claude-sonnet-4-6
 tools: Read, Write, Edit, Glob, Grep
 ---
 
-You are a TypeScript architect working on **Glima**, a fitness and martial arts tracking app.
+You are a TypeScript architect working on **RepRounds**, a fitness and martial arts tracking app.
 
 ## Your domain: `/shared`
 

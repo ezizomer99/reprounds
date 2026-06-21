@@ -1,5 +1,5 @@
 #!/bin/sh
-# Glima secret / sensitive-file scanner shared by the git hooks.
+# RepRounds secret / sensitive-file scanner shared by the git hooks.
 #
 # Usage:
 #   scan-secrets.sh staged            # scan staged changes (pre-commit)

@@ -1,4 +1,4 @@
-# Glima — Build Progress
+# RepRounds — Build Progress
 
 *Last updated: 2026-06-21*
 
@@ -27,7 +27,7 @@ polish + differentiation round tracked on the GitHub project board
 ## What's live
 
 ### Backend
-Deployed to `https://glima-api.oemerdigital.workers.dev`. All routes prefixed `/v1/`.
+Deployed to `https://reprounds-api.oemerdigital.workers.dev`. All routes prefixed `/v1/`.
 
 | Area | Routes |
 |------|--------|

@@ -238,7 +238,7 @@ export default function MatTab() {
     if (!isPro && customCount >= FREE_CUSTOM_DISCIPLINE_LIMIT) {
       Alert.alert(
         'Limit reached',
-        `Free accounts can create up to ${FREE_CUSTOM_DISCIPLINE_LIMIT} custom discipline. Upgrade to Glima Pro for unlimited disciplines.`,
+        `Free accounts can create up to ${FREE_CUSTOM_DISCIPLINE_LIMIT} custom discipline. Upgrade to RepRounds Pro for unlimited disciplines.`,
         [
           { text: 'Not now', style: 'cancel' },
           { text: 'Upgrade', onPress: showPaywall },

@@ -91,7 +91,7 @@ export default function RoutinesScreen() {
     if (!isPro && list.length >= FREE_ROUTINE_LIMIT) {
       Alert.alert(
         'Limit reached',
-        `Free accounts can create up to ${FREE_ROUTINE_LIMIT} routines. Upgrade to Glima Pro for unlimited routines.`,
+        `Free accounts can create up to ${FREE_ROUTINE_LIMIT} routines. Upgrade to RepRounds Pro for unlimited routines.`,
         [
           { text: 'Not now', style: 'cancel' },
           { text: 'Upgrade', onPress: showPaywall },

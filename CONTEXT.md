@@ -1,4 +1,4 @@
-# Glima — Terminology Glossary
+# RepRounds — Terminology Glossary
 
 ## Styling & Animation
 

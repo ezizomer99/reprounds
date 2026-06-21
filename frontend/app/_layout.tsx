@@ -24,7 +24,7 @@ import { UnitProvider } from '../src/units/UnitContext';
 import { SubscriptionProvider } from '../src/context/SubscriptionContext';
 
 GoogleSignin.configure({
-  webClientId: '255150095703-33en546bo9f3h3hsi0mqhgb70ipn5d6f.apps.googleusercontent.com',
+  webClientId: '548195273503-nd3fenok612m32b255r54852qccsjk3u.apps.googleusercontent.com',
   iosClientId: process.env.EXPO_PUBLIC_IOS_CLIENT_ID,
 });
 

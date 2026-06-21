@@ -1,6 +1,6 @@
 import { getSessionToken } from './auth';
 
-const API_BASE_URL = 'https://glima-api.oemerdigital.workers.dev/v1';
+const API_BASE_URL = 'https://reprounds-api.oemerdigital.workers.dev/v1';
 
 async function buildHeaders(includeAuth: boolean): Promise<HeadersInit> {
   const headers: Record<string, string> = {

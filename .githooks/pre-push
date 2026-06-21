@@ -1,5 +1,5 @@
 #!/bin/sh
-# Glima: scan the commits being pushed for secrets / sensitive files.
+# RepRounds: scan the commits being pushed for secrets / sensitive files.
 # stdin lines: <local ref> <local sha> <remote ref> <remote sha>
 root="$(git rev-parse --show-toplevel)"
 scan="$root/.githooks/scan-secrets.sh"
