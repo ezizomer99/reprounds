@@ -3,6 +3,8 @@ packages:
   - 'backend'
   - 'shared'
 nodeLinker: hoisted
+overrides:
+  undici@<6.27.0: ^6.27.0
 allowBuilds:
   esbuild: true
   sharp: true
