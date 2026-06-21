@@ -16,6 +16,7 @@ import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { Fight, FightMethod, FightResult, RankPromotion } from '@app/shared';
+import { isRoundsSession } from '@app/shared';
 import { useDisciplineHistory, useDisciplines } from '../../../src/hooks/useDisciplines';
 import { fightRecord, useCreateFight, useDeleteFight, useFights } from '../../../src/hooks/useFights';
 import { useCreatePromotion, useDeletePromotion, usePromotions } from '../../../src/hooks/usePromotions';
@@ -34,6 +35,16 @@ function formatDate(dateStr: string): { day: string; month: string; year: string
 }
 
 function getMaDetails(entry: { details: Record<string, unknown> | null }) {
+  // Structured round sessions: summarize rounds + class type, surface the journal.
+  if (isRoundsSession(entry.details)) {
+    const r = entry.details;
+    const n = r.rounds?.length ?? 0;
+    const parts: string[] = [];
+    if (n) parts.push(`${n} round${n !== 1 ? 's' : ''}`);
+    if (r.classType) parts.push(r.classType.replace(/_/g, ' '));
+    return { title: parts.join(' · ') || 'Session', notes: r.techniqueNotes?.trim() || null };
+  }
+  // Legacy field_config sessions.
   const d = entry.details as Record<string, string> | null;
   return { title: d?.title?.trim() || null, notes: d?.notes?.trim() || null };
 }
