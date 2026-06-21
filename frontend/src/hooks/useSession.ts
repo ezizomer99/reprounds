@@ -192,6 +192,7 @@ export function useAddStrengthSet() {
           rpe: body.rpe ?? null,
           rir: body.rir ?? null,
           completed: body.completed ?? false,
+          notes: body.notes ?? null,
         };
         queryClient.setQueryData<SessionWithEntries>(
           key,

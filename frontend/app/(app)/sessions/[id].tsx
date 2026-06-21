@@ -216,6 +216,12 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   const [weight, setWeight] = useState(set.weight !== null ? fmtWeight(set.weight, unit) : '');
   const [duration, setDuration] = useState(set.reps !== null ? fmtDuration(set.reps) : '');
   const [rpe, setRpe] = useState(set.rpe !== null ? String(set.rpe) : '');
+  const [notes, setNotes] = useState(set.notes ?? '');
+  const [showNote, setShowNote] = useState(false);
+
+  function handleBlurNotes() {
+    updateSet.mutate({ sessionId, entryId, setId: set.id, notes: notes.trim() || null });
+  }
 
   function handleBlurReps() {
     const parsed = reps.trim() === '' ? null : Number(reps);
@@ -240,6 +246,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   }
 
   const isDone = set.completed;
+  const hasNote = (set.notes ?? '').trim().length > 0;
 
   function toggleComplete() {
     const next = !isDone;
@@ -250,6 +257,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   }
 
   return (
+    <View>
     <View style={[styles.setRow, isDone && { backgroundColor: withAlpha(T.primary, 0.08) }]}>
       {/* Number circle / warm-up — tap to toggle complete */}
       <View style={styles.setCircleCol}>
@@ -347,9 +355,32 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
         </>
       )}
 
+      <TouchableOpacity style={styles.menuBtn} onPress={() => setShowNote((v) => !v)}>
+        <Ionicons
+          name={hasNote ? 'document-text' : 'document-text-outline'}
+          size={15}
+          color={hasNote ? T.primary : T.muted}
+        />
+      </TouchableOpacity>
+
       <TouchableOpacity style={styles.menuBtn} onPress={onOpenMenu}>
         <Ionicons name="ellipsis-vertical" size={16} color={T.muted} />
       </TouchableOpacity>
+    </View>
+
+    {(showNote || hasNote) && (
+      <TextInput
+        style={[styles.maInput, styles.setNoteInput]}
+        value={notes}
+        onChangeText={setNotes}
+        onBlur={handleBlurNotes}
+        placeholder="Note…"
+        placeholderTextColor={T.muted}
+        multiline
+        textAlignVertical="top"
+        /* Notes stay editable even after the set is completed */
+      />
+    )}
     </View>
   );
 }
@@ -1165,6 +1196,7 @@ export default function SessionScreen() {
   const doneCount = session.entries.reduce((n, e) => n + e.sets.filter((s) => s.completed).length, 0);
   const sessionVolume = session.entries.reduce((sum, e) => sum + totalVolume(e.sets), 0);
   const hasMartialArts = session.entries.some((e) => e.kind === 'martial_arts');
+  const hasExercise = session.entries.some((e) => e.kind === 'exercise');
   const canFinish = doneCount > 0 || hasMartialArts;
   const isActive = session.status !== 'completed';
 
@@ -1316,14 +1348,20 @@ export default function SessionScreen() {
 
         {session.status !== 'completed' && (
           <View style={styles.addEntryRow}>
-            <TouchableOpacity style={styles.addEntryBtn} onPress={() => setShowExercisePicker(true)}>
-              <Ionicons name="add" size={16} color={T.textDim} />
-              <Text style={styles.addEntryText}>Exercise</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.addEntryBtn} onPress={() => setShowDisciplinePicker(true)}>
-              <Ionicons name="add" size={16} color={T.textDim} />
-              <Text style={styles.addEntryText}>Discipline</Text>
-            </TouchableOpacity>
+            {/* A session is either weightlifting or martial arts — never both.
+                Once the first entry sets the kind, only that kind can be added. */}
+            {!hasMartialArts && (
+              <TouchableOpacity style={styles.addEntryBtn} onPress={() => setShowExercisePicker(true)}>
+                <Ionicons name="add" size={16} color={T.textDim} />
+                <Text style={styles.addEntryText}>Exercise</Text>
+              </TouchableOpacity>
+            )}
+            {!hasExercise && (
+              <TouchableOpacity style={styles.addEntryBtn} onPress={() => setShowDisciplinePicker(true)}>
+                <Ionicons name="add" size={16} color={T.textDim} />
+                <Text style={styles.addEntryText}>Discipline</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </ScrollView>
@@ -1540,6 +1578,10 @@ function makeStyles(T: ThemeColors) {
     fontFamily: F.uiMed, fontSize: 15, color: T.text,
   },
   maTextarea: { minHeight: 80 },
+  setNoteInput: {
+    marginLeft: 37, marginRight: 2, marginBottom: 8,
+    minHeight: 38, fontSize: 14, paddingVertical: 8,
+  },
   maSaveBtn: {
     backgroundColor: T.primary, borderRadius: R.sm,
     paddingVertical: 11, alignItems: 'center', marginTop: 4,

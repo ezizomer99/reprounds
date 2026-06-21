@@ -1,23 +1,33 @@
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import type * as NotificationsModule from 'expo-notifications';
 
-// Show a banner + play sound even when the app is foregrounded (so the rest
-// timer "ding" fires while you're looking at the screen too).
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
-});
+// Guarded load: if the native module isn't linked yet (e.g. before an EAS
+// rebuild after adding expo-notifications), importing it can throw at module
+// evaluation. Loading it inside try/catch lets the app boot and the
+// notification features simply no-op until the native build is in place.
+let Notifications: typeof NotificationsModule | null = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  Notifications = require('expo-notifications');
+  // Show a banner + play sound even when foregrounded (rest-timer "ding").
+  Notifications?.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: false,
+    }),
+  });
+} catch {
+  Notifications = null;
+}
 
 const ANDROID_CHANNEL = 'default';
 let permission: boolean | null = null;
 
 /** Request notification permission once (and set up the Android channel). */
 export async function ensureNotificationPermission(): Promise<boolean> {
-  if (Platform.OS === 'web') return false;
+  if (!Notifications || Platform.OS === 'web') return false;
   if (permission !== null) return permission;
   try {
     const current = await Notifications.getPermissionsAsync();
@@ -48,7 +58,7 @@ export async function scheduleInSeconds(
   body: string,
   data?: Record<string, unknown>,
 ): Promise<string | null> {
-  if (Platform.OS === 'web' || seconds <= 0) return null;
+  if (!Notifications || Platform.OS === 'web' || seconds <= 0) return null;
   if (!(await ensureNotificationPermission())) return null;
   try {
     return await Notifications.scheduleNotificationAsync({
@@ -72,7 +82,7 @@ export async function scheduleAtDate(
   body: string,
   data?: Record<string, unknown>,
 ): Promise<string | null> {
-  if (Platform.OS === 'web' || date.getTime() <= Date.now()) return null;
+  if (!Notifications || Platform.OS === 'web' || date.getTime() <= Date.now()) return null;
   if (!(await ensureNotificationPermission())) return null;
   try {
     return await Notifications.scheduleNotificationAsync({
@@ -89,7 +99,7 @@ export async function scheduleAtDate(
 }
 
 export async function cancelScheduled(id: string | null | undefined): Promise<void> {
-  if (!id) return;
+  if (!Notifications || !id) return;
   try {
     await Notifications.cancelScheduledNotificationAsync(id);
   } catch {
@@ -99,13 +109,14 @@ export async function cancelScheduled(id: string | null | undefined): Promise<vo
 
 /** Cancel all scheduled notifications carrying `data.kind === kind`. */
 export async function cancelScheduledByKind(kind: string): Promise<void> {
-  if (Platform.OS === 'web') return;
+  const n = Notifications;
+  if (!n || Platform.OS === 'web') return;
   try {
-    const all = await Notifications.getAllScheduledNotificationsAsync();
+    const all = await n.getAllScheduledNotificationsAsync();
     await Promise.all(
       all
-        .filter((n) => (n.content.data as { kind?: string } | null)?.kind === kind)
-        .map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)),
+        .filter((s) => (s.content.data as { kind?: string } | null)?.kind === kind)
+        .map((s) => n.cancelScheduledNotificationAsync(s.identifier)),
     );
   } catch {
     /* no-op */

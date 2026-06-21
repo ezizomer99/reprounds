@@ -157,6 +157,8 @@ export interface Session {
   notes: string | null;
   createdAt: string;
   entries?: SessionEntry[];
+  /** Distinct entry kinds present in this session (set on list responses). */
+  kinds?: EntryKind[];
 }
 
 export interface SessionEntry {
@@ -184,6 +186,7 @@ export interface StrengthSet {
   rpe: number | null;
   rir: number | null;
   completed: boolean;
+  notes: string | null;
 }
 
 export type CalendarItem =
@@ -390,6 +393,7 @@ export interface CreateStrengthSetRequest {
   rpe?: number | null;
   rir?: number | null;
   completed?: boolean;
+  notes?: string | null;
 }
 
 export interface UpdateStrengthSetRequest {
@@ -399,6 +403,7 @@ export interface UpdateStrengthSetRequest {
   rpe?: number | null;
   rir?: number | null;
   completed?: boolean;
+  notes?: string | null;
 }
 
 export interface SessionEntryWithSets extends SessionEntry {

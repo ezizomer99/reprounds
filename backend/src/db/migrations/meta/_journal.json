@@ -92,6 +92,13 @@
       "when": 1782039343549,
       "tag": "0012_lush_glorian",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1782066006821,
+      "tag": "0013_new_jean_grey",
+      "breakpoints": true
     }
   ]
 }
