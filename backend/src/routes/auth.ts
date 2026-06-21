@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { eq } from 'drizzle-orm';
 import { createDb } from '../db';
-import { users, exercises, disciplines, fights, partners, routines, sessions } from '../db/schema';
+import { users, exercises, disciplines, fights, partners, rankPromotions, routines, sessions } from '../db/schema';
 import { verifyGoogleIdToken } from '../lib/googleAuth';
 import { signJwt } from '../lib/jwt';
 import { authMiddleware } from '../middleware/auth';
@@ -124,6 +124,7 @@ authRoutes.post('/google', async (c) => {
       await db.update(disciplines).set({ userId: dbUser.id }).where(eq(disciplines.userId, guestUser.id));
       await db.update(partners).set({ userId: dbUser.id }).where(eq(partners.userId, guestUser.id));
       await db.update(fights).set({ userId: dbUser.id }).where(eq(fights.userId, guestUser.id));
+      await db.update(rankPromotions).set({ userId: dbUser.id }).where(eq(rankPromotions.userId, guestUser.id));
       await db.update(routines).set({ userId: dbUser.id }).where(eq(routines.userId, guestUser.id));
       await db.update(sessions).set({ userId: dbUser.id }).where(eq(sessions.userId, guestUser.id));
       // session_entries and strength_sets cascade through sessions/routines — no direct user_id

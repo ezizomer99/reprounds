@@ -180,3 +180,20 @@ export const fights = pgTable('fights', {
   userIdIdx: index('fights_user_id_idx').on(t.userId),
   disciplineIdIdx: index('fights_discipline_id_idx').on(t.disciplineId),
 }));
+
+// Belt / rank promotions, tagged to a discipline. The most recent by date is
+// the user's current rank. `rank` is free text (e.g. "Blue belt") so it covers
+// BJJ belts, Judo, and other ranked arts; stripes is optional.
+export const rankPromotions = pgTable('rank_promotions', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  userId:       uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  disciplineId: uuid('discipline_id').notNull().references(() => disciplines.id, { onDelete: 'cascade' }),
+  rank:         text('rank').notNull(),
+  stripes:      integer('stripes'),
+  date:         date('date').notNull(),
+  notes:        text('notes'),
+  createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdIdx: index('rank_promotions_user_id_idx').on(t.userId),
+  disciplineIdIdx: index('rank_promotions_discipline_id_idx').on(t.disciplineId),
+}));

@@ -75,6 +75,19 @@ export interface Fight {
   createdAt: string;
 }
 
+// A belt/rank promotion, tagged to a discipline. The most recent by date is the
+// user's current rank.
+export interface RankPromotion {
+  id: string;
+  userId: string;
+  disciplineId: string;
+  rank: string;
+  stripes: number | null;
+  date: string;
+  notes: string | null;
+  createdAt: string;
+}
+
 export interface Routine {
   id: string;
   userId: string;
@@ -206,6 +219,18 @@ export interface UpdateFightRequest {
   result?: FightResult;
   method?: FightMethod | null;
   round?: number | null;
+  notes?: string | null;
+}
+
+export interface RankPromotionListResponse {
+  promotions: RankPromotion[];
+}
+
+export interface CreateRankPromotionRequest {
+  disciplineId: string;
+  rank: string;
+  stripes?: number | null;
+  date: string;
   notes?: string | null;
 }
 

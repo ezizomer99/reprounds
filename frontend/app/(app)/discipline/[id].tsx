@@ -15,9 +15,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import type { Fight, FightMethod, FightResult } from '@app/shared';
-import { useDisciplineHistory } from '../../../src/hooks/useDisciplines';
+import type { Fight, FightMethod, FightResult, RankPromotion } from '@app/shared';
+import { useDisciplineHistory, useDisciplines } from '../../../src/hooks/useDisciplines';
 import { fightRecord, useCreateFight, useDeleteFight, useFights } from '../../../src/hooks/useFights';
+import { useCreatePromotion, useDeletePromotion, usePromotions } from '../../../src/hooks/usePromotions';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
@@ -50,9 +51,18 @@ export default function DisciplineDetailScreen() {
   const deleteFight = useDeleteFight(id ?? null);
   const [showAddFight, setShowAddFight] = useState(false);
 
+  const { data: disciplines } = useDisciplines();
+  const discipline = disciplines?.find((d) => d.id === id);
+  const isGrappling = discipline?.category === 'grappling';
+  const { data: promotions } = usePromotions(id ?? null);
+  const deletePromotion = useDeletePromotion(id ?? null);
+  const [showAddPromo, setShowAddPromo] = useState(false);
+
   const history = data?.history ?? [];
   const fightList = fights ?? [];
   const record = fightRecord(fightList);
+  const promoList = promotions ?? [];
+  const currentRank = promoList[0] ?? null; // ordered by date desc
 
   if (!isPro) {
     return (
@@ -112,6 +122,51 @@ export default function DisciplineDetailScreen() {
                 <Text style={styles.statKey}>Record (W-L-D)</Text>
               </View>
             </View>
+
+            {isGrappling && (
+              <>
+                <View style={styles.compHead}>
+                  <Text style={styles.sectionLabel}>Rank</Text>
+                  <TouchableOpacity style={styles.logBtn} onPress={() => setShowAddPromo(true)}>
+                    <Ionicons name="add" size={15} color={T.primary} />
+                    <Text style={styles.logBtnText}>Add promotion</Text>
+                  </TouchableOpacity>
+                </View>
+                {currentRank ? (
+                  <View style={styles.rankCard}>
+                    <View style={styles.rankCurrent}>
+                      <Text style={styles.rankName}>{currentRank.rank}</Text>
+                      {currentRank.stripes ? (
+                        <View style={styles.stripeRow}>
+                          {Array.from({ length: currentRank.stripes }).map((_, i) => (
+                            <View key={i} style={styles.stripe} />
+                          ))}
+                        </View>
+                      ) : null}
+                    </View>
+                    {promoList.length > 1 && (
+                      <Text style={styles.rankHistory}>
+                        {promoList.length} promotion{promoList.length !== 1 ? 's' : ''} logged
+                      </Text>
+                    )}
+                  </View>
+                ) : (
+                  <Text style={styles.compEmpty}>No promotions logged yet.</Text>
+                )}
+                {promoList.map((p) => (
+                  <PromotionRow
+                    key={p.id}
+                    promotion={p}
+                    onDelete={() =>
+                      Alert.alert('Delete promotion?', 'This cannot be undone.', [
+                        { text: 'Cancel', style: 'cancel' },
+                        { text: 'Delete', style: 'destructive', onPress: () => deletePromotion.mutate(p.id) },
+                      ])
+                    }
+                  />
+                ))}
+              </>
+            )}
 
             <View style={styles.compHead}>
               <Text style={styles.sectionLabel}>Competition</Text>
@@ -206,6 +261,9 @@ export default function DisciplineDetailScreen() {
 
       {showAddFight && id && (
         <AddFightModal disciplineId={id} onClose={() => setShowAddFight(false)} />
+      )}
+      {showAddPromo && id && (
+        <AddPromotionModal disciplineId={id} onClose={() => setShowAddPromo(false)} />
       )}
     </View>
   );
@@ -390,6 +448,148 @@ function AddFightModal({ disciplineId, onClose }: { disciplineId: string; onClos
   );
 }
 
+// ─── Rank progression ────────────────────────────────────────────────────────
+
+const BELTS = ['White', 'Blue', 'Purple', 'Brown', 'Black'];
+const STRIPE_OPTS = [0, 1, 2, 3, 4];
+
+function PromotionRow({ promotion, onDelete }: { promotion: RankPromotion; onDelete: () => void }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const { day, month, year } = formatDate(promotion.date);
+  const stripeText = promotion.stripes
+    ? ` · ${promotion.stripes} stripe${promotion.stripes !== 1 ? 's' : ''}`
+    : '';
+  return (
+    <View style={styles.fightRow}>
+      <Ionicons name="ribbon-outline" size={20} color={T.gold} />
+      <View style={{ flex: 1 }}>
+        <Text style={styles.fightOpp} numberOfLines={1}>{promotion.rank}{stripeText}</Text>
+        <Text style={styles.fightMeta}>{`${month} ${day}, ${year}`}</Text>
+      </View>
+      <TouchableOpacity hitSlop={8} onPress={onDelete}>
+        <Ionicons name="trash-outline" size={16} color={T.muted} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function AddPromotionModal({ disciplineId, onClose }: { disciplineId: string; onClose: () => void }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const createPromotion = useCreatePromotion();
+  const [rank, setRank] = useState('');
+  const [stripes, setStripes] = useState(0);
+  const [date, setDate] = useState(todayISO());
+  const [notes, setNotes] = useState('');
+
+  async function handleSave() {
+    if (!rank.trim()) {
+      Alert.alert('Rank required', 'Pick or type a rank.');
+      return;
+    }
+    try {
+      await createPromotion.mutateAsync({
+        disciplineId,
+        rank: rank.trim(),
+        stripes: stripes || null,
+        date,
+        notes: notes.trim() || null,
+      });
+      onClose();
+    } catch (err) {
+      Alert.alert('Error', (err as Error).message ?? 'Failed to save promotion.');
+    }
+  }
+
+  return (
+    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+      <Pressable style={styles.backdrop} onPress={onClose} />
+      <View style={styles.sheet}>
+        <View style={styles.handle} />
+        <ScrollView keyboardShouldPersistTaps="handled">
+          <Text style={styles.sheetTitle}>Add promotion</Text>
+
+          <Text style={styles.sheetLabel}>Belt</Text>
+          <View style={styles.chipRow}>
+            {BELTS.map((b) => {
+              const active = rank === b;
+              return (
+                <TouchableOpacity
+                  key={b}
+                  style={[styles.chip, active && styles.chipActive]}
+                  onPress={() => setRank(b)}
+                >
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{b}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={styles.sheetLabel}>Or type a rank</Text>
+          <TextInput
+            style={styles.sheetInput}
+            value={rank}
+            onChangeText={setRank}
+            placeholder="e.g. Blue belt, 1st kyu"
+            placeholderTextColor={T.muted}
+            autoCapitalize="words"
+          />
+
+          <Text style={styles.sheetLabel}>Stripes</Text>
+          <View style={styles.chipRow}>
+            {STRIPE_OPTS.map((s) => {
+              const active = stripes === s;
+              return (
+                <TouchableOpacity
+                  key={s}
+                  style={[styles.chip, active && styles.chipActive]}
+                  onPress={() => setStripes(s)}
+                >
+                  <Text style={[styles.chipText, active && styles.chipTextActive]}>{s}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
+          <Text style={styles.sheetLabel}>Date</Text>
+          <TextInput
+            style={styles.sheetInput}
+            value={date}
+            onChangeText={setDate}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={T.muted}
+            autoCapitalize="none"
+          />
+
+          <Text style={styles.sheetLabel}>Notes</Text>
+          <TextInput
+            style={[styles.sheetInput, styles.sheetTextarea]}
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Optional"
+            placeholderTextColor={T.muted}
+            multiline
+            textAlignVertical="top"
+          />
+
+          <TouchableOpacity
+            style={[styles.saveBtn, createPromotion.isPending && { opacity: 0.6 }]}
+            onPress={handleSave}
+            disabled={createPromotion.isPending}
+          >
+            {createPromotion.isPending ? (
+              <ActivityIndicator size="small" color={T.onPrimary} />
+            ) : (
+              <Text style={styles.saveBtnText}>Save promotion</Text>
+            )}
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
 function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: T.bg },
@@ -492,6 +692,15 @@ function makeStyles(T: ThemeColors) {
     logBtn: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingVertical: 6 },
     logBtnText: { fontFamily: F.uiSemi, fontSize: 13, color: T.primary },
     compEmpty: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, paddingHorizontal: D.pad, paddingBottom: 4 },
+    rankCard: {
+      backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.sm,
+      paddingHorizontal: 14, paddingVertical: 12, gap: 6,
+    },
+    rankCurrent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    rankName: { fontFamily: F.uiBold, fontSize: 17, color: T.text },
+    stripeRow: { flexDirection: 'row', gap: 3 },
+    stripe: { width: 4, height: 16, borderRadius: 1, backgroundColor: T.gold },
+    rankHistory: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
     fightRow: {
       flexDirection: 'row', alignItems: 'center', gap: 12,
       backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.sm,
