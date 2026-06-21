@@ -1,0 +1,1 @@
+ALTER TABLE "exercises" DROP COLUMN IF EXISTS "default_rest_seconds";

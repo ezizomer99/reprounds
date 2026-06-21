@@ -58,6 +58,33 @@ function getWeekDays(): WeekDay[] {
   });
 }
 
+function mondayOf(d: Date): Date {
+  const m = new Date(d);
+  m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
+  m.setHours(0, 0, 0, 0);
+  return m;
+}
+
+function weekKey(isoDate: string): string {
+  return mondayOf(new Date(isoDate + 'T00:00:00')).toISOString().slice(0, 10);
+}
+
+/** Consecutive weeks (incl. current) with at least one completed session. The
+ *  current week not yet trained does not break the streak (grace). */
+function computeWeekStreak(dates: string[]): number {
+  const activeWeeks = new Set(dates.map(weekKey));
+  const curMonday = mondayOf(new Date());
+  let streak = 0;
+  for (let w = 0; w < 520; w++) {
+    const wk = new Date(curMonday);
+    wk.setDate(curMonday.getDate() - w * 7);
+    if (activeWeeks.has(wk.toISOString().slice(0, 10))) streak++;
+    else if (w === 0) continue; // grace for the current week
+    else break;
+  }
+  return streak;
+}
+
 function isToday(d: Date): boolean {
   const now = new Date();
   return (
@@ -105,6 +132,15 @@ export default function WorkoutTab() {
     () => new Set(sessions?.map((s) => s.date) ?? []),
     [sessions],
   );
+
+  const { weekStreak, weekCount } = useMemo(() => {
+    const dates = sessions?.map((s) => s.date) ?? [];
+    const thisWeek = mondayOf(new Date()).toISOString().slice(0, 10);
+    return {
+      weekStreak: computeWeekStreak(dates),
+      weekCount: dates.filter((d) => weekKey(d) === thisWeek).length,
+    };
+  }, [sessions]);
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -154,7 +190,11 @@ export default function WorkoutTab() {
             </View>
             <Ionicons name="chevron-forward" size={16} color={T.muted} />
           </View>
-          <Text style={styles.weekSub}>Log a workout to start your streak</Text>
+          <Text style={styles.weekSub}>
+            {weekCount > 0
+              ? `${weekCount} workout${weekCount !== 1 ? 's' : ''} this week`
+              : 'Log a workout to start your streak'}
+          </Text>
 
           <View style={styles.weekStrip}>
             {weekDays.map((wd) => {
@@ -182,17 +222,8 @@ export default function WorkoutTab() {
                 <Ionicons name="flash" size={14} color={T.primary} />
               </View>
               <View>
-                <Text style={styles.streakNum}>0 weeks</Text>
+                <Text style={styles.streakNum}>{weekStreak} week{weekStreak !== 1 ? 's' : ''}</Text>
                 <Text style={styles.streakLabel}>current streak</Text>
-              </View>
-            </View>
-            <View style={styles.streakChip}>
-              <View style={[styles.streakIconBg, styles.shieldIconBg]}>
-                <Ionicons name="shield-outline" size={14} color={T.textDim} />
-              </View>
-              <View>
-                <Text style={styles.streakNum}>1 streak</Text>
-                <Text style={styles.streakLabel}>shield</Text>
               </View>
             </View>
           </View>
@@ -354,7 +385,6 @@ function makeStyles(T: ThemeColors) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    shieldIconBg: { backgroundColor: T.surface },
     streakNum: { fontFamily: F.uiSemi, fontSize: 14, color: T.text },
     streakLabel: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim },
 

@@ -1,4 +1,11 @@
-# grill-with-docs
+---
+name: grill-me-with-docs
+description: >-
+  Relentless interview session that stress-tests plans against this project's
+  domain model and documentation, one question at a time.
+---
+
+# grill-me-with-docs
 
 Relentless interview session that stress-tests plans against this project's domain model and documentation.
 

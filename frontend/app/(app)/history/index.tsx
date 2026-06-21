@@ -1,73 +1,18 @@
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import type { Session, RoutineWithItems } from '@app/shared';
 import { useDeleteSession, useSessions } from '../../../src/hooks/useSession';
 import { useRoutines } from '../../../src/hooks/useRoutines';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
+import { Skeleton } from '../../../src/components/Skeleton';
+import { SessionRow, buildRoutineMap, rowSeparatorMargin, sessionIsMat } from '../../../src/components/SessionRow';
 
 const FREE_HISTORY_DAYS = 30;
-
-function formatDateBlock(dateStr: string): { day: string; month: string } {
-  const d = new Date(dateStr + 'T00:00:00');
-  return {
-    day: String(d.getDate()),
-    month: d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),
-  };
-}
-
-function buildRoutineMap(routines: RoutineWithItems[] | undefined): Map<string, string> {
-  const map = new Map<string, string>();
-  if (!routines) return map;
-  for (const t of routines) map.set(t.id, t.name);
-  return map;
-}
-
-function SessionRow({ session, sessionName, routineName, isMat, onPress, onDelete }: {
-  session: Session;
-  sessionName: string | null;
-  routineName: string | null;
-  isMat: boolean;
-  onPress: () => void;
-  onDelete: () => void;
-}) {
-  const { T } = useTheme();
-  const styles = useMemo(() => makeStyles(T), [T]);
-  const { day, month } = formatDateBlock(session.date);
-  const duration = session.durationMinutes ? `${session.durationMinutes} min` : null;
-  const displayName = sessionName ?? routineName ?? 'Session';
-
-  return (
-    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.dateBlock}>
-        <Text style={styles.dateDay}>{day}</Text>
-        <Text style={styles.dateMonth}>{month}</Text>
-      </View>
-      <View style={styles.rowDivider} />
-      <View style={styles.rowContent}>
-        <Text style={styles.rowName}>{displayName}</Text>
-        <Text style={styles.rowMeta}>
-          {duration ?? ''}
-          {duration ? ' · ' : ''}
-          {session.status}
-        </Text>
-      </View>
-      <View style={[styles.kindBadge, isMat && styles.kindBadgeMat]}>
-        {isMat
-          ? <Ionicons name="flash" size={12} color={T.grappling} />
-          : <Ionicons name="barbell" size={12} color={T.textDim} />}
-      </View>
-      <TouchableOpacity onPress={onDelete} style={styles.deleteBtn} hitSlop={8}>
-        <Ionicons name="trash-outline" size={17} color={T.danger} />
-      </TouchableOpacity>
-    </TouchableOpacity>
-  );
-}
 
 export default function HistoryScreen() {
   const router = useRouter();
@@ -121,7 +66,17 @@ export default function HistoryScreen() {
       </View>
 
       {isLoading && (
-        <View style={styles.centered}><ActivityIndicator size="large" color={T.primary} /></View>
+        <View style={{ paddingTop: 8 }}>
+          {Array.from({ length: 7 }).map((_, i) => (
+            <View key={i} style={styles.skeletonRow}>
+              <Skeleton width={40} height={40} radius={20} />
+              <View style={{ flex: 1, gap: 8 }}>
+                <Skeleton width="55%" height={14} />
+                <Skeleton width="32%" height={11} />
+              </View>
+            </View>
+          ))}
+        </View>
       )}
 
       {isError && (
@@ -142,7 +97,7 @@ export default function HistoryScreen() {
                 session={item}
                 sessionName={item.name}
                 routineName={routineName}
-                isMat={false}
+                isMat={sessionIsMat(item)}
                 onPress={() => router.push({ pathname: '/sessions/[id]', params: { id: item.id } } as never)}
                 onDelete={() => handleDelete(item.id, displayName)}
               />
@@ -189,21 +144,8 @@ function makeStyles(T: ThemeColors) {
     headerTitle: { fontFamily: F.uiSemi, fontSize: 19, color: T.text, letterSpacing: -0.2 },
     headerSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 1 },
 
-    row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: D.pad, paddingVertical: 13, gap: 12 },
-    dateBlock: { width: 46, alignItems: 'center', flexShrink: 0 },
-    dateDay: { fontFamily: F.monoBold, fontSize: 19, color: T.text },
-    dateMonth: { fontFamily: F.uiBold, fontSize: 10, color: T.textDim, letterSpacing: 0.6 },
-    rowDivider: { width: 1, height: 34, backgroundColor: T.border },
-    rowContent: { flex: 1 },
-    rowName: { fontFamily: F.uiSemi, fontSize: 15, color: T.text, marginBottom: 2 },
-    rowMeta: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
-    kindBadge: {
-      width: 26, height: 26, borderRadius: R.sm,
-      backgroundColor: T.surface2, alignItems: 'center', justifyContent: 'center',
-    },
-    kindBadgeMat: { backgroundColor: withAlpha(T.grappling, 0.12) },
-    deleteBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
-    separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad + 46 + 12 + 1 + 12 },
+    skeletonRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: D.pad, paddingVertical: 14, gap: 12 },
+    separator: { height: 1, backgroundColor: T.border, marginLeft: rowSeparatorMargin() },
     centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
     emptyText: { fontFamily: F.uiSemi, fontSize: 15, color: T.textDim, marginBottom: 4 },
     emptySub: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, textAlign: 'center', paddingHorizontal: 24 },

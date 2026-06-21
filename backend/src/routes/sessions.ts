@@ -249,6 +249,24 @@ sessionRoutes.get('/', async (c) => {
     .orderBy(desc(sessions.date), desc(sessions.createdAt))
     .limit(limit);
 
+  const ids = rows.map((r) => r.id);
+  const kindRows = ids.length
+    ? await db
+        .selectDistinct({ sessionId: sessionEntries.sessionId, kind: sessionEntries.kind })
+        .from(sessionEntries)
+        .where(inArray(sessionEntries.sessionId, ids))
+    : [];
+
+  const kindMap = new Map<string, Set<'exercise' | 'martial_arts'>>();
+  for (const r of kindRows) {
+    let set = kindMap.get(r.sessionId);
+    if (!set) {
+      set = new Set();
+      kindMap.set(r.sessionId, set);
+    }
+    set.add(r.kind);
+  }
+
   const mapped = rows.map((s) => ({
     id: s.id,
     userId: s.userId,
@@ -260,6 +278,7 @@ sessionRoutes.get('/', async (c) => {
     durationMinutes: s.durationMinutes ?? null,
     notes: s.notes ?? null,
     createdAt: s.createdAt.toISOString(),
+    kinds: [...(kindMap.get(s.id) ?? [])],
   }));
 
   return c.json({ sessions: mapped });
@@ -332,6 +351,7 @@ sessionRoutes.post('/', async (c) => {
             exerciseId: item.exerciseId ?? null,
             disciplineId: item.disciplineId ?? null,
             orderIndex: item.orderIndex,
+            supersetGroup: item.supersetGroup ?? null,
             restSeconds: item.defaultRestSeconds ?? null,
           })
           .returning();
@@ -552,6 +572,7 @@ sessionRoutes.patch('/:id/entries/:entryId', async (c) => {
   if ('restSeconds' in body) updates.restSeconds = body.restSeconds ?? null;
   if ('details' in body) updates.details = body.details ?? null;
   if ('notes' in body) updates.notes = body.notes ?? null;
+  if ('supersetGroup' in body) updates.supersetGroup = body.supersetGroup ?? null;
 
   if (Object.keys(updates).length > 0) {
     await db

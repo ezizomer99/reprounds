@@ -22,6 +22,8 @@ type Env = {
     DATABASE_URL?: string;
     JWT_SECRET: string;
     GOOGLE_CLIENT_ID: string;
+    EXERCISES_BUCKET: R2Bucket;
+    R2_PUBLIC_BASE_URL: string;
   };
   Variables: {
     userId: string;
@@ -32,21 +34,50 @@ const exerciseRoutes = new Hono<Env>();
 
 exerciseRoutes.use('*', authMiddleware);
 
+type ExerciseRow = typeof exercises.$inferSelect;
+
+function mapExercise(r: ExerciseRow, includeHeavy = false): Exercise {
+  return {
+    id: r.id,
+    userId: r.userId,
+    name: r.name,
+    type: r.type as Exercise['type'],
+    createdAt: r.createdAt.toISOString(),
+    category: r.category,
+    bodyPart: r.bodyPart,
+    equipment: r.equipment,
+    muscleGroup: r.muscleGroup,
+    secondaryMuscles: r.secondaryMuscles,
+    target: r.target,
+    imageUrl: r.imageUrl,
+    instructions: includeHeavy ? r.instructions : null,
+    instructionSteps: includeHeavy ? (r.instructionSteps as string[] | null) : null,
+  };
+}
+
+// GET /exercises
 exerciseRoutes.get('/', async (c) => {
   const userId = c.get('userId');
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
   const typeFilter = c.req.query('type') as string | undefined;
   const search = c.req.query('search');
+  const categoryFilter = c.req.query('category');
+  const equipmentFilter = c.req.query('equipment');
 
   const conditions = [or(isNull(exercises.userId), eq(exercises.userId, userId))!];
 
   if (typeFilter) {
     conditions.push(eq(exercises.type, typeFilter as 'strength' | 'conditioning' | 'martial_arts'));
   }
-
   if (search) {
     conditions.push(ilike(exercises.name, `%${search}%`));
+  }
+  if (categoryFilter) {
+    conditions.push(eq(exercises.category, categoryFilter));
+  }
+  if (equipmentFilter) {
+    conditions.push(eq(exercises.equipment, equipmentFilter));
   }
 
   const rows = await db
@@ -56,19 +87,13 @@ exerciseRoutes.get('/', async (c) => {
     .orderBy(exercises.name);
 
   const result: ExerciseListResponse = {
-    exercises: rows.map((r): Exercise => ({
-      id: r.id,
-      userId: r.userId,
-      name: r.name,
-      type: r.type as Exercise['type'],
-      defaultRestSeconds: r.defaultRestSeconds,
-      createdAt: r.createdAt.toISOString(),
-    })),
+    exercises: rows.map((r) => mapExercise(r, false)),
   };
 
   return c.json(result);
 });
 
+// POST /exercises
 exerciseRoutes.post('/', async (c) => {
   const userId = c.get('userId');
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
@@ -90,22 +115,31 @@ exerciseRoutes.post('/', async (c) => {
       userId,
       name: body.name,
       type: body.type,
-      defaultRestSeconds: body.defaultRestSeconds ?? null,
+      target: body.target ?? null,
     })
     .returning();
 
-  const exercise: Exercise = {
-    id: row.id,
-    userId: row.userId,
-    name: row.name,
-    type: row.type as Exercise['type'],
-    defaultRestSeconds: row.defaultRestSeconds,
-    createdAt: row.createdAt.toISOString(),
-  };
-
-  return c.json({ exercise }, 201);
+  return c.json({ exercise: mapExercise(row) }, 201);
 });
 
+// GET /exercises/:id  — full detail including instructions
+exerciseRoutes.get('/:id', async (c) => {
+  const userId = c.get('userId');
+  const id = c.req.param('id');
+  const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+
+  const [row] = await db
+    .select()
+    .from(exercises)
+    .where(and(eq(exercises.id, id), or(isNull(exercises.userId), eq(exercises.userId, userId))!))
+    .limit(1);
+
+  if (!row) return c.json({ error: 'Not found' }, 404);
+
+  return c.json({ exercise: mapExercise(row, true) });
+});
+
+// PATCH /exercises/:id
 exerciseRoutes.patch('/:id', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
@@ -131,19 +165,10 @@ exerciseRoutes.patch('/:id', async (c) => {
   const updates: Partial<typeof exercises.$inferInsert> = {};
   if (body.name !== undefined) updates.name = body.name;
   if (body.type !== undefined) updates.type = body.type;
-  if ('defaultRestSeconds' in body) updates.defaultRestSeconds = body.defaultRestSeconds ?? null;
+  if ('target' in body) updates.target = body.target ?? null;
 
   if (Object.keys(updates).length === 0) {
-    const current = existing[0];
-    const exercise: Exercise = {
-      id: current.id,
-      userId: current.userId,
-      name: current.name,
-      type: current.type as Exercise['type'],
-      defaultRestSeconds: current.defaultRestSeconds,
-      createdAt: current.createdAt.toISOString(),
-    };
-    return c.json({ exercise });
+    return c.json({ exercise: mapExercise(existing[0]) });
   }
 
   const [row] = await db
@@ -152,18 +177,10 @@ exerciseRoutes.patch('/:id', async (c) => {
     .where(and(eq(exercises.id, id), eq(exercises.userId, userId)))
     .returning();
 
-  const exercise: Exercise = {
-    id: row.id,
-    userId: row.userId,
-    name: row.name,
-    type: row.type as Exercise['type'],
-    defaultRestSeconds: row.defaultRestSeconds,
-    createdAt: row.createdAt.toISOString(),
-  };
-
-  return c.json({ exercise });
+  return c.json({ exercise: mapExercise(row) });
 });
 
+// DELETE /exercises/:id
 exerciseRoutes.delete('/:id', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');

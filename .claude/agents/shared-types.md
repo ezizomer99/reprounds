@@ -83,7 +83,6 @@ interface Exercise {
   userId: string | null;
   name: string;
   type: 'strength' | 'conditioning';
-  defaultRestSeconds: number | null;
 }
 
 interface Discipline {

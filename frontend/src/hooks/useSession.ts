@@ -7,13 +7,31 @@ import type {
   ExerciseHistoryResponse,
   ExercisePRsResponse,
   Session,
+  SessionEntryWithSets,
   SessionListResponse,
   SessionWithEntries,
+  StrengthSet,
   UpdateSessionEntryRequest,
   UpdateSessionRequest,
   UpdateStrengthSetRequest,
 } from '@app/shared';
 import { apiDelete, apiGet, apiPatch, apiPost } from '../lib/api';
+
+const sessionKey = (id: string) => ['session', id] as const;
+
+/** Immutably replace one entry within a cached session. */
+function patchEntry(
+  session: SessionWithEntries,
+  entryId: string,
+  fn: (entry: SessionEntryWithSets) => SessionEntryWithSets,
+): SessionWithEntries {
+  return {
+    ...session,
+    entries: session.entries.map((e) => (e.id === entryId ? fn(e) : e)),
+  };
+}
+
+type SessionCtx = { previous?: SessionWithEntries };
 
 export function useSessions(status?: string) {
   return useQuery<Session[], Error>({
@@ -121,12 +139,29 @@ export function useUpdateSessionEntry() {
   return useMutation<
     void,
     Error,
-    { sessionId: string; entryId: string } & UpdateSessionEntryRequest
+    { sessionId: string; entryId: string } & UpdateSessionEntryRequest,
+    SessionCtx
   >({
     mutationFn: ({ sessionId, entryId, ...body }) =>
       apiPatch<void>(`/sessions/${sessionId}/entries/${entryId}`, body),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['session', variables.sessionId] });
+    onMutate: async ({ sessionId, entryId, ...patch }) => {
+      const key = sessionKey(sessionId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<SessionWithEntries>(key);
+      if (previous) {
+        queryClient.setQueryData<SessionWithEntries>(
+          key,
+          patchEntry(previous, entryId, (e) => ({ ...e, ...patch })),
+        );
+      }
+      return { previous };
+    },
+    onError: (_e, { sessionId }, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(sessionKey(sessionId), ctx.previous);
+    },
+    // gi can be server-derived from details, so reconcile in the background.
+    onSettled: (_d, _e, { sessionId }) => {
+      queryClient.invalidateQueries({ queryKey: sessionKey(sessionId) });
     },
   });
 }
@@ -137,12 +172,40 @@ export function useAddStrengthSet() {
   return useMutation<
     void,
     Error,
-    { sessionId: string; entryId: string } & CreateStrengthSetRequest
+    { sessionId: string; entryId: string } & CreateStrengthSetRequest,
+    SessionCtx
   >({
     mutationFn: ({ sessionId, entryId, ...body }) =>
       apiPost<void>(`/sessions/${sessionId}/entries/${entryId}/sets`, body),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['session', variables.sessionId] });
+    onMutate: async ({ sessionId, entryId, ...body }) => {
+      const key = sessionKey(sessionId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<SessionWithEntries>(key);
+      if (previous) {
+        const tempSet: StrengthSet = {
+          id: `optimistic-${Date.now()}`,
+          sessionEntryId: entryId,
+          setNumber: body.setNumber,
+          setType: body.setType ?? 'normal',
+          reps: body.reps ?? null,
+          weight: body.weight ?? null,
+          rpe: body.rpe ?? null,
+          rir: body.rir ?? null,
+          completed: body.completed ?? false,
+        };
+        queryClient.setQueryData<SessionWithEntries>(
+          key,
+          patchEntry(previous, entryId, (e) => ({ ...e, sets: [...e.sets, tempSet] })),
+        );
+      }
+      return { previous };
+    },
+    onError: (_e, { sessionId }, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(sessionKey(sessionId), ctx.previous);
+    },
+    // Refetch to swap the temp id for the server-assigned set id.
+    onSettled: (_d, _e, { sessionId }) => {
+      queryClient.invalidateQueries({ queryKey: sessionKey(sessionId) });
     },
   });
 }
@@ -153,13 +216,31 @@ export function useUpdateStrengthSet() {
   return useMutation<
     void,
     Error,
-    { sessionId: string; entryId: string; setId: string } & UpdateStrengthSetRequest
+    { sessionId: string; entryId: string; setId: string } & UpdateStrengthSetRequest,
+    SessionCtx
   >({
     mutationFn: ({ sessionId, entryId, setId, ...body }) =>
       apiPatch<void>(`/sessions/${sessionId}/entries/${entryId}/sets/${setId}`, body),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['session', variables.sessionId] });
+    onMutate: async ({ sessionId, entryId, setId, ...patch }) => {
+      const key = sessionKey(sessionId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<SessionWithEntries>(key);
+      if (previous) {
+        queryClient.setQueryData<SessionWithEntries>(
+          key,
+          patchEntry(previous, entryId, (e) => ({
+            ...e,
+            sets: e.sets.map((s) => (s.id === setId ? { ...s, ...patch } : s)),
+          })),
+        );
+      }
+      return { previous };
     },
+    onError: (_e, { sessionId }, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(sessionKey(sessionId), ctx.previous);
+    },
+    // No server-derived fields on a set; the optimistic patch is authoritative,
+    // so skip the invalidate to avoid a full-session refetch on every keystroke.
   });
 }
 
@@ -169,12 +250,28 @@ export function useDeleteStrengthSet() {
   return useMutation<
     void,
     Error,
-    { sessionId: string; entryId: string; setId: string }
+    { sessionId: string; entryId: string; setId: string },
+    SessionCtx
   >({
     mutationFn: ({ sessionId, entryId, setId }) =>
       apiDelete(`/sessions/${sessionId}/entries/${entryId}/sets/${setId}`),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['session', variables.sessionId] });
+    onMutate: async ({ sessionId, entryId, setId }) => {
+      const key = sessionKey(sessionId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<SessionWithEntries>(key);
+      if (previous) {
+        queryClient.setQueryData<SessionWithEntries>(
+          key,
+          patchEntry(previous, entryId, (e) => ({
+            ...e,
+            sets: e.sets.filter((s) => s.id !== setId),
+          })),
+        );
+      }
+      return { previous };
+    },
+    onError: (_e, { sessionId }, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(sessionKey(sessionId), ctx.previous);
     },
   });
 }

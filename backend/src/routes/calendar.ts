@@ -29,6 +29,7 @@ function mapSession(row: typeof sessions.$inferSelect) {
     id: row.id,
     userId: row.userId,
     routineId: row.routineId ?? null,
+    name: row.name ?? null,
     date: row.date,
     status: row.status,
     startedAt: row.startedAt?.toISOString() ?? null,

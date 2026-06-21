@@ -29,6 +29,69 @@
       "when": 1781892526339,
       "tag": "0003_spooky_micromacro",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1781910382019,
+      "tag": "0004_past_rumiko_fujikawa",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1781911767186,
+      "tag": "0005_hard_alex_power",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781945000000,
+      "tag": "0006_drop_exercise_default_rest",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781945683003,
+      "tag": "0007_chubby_chimera",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1781950502098,
+      "tag": "0008_normal_spitfire",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1781950834074,
+      "tag": "0009_broken_dexter_bennett",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1781952029227,
+      "tag": "0010_chubby_venom",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1781952400964,
+      "tag": "0011_marvelous_rattler",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1782039343549,
+      "tag": "0012_lush_glorian",
+      "breakpoints": true
     }
   ]
 }

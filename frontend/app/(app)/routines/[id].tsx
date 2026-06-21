@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Image } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,6 +33,8 @@ import {
   useUpdateRoutine,
   useUpdateRoutineItem,
 } from '../../../src/hooks/useRoutines';
+import { useUnit } from '../../../src/units/UnitContext';
+import { fmtWeight, unitToKg, type WeightUnit } from '../../../src/units/units';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -79,7 +82,7 @@ function plannedSetsOf(target: RoutineItemTarget | null): PlannedSet[] {
   return Array.isArray(target?.sets) ? (target!.sets as PlannedSet[]) : [];
 }
 
-function formatTarget(target: RoutineItemTarget | null, type: ExerciseType): string | null {
+function formatTarget(target: RoutineItemTarget | null, type: ExerciseType, unit: WeightUnit): string | null {
   const sets = plannedSetsOf(target);
   if (sets.length === 0) return null;
   const warm = sets.filter((s) => s.setType === 'warmup').length;
@@ -98,7 +101,7 @@ function formatTarget(target: RoutineItemTarget | null, type: ExerciseType): str
       return `${warmStr}${work.length} × ${fmtDuration(first.durationSeconds)}`;
     }
     if (first.reps != null) {
-      const w = first.weight != null ? ` @ ${first.weight}kg` : '';
+      const w = first.weight != null ? ` @ ${fmtWeight(first.weight, unit)}${unit}` : '';
       return `${warmStr}${work.length} × ${first.reps}${w}`;
     }
   }
@@ -177,10 +180,11 @@ function PlanSetRow({ row, index, type, onChange, onCycleType, onRemove }: {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const SET_TYPE_COLOR = useMemo(() => setTypeColors(T), [T]);
+  const { unit } = useUnit();
   const isWarm = row.setType === 'warmup';
   const isTime = type === 'conditioning';
   const [reps, setReps] = useState(row.reps != null ? String(row.reps) : '');
-  const [weight, setWeight] = useState(row.weight != null ? String(row.weight) : '');
+  const [weight, setWeight] = useState(row.weight != null ? fmtWeight(row.weight, unit) : '');
   const [duration, setDuration] = useState(row.durationSeconds != null ? fmtDuration(row.durationSeconds) : '');
 
   return (
@@ -232,13 +236,15 @@ function PlanSetRow({ row, index, type, onChange, onCycleType, onRemove }: {
               style={styles.planCellValue}
               value={weight}
               onChangeText={setWeight}
-              onBlur={() => onChange({ weight: weight.trim() === '' ? null : Number(weight) })}
+              onBlur={() =>
+                onChange({ weight: weight.trim() === '' ? null : unitToKg(Number(weight), unit) })
+              }
               placeholder="—"
               placeholderTextColor={T.muted}
               keyboardType="decimal-pad"
               textAlign="center"
             />
-            <Text style={styles.planCellUnit}>kg</Text>
+            <Text style={styles.planCellUnit}>{unit}</Text>
           </View>
           <View style={styles.planCell}>
             <TextInput
@@ -429,8 +435,15 @@ function PickExerciseModal({ visible, onClose, onPick }: PickExerciseModalProps)
                 onPress={() => { onPick(item); handleClose(); }}
                 activeOpacity={0.7}
               >
-                <Text style={styles.pickRowName}>{item.name}</Text>
-                <Text style={styles.pickRowType}>{item.type}</Text>
+                {item.imageUrl ? (
+                  <Image source={{ uri: item.imageUrl }} style={styles.pickThumb} resizeMode="cover" />
+                ) : (
+                  <View style={[styles.pickThumb, styles.pickThumbPlaceholder]} />
+                )}
+                <View style={styles.pickRowInfo}>
+                  <Text style={styles.pickRowName}>{item.name}</Text>
+                  <Text style={styles.pickRowType}>{item.equipment ?? item.muscleGroup ?? item.type}</Text>
+                </View>
               </TouchableOpacity>
             )}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -509,6 +522,7 @@ function PickDisciplineModal({ visible, onClose, onPick }: PickDisciplineModalPr
 
 export default function RoutineEditorScreen() {
   const { T } = useTheme();
+  const { unit } = useUnit();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -727,7 +741,7 @@ export default function RoutineEditorScreen() {
               key={item._localId}
               name={item._displayName}
               kind={item.kind}
-              targetSummary={formatTarget(asTarget(item.target), typeOf(item.exerciseId))}
+              targetSummary={formatTarget(asTarget(item.target), typeOf(item.exerciseId), unit)}
               onPress={() => setEditingTarget({ id: item._localId, isPending: true })}
               onRemove={() => setPendingItems((prev) => prev.filter((i) => i._localId !== item._localId))}
             />
@@ -740,7 +754,7 @@ export default function RoutineEditorScreen() {
               key={item.id}
               name={item.exerciseName ?? item.disciplineName ?? 'Unknown'}
               kind={item.kind}
-              targetSummary={formatTarget(asTarget(item.target), typeOf(item.exerciseId))}
+              targetSummary={formatTarget(asTarget(item.target), typeOf(item.exerciseId), unit)}
               onPress={() => setEditingTarget({ id: item.id, isPending: false })}
               onRemove={() => {
                 if (!existingRoutine) return;
@@ -943,11 +957,14 @@ function makeStyles(T: ThemeColors) {
     marginHorizontal: D.pad, marginBottom: 12,
   },
   pickRow: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: D.pad, paddingVertical: 14,
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: D.pad, paddingVertical: 10, gap: 12,
   },
+  pickThumb: { width: 44, height: 44, borderRadius: R.sm },
+  pickThumbPlaceholder: { backgroundColor: T.surface2 },
+  pickRowInfo: { flex: 1 },
   pickRowName: { fontFamily: F.uiMed, fontSize: 15, color: T.text },
-  pickRowType: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
+  pickRowType: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 2, textTransform: 'capitalize' },
   separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad },
   modalCentered: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
   emptyText: { fontFamily: F.uiMed, fontSize: 15, color: T.muted },

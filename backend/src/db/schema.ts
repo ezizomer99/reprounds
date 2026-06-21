@@ -21,6 +21,8 @@ export const disciplineCatEnum = pgEnum('discipline_cat', ['grappling', 'strikin
 export const sessionStatusEnum = pgEnum('session_status', ['planned', 'in_progress', 'completed', 'skipped']);
 export const setTypeEnum      = pgEnum('set_type',      ['warmup', 'normal', 'drop', 'failure', 'amrap']);
 export const giTypeEnum       = pgEnum('gi_type',       ['gi', 'no_gi']);
+export const fightResultEnum  = pgEnum('fight_result',  ['win', 'loss', 'draw']);
+export const fightMethodEnum  = pgEnum('fight_method',  ['ko', 'tko', 'submission', 'decision', 'points', 'other']);
 
 export const users = pgTable('users', {
   id:         uuid('id').primaryKey().defaultRandom(),
@@ -38,7 +40,17 @@ export const exercises = pgTable('exercises', {
   userId:             uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
   name:               text('name').notNull(),
   type:               activityTypeEnum('type').notNull(),
-  defaultRestSeconds: integer('default_rest_seconds'),
+  // Metadata columns — populated by seeding from exercises.json, null on user-created exercises
+  sourceId:           text('source_id').unique(),
+  category:           text('category'),
+  bodyPart:           text('body_part'),
+  equipment:          text('equipment'),
+  muscleGroup:        text('muscle_group'),
+  secondaryMuscles:   text('secondary_muscles').array(),
+  target:             text('target'),
+  instructions:       text('instructions'),
+  instructionSteps:   jsonb('instruction_steps'),
+  imageUrl:           text('image_url'),
   createdAt:          timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -50,6 +62,17 @@ export const disciplines = pgTable('disciplines', {
   fieldConfig: jsonb('field_config').notNull().default(sql`'[]'::jsonb`),
   createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Training partners — people the user rolls/spars with, referenced from
+// martial-arts rounds. Name only; one row per user-owned partner.
+export const partners = pgTable('partners', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  userId:    uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name:      text('name').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdIdx: index('partners_user_id_idx').on(t.userId),
+}));
 
 // A routine is a workout definition (its items) plus an optional recurring
 // schedule. rrule === null means the routine is unscheduled (run ad-hoc);
@@ -118,6 +141,7 @@ export const sessionEntries = pgTable('session_entries', {
 }, (t) => ({
   sessionIdIdx: index('session_entries_session_id_idx').on(t.sessionId),
   exerciseIdIdx: index('session_entries_exercise_id_idx').on(t.exerciseId),
+  disciplineIdIdx: index('session_entries_discipline_id_idx').on(t.disciplineId),
   kindCheck: check(
     'session_entries_kind_check',
     sql`(${t.kind} = 'exercise' AND ${t.exerciseId} IS NOT NULL AND ${t.disciplineId} IS NULL)
@@ -137,4 +161,52 @@ export const strengthSets = pgTable('strength_sets', {
   completed:       boolean('completed').notNull().default(false),
 }, (t) => ({
   sessionEntryIdIdx: index('strength_sets_session_entry_id_idx').on(t.sessionEntryId),
+}));
+
+// Competition / fight results, tagged to a discipline. Builds the user's
+// amateur/pro record (the striking/MMA equivalent of belt progression).
+export const fights = pgTable('fights', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  userId:       uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  disciplineId: uuid('discipline_id').notNull().references(() => disciplines.id, { onDelete: 'cascade' }),
+  date:         date('date').notNull(),
+  opponent:     text('opponent'),
+  result:       fightResultEnum('result').notNull(),
+  method:       fightMethodEnum('method'),
+  round:        integer('round'),
+  notes:        text('notes'),
+  createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdIdx: index('fights_user_id_idx').on(t.userId),
+  disciplineIdIdx: index('fights_discipline_id_idx').on(t.disciplineId),
+}));
+
+// Belt / rank promotions, tagged to a discipline. The most recent by date is
+// the user's current rank. `rank` is free text (e.g. "Blue belt") so it covers
+// BJJ belts, Judo, and other ranked arts; stripes is optional.
+export const rankPromotions = pgTable('rank_promotions', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  userId:       uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  disciplineId: uuid('discipline_id').notNull().references(() => disciplines.id, { onDelete: 'cascade' }),
+  rank:         text('rank').notNull(),
+  stripes:      integer('stripes'),
+  date:         date('date').notNull(),
+  notes:        text('notes'),
+  createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdIdx: index('rank_promotions_user_id_idx').on(t.userId),
+  disciplineIdIdx: index('rank_promotions_discipline_id_idx').on(t.disciplineId),
+}));
+
+// Body-weight log — one entry per weigh-in. Drives weight-cut tracking for
+// fight camps; weight stored in kg (display unit handled client-side).
+export const weightLogs = pgTable('weight_logs', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  userId:    uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  date:      date('date').notNull(),
+  weightKg:  numeric('weight_kg').notNull(),
+  notes:     text('notes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdDateIdx: index('weight_logs_user_id_date_idx').on(t.userId, t.date),
 }));

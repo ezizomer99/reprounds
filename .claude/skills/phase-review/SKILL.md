@@ -1,3 +1,10 @@
+---
+name: phase-review
+description: >-
+  Audit the current state of the project against the active build phase in
+  docs/BUILD_SPEC.md and report what's done, what's missing, and what to do next.
+---
+
 # phase-review
 
 Audit the current state of the project against the active build phase in `docs/BUILD_SPEC.md` and report what's done, what's missing, and what to do next.

@@ -12,6 +12,7 @@
     "db:seed": "pnpm --filter backend db:seed"
   },
   "devDependencies": {
-    "typescript": "^5.5.0"
+    "typescript": "^5.5.0",
+    "wrangler": "^4.103.0"
   }
 }

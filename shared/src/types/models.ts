@@ -1,4 +1,4 @@
-import type { ActivityType, DisciplineCat, EntryKind, GiType, SessionStatus, SetType } from './enums';
+import type { ActivityType, DisciplineCat, EntryKind, FightMethod, FightResult, GiType, SessionStatus, SetType } from './enums';
 import type { FieldConfig } from './fieldConfig';
 
 export interface User {
@@ -28,8 +28,18 @@ export interface Exercise {
   userId: string | null;
   name: string;
   type: Exclude<ActivityType, 'martial_arts'>;
-  defaultRestSeconds: number | null;
   createdAt: string;
+  // Metadata — null on user-created custom exercises
+  category: string | null;
+  bodyPart: string | null;
+  equipment: string | null;
+  muscleGroup: string | null;
+  secondaryMuscles: string[] | null;
+  target: string | null;
+  imageUrl: string | null;
+  // Heavy fields — only populated by GET /exercises/:id, null in list responses
+  instructions: string | null;
+  instructionSteps: string[] | null;
 }
 
 export interface Discipline {
@@ -38,6 +48,54 @@ export interface Discipline {
   name: string;
   category: DisciplineCat;
   fieldConfig: FieldConfig;
+  createdAt: string;
+}
+
+// A training partner the user rolls/spars with, referenced by id from
+// martial-arts rounds (RoundsSessionDetails). Name only.
+export interface Partner {
+  id: string;
+  userId: string;
+  name: string;
+  createdAt: string;
+}
+
+// A competition / fight result, tagged to a discipline. Aggregates into the
+// user's win-loss-draw record on the discipline detail screen.
+export interface Fight {
+  id: string;
+  userId: string;
+  disciplineId: string;
+  date: string;
+  opponent: string | null;
+  result: FightResult;
+  method: FightMethod | null;
+  round: number | null;
+  notes: string | null;
+  createdAt: string;
+}
+
+// A single body-weight weigh-in. weightKg is the stored value; display unit is
+// handled client-side.
+export interface WeightLog {
+  id: string;
+  userId: string;
+  date: string;
+  weightKg: number;
+  notes: string | null;
+  createdAt: string;
+}
+
+// A belt/rank promotion, tagged to a discipline. The most recent by date is the
+// user's current rank.
+export interface RankPromotion {
+  id: string;
+  userId: string;
+  disciplineId: string;
+  rank: string;
+  stripes: number | null;
+  date: string;
+  notes: string | null;
   createdAt: string;
 }
 
@@ -99,6 +157,8 @@ export interface Session {
   notes: string | null;
   createdAt: string;
   entries?: SessionEntry[];
+  /** Distinct entry kinds present in this session (set on list responses). */
+  kinds?: EntryKind[];
 }
 
 export interface SessionEntry {
@@ -140,16 +200,73 @@ export interface DisciplineListResponse {
   disciplines: Discipline[];
 }
 
+export interface PartnerListResponse {
+  partners: Partner[];
+}
+
+export interface CreatePartnerRequest {
+  name: string;
+}
+
+export interface UpdatePartnerRequest {
+  name?: string;
+}
+
+export interface FightListResponse {
+  fights: Fight[];
+}
+
+export interface CreateFightRequest {
+  disciplineId: string;
+  date: string;
+  opponent?: string | null;
+  result: FightResult;
+  method?: FightMethod | null;
+  round?: number | null;
+  notes?: string | null;
+}
+
+export interface UpdateFightRequest {
+  date?: string;
+  opponent?: string | null;
+  result?: FightResult;
+  method?: FightMethod | null;
+  round?: number | null;
+  notes?: string | null;
+}
+
+export interface RankPromotionListResponse {
+  promotions: RankPromotion[];
+}
+
+export interface CreateRankPromotionRequest {
+  disciplineId: string;
+  rank: string;
+  stripes?: number | null;
+  date: string;
+  notes?: string | null;
+}
+
+export interface WeightLogListResponse {
+  weights: WeightLog[];
+}
+
+export interface CreateWeightLogRequest {
+  date: string;
+  weightKg: number;
+  notes?: string | null;
+}
+
 export interface CreateExerciseRequest {
   name: string;
   type: Exclude<ActivityType, 'martial_arts'>;
-  defaultRestSeconds?: number | null;
+  target?: string | null;
 }
 
 export interface UpdateExerciseRequest {
   name?: string;
   type?: Exclude<ActivityType, 'martial_arts'>;
-  defaultRestSeconds?: number | null;
+  target?: string | null;
 }
 
 export interface CreateDisciplineRequest {
@@ -264,6 +381,7 @@ export interface UpdateSessionEntryRequest {
   restSeconds?: number | null;
   details?: Record<string, unknown> | null;
   notes?: string | null;
+  supersetGroup?: number | null;
 }
 
 export interface CreateStrengthSetRequest {

@@ -34,7 +34,7 @@ gi_type         ENUM ('gi', 'no_gi')
 
 ### Tables
 - **users** — `id`, `google_sub` (UNIQUE), `email`, `name`, `avatar_url`, `created_at`. No password column.
-- **exercises** — `id`, `user_id` (NULL = global), `name`, `type` (activity_type, only 'strength'|'conditioning'), `default_rest_seconds`, `created_at`
+- **exercises** — `id`, `user_id` (NULL = global), `name`, `type` (activity_type, only 'strength'|'conditioning'), `created_at` (+ seed metadata: `source_id`, `category`, `body_part`, `equipment`, `muscle_group`, `secondary_muscles`, `target`, `instructions`, `instruction_steps`, `image_url`)
 - **disciplines** — `id`, `user_id` (NULL = global), `name`, `category` (discipline_cat), `field_config` (jsonb, default '[]'), `created_at`
 - **templates** — `id`, `user_id` NOT NULL, `name`, `day_label`, `notes`, `created_at`
 - **template_items** — `id`, `template_id`, `kind` (entry_kind), `exercise_id` (nullable), `discipline_id` (nullable), `order_index`, `superset_group`, `default_rest_seconds`, `target` (jsonb), + CHECK constraint

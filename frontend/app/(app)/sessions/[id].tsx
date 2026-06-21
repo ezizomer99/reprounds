@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { Image } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,6 +25,7 @@ import type {
   SetType,
   StrengthSet,
 } from '@app/shared';
+import { isRoundsSession, totalVolume } from '@app/shared';
 import { useExercises } from '../../../src/hooks/useExercises';
 import { useDisciplines } from '../../../src/hooks/useDisciplines';
 import {
@@ -39,6 +41,12 @@ import {
 } from '../../../src/hooks/useSession';
 import { useRoutines } from '../../../src/hooks/useRoutines';
 import { RestTimer } from '../../../src/components/RestTimer';
+import { Skeleton } from '../../../src/components/Skeleton';
+import { RoundLogger, BOXING_WEAPONS, MUAY_THAI_WEAPONS } from '../../../src/components/RoundLogger';
+import { PlateCalculator } from '../../../src/components/PlateCalculator';
+import { useUnit } from '../../../src/units/UnitContext';
+import { fmtWeight, kgToUnit, unitToKg } from '../../../src/units/units';
+import { cancelScheduled, scheduleInSeconds } from '../../../src/lib/notifications';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -128,8 +136,15 @@ function PickExerciseModal({ visible, onClose, onPick }: {
             keyExtractor={(i) => i.id}
             renderItem={({ item }) => (
               <TouchableOpacity style={styles.pickRow} onPress={() => { onPick(item); handleClose(); }}>
-                <Text style={styles.pickName}>{item.name}</Text>
-                <Text style={styles.pickMeta}>{item.type}</Text>
+                {item.imageUrl ? (
+                  <Image source={{ uri: item.imageUrl }} style={styles.pickThumb} resizeMode="cover" />
+                ) : (
+                  <View style={[styles.pickThumb, styles.pickThumbPlaceholder]} />
+                )}
+                <View style={styles.pickInfo}>
+                  <Text style={styles.pickName}>{item.name}</Text>
+                  <Text style={styles.pickMeta}>{item.equipment ?? item.muscleGroup ?? item.type}</Text>
+                </View>
               </TouchableOpacity>
             )}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -196,8 +211,9 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   const isTime = exerciseType === 'conditioning';
   const isWarm = set.setType === 'warmup';
   const updateSet = useUpdateStrengthSet();
+  const { unit } = useUnit();
   const [reps, setReps] = useState(set.reps !== null ? String(set.reps) : '');
-  const [weight, setWeight] = useState(set.weight !== null ? String(set.weight) : '');
+  const [weight, setWeight] = useState(set.weight !== null ? fmtWeight(set.weight, unit) : '');
   const [duration, setDuration] = useState(set.reps !== null ? fmtDuration(set.reps) : '');
   const [rpe, setRpe] = useState(set.rpe !== null ? String(set.rpe) : '');
 
@@ -208,7 +224,8 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
 
   function handleBlurWeight() {
     const parsed = weight.trim() === '' ? null : Number(weight);
-    updateSet.mutate({ sessionId, entryId, setId: set.id, weight: isNaN(parsed as number) ? null : parsed });
+    const kg = parsed === null || isNaN(parsed) ? null : unitToKg(parsed, unit);
+    updateSet.mutate({ sessionId, entryId, setId: set.id, weight: kg });
   }
 
   function handleBlurDuration() {
@@ -291,7 +308,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
               editable={!isDone}
               textAlign="center"
             />
-            <Text style={styles.cellUnit}>kg</Text>
+            <Text style={styles.cellUnit}>{unit}</Text>
           </View>
 
           <View style={[styles.cell, isDone && styles.cellDone]}>
@@ -339,11 +356,12 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
 
 // ─── Per-set actions menu ─────────────────────────────────────────────────────
 
-function SetActionsMenu({ set, onSetType, onDuplicate, onDelete, onClose }: {
+function SetActionsMenu({ set, onSetType, onDuplicate, onDelete, onPlateMath, onClose }: {
   set: StrengthSet;
   onSetType: (t: SetType) => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onPlateMath: () => void;
   onClose: () => void;
 }) {
   const { T } = useTheme();
@@ -361,6 +379,10 @@ function SetActionsMenu({ set, onSetType, onDuplicate, onDelete, onClose }: {
             </TouchableOpacity>
           ))}
           <View style={styles.menuDivider} />
+          <TouchableOpacity style={styles.menuItem} onPress={() => { onPlateMath(); onClose(); }}>
+            <Ionicons name="barbell-outline" size={16} color={T.textDim} />
+            <Text style={styles.menuItemText}>Plate math</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.menuItem} onPress={() => { onDuplicate(); onClose(); }}>
             <Ionicons name="copy-outline" size={16} color={T.textDim} />
             <Text style={styles.menuItemText}>Duplicate set</Text>
@@ -380,15 +402,16 @@ function SetActionsMenu({ set, onSetType, onDuplicate, onDelete, onClose }: {
 function LastTime({ exerciseId }: { exerciseId: string }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+  const { unit } = useUnit();
   const { data } = useExerciseHistory(exerciseId);
   const summary = useMemo(() => {
     if (!data?.history.length) return null;
     const sets = data.history[0].entry.sets.filter((s) => s.completed && s.reps !== null);
     if (!sets.length) return null;
     const s = sets[0];
-    const w = s.weight !== null ? `×${s.weight}kg` : '';
+    const w = s.weight !== null ? `×${fmtWeight(s.weight, unit)}${unit}` : '';
     return `Last: ${sets.length}×${s.reps}${w}`;
-  }, [data]);
+  }, [data, unit]);
   if (!summary) return null;
   return <Text style={styles.lastTimeText}>Last: <Text style={styles.lastTimeVal}>{summary.replace('Last: ', '')}</Text></Text>;
 }
@@ -407,21 +430,31 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, exerciseType }: {
   const addSet = useAddStrengthSet();
   const updateSet = useUpdateStrengthSet();
   const deleteSet = useDeleteStrengthSet();
+  const { data: history } = useExerciseHistory(entry.exerciseId);
   const restSeconds = entry.restSeconds ?? 120;
   const [menuSet, setMenuSet] = useState<StrengthSet | null>(null);
+  const [plateWeight, setPlateWeight] = useState<number | null>(null);
 
   const warmups = entry.sets.filter((s) => s.setType === 'warmup');
   const working = entry.sets.filter((s) => s.setType !== 'warmup');
+
+  // Last session's working sets, used to autofill when starting fresh.
+  const lastSessionWorking = useMemo(
+    () => (history?.history[0]?.entry.sets ?? []).filter((s) => s.setType !== 'warmup'),
+    [history],
+  );
 
   function handleAddWarmup() {
     addSet.mutate({ sessionId, entryId: entry.id, setNumber: entry.sets.length + 1, setType: 'warmup', completed: false });
   }
 
   function handleAddSet() {
-    const last = working[working.length - 1];
+    // Prefer the previous set in this session; otherwise autofill from the
+    // matching set in the last session so a fresh exercise isn't blank.
+    const source = working[working.length - 1] ?? lastSessionWorking[working.length] ?? null;
     addSet.mutate({
       sessionId, entryId: entry.id, setNumber: entry.sets.length + 1, setType: 'normal',
-      reps: last?.reps ?? null, weight: last?.weight ?? null, completed: false,
+      reps: source?.reps ?? null, weight: source?.weight ?? null, completed: false,
     });
   }
 
@@ -510,8 +543,13 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, exerciseType }: {
           onSetType={(t) => updateSet.mutate({ sessionId, entryId: entry.id, setId: menuSet.id, setType: t })}
           onDuplicate={() => handleDuplicate(menuSet)}
           onDelete={() => handleDelete(menuSet)}
+          onPlateMath={() => setPlateWeight(menuSet.weight ?? 0)}
           onClose={() => setMenuSet(null)}
         />
+      )}
+
+      {plateWeight !== null && (
+        <PlateCalculator weightKg={plateWeight} onClose={() => setPlateWeight(null)} />
       )}
     </View>
   );
@@ -559,6 +597,14 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
     );
   }
 
+  // Seeded (global) disciplines get the structured, category-aware round logger;
+  // user-created custom disciplines keep their generic field_config form.
+  // All three categories now have a structured logger.
+  const useStructured = discipline.userId === null;
+  const strikeWeapons = /muay thai|kickbox/i.test(discipline.name)
+    ? MUAY_THAI_WEAPONS
+    : BOXING_WEAPONS;
+
   return (
     <View style={styles.entryCard}>
       <View style={styles.entryHead}>
@@ -568,7 +614,14 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
         </View>
       </View>
 
-      {discipline.fieldConfig.map((field) => {
+      {useStructured ? (
+        <RoundLogger
+          category={discipline.category}
+          value={isRoundsSession(details) ? details : null}
+          onChange={(next) => setDetails(next as unknown as Record<string, unknown>)}
+          strikeWeapons={strikeWeapons}
+        />
+      ) : discipline.fieldConfig.map((field) => {
         if (field.type === 'enum') {
           const enumField = field as EnumFieldDef;
           const current = details[field.key] as string | undefined;
@@ -945,9 +998,11 @@ export default function SessionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
+  const { unit } = useUnit();
   const { data: session, isLoading, isError } = useSession(id ?? null);
   const completeSession = useCompleteSession();
   const updateSession = useUpdateSession();
+  const updateEntry = useUpdateSessionEntry();
   const addEntry = useAddSessionEntry();
   const { data: disciplines } = useDisciplines();
   const { data: allExercises } = useExercises();
@@ -985,9 +1040,36 @@ export default function SessionScreen() {
     return () => clearInterval(intervalId);
   }, [session?.startedAt, session?.status]);
 
+  // Schedule a local notification for when the rest timer ends, so it still
+  // fires (with sound/vibration) if the app is backgrounded.
+  const restNotifId = useRef<string | null>(null);
+  async function armRestNotification(secs: number) {
+    await cancelScheduled(restNotifId.current);
+    restNotifId.current = await scheduleInSeconds(
+      secs,
+      'Rest complete',
+      'Time for your next set.',
+      { kind: 'rest' },
+    );
+  }
+
   function handleSetCompleted(secs: number) {
     setRestTotal(secs);
     setRestSeconds(secs);
+    armRestNotification(secs);
+  }
+
+  function handleRestSkip() {
+    cancelScheduled(restNotifId.current);
+    restNotifId.current = null;
+    setRestSeconds(null);
+  }
+
+  function handleRestAdd() {
+    const next = (restSeconds ?? 0) + 15;
+    setRestTotal((t) => t + 15);
+    setRestSeconds(next);
+    armRestNotification(next);
   }
 
   function handleBack() {
@@ -1033,7 +1115,40 @@ export default function SessionScreen() {
   }
 
   if (isLoading) {
-    return <View style={styles.loadingScreen}><ActivityIndicator size="large" color={T.primary} /></View>;
+    return (
+      <View style={[styles.screen, { paddingTop: insets.top }]}>
+        <View style={styles.header}>
+          <View style={styles.headerIconBtn}><Skeleton width={22} height={22} radius={6} /></View>
+          <View style={styles.headerCenter}><Skeleton width={92} height={20} /></View>
+          <View style={styles.headerActions}>
+            <View style={styles.headerIconBtn}><Skeleton width={22} height={22} radius={6} /></View>
+            <View style={styles.headerIconBtn}><Skeleton width={22} height={22} radius={6} /></View>
+          </View>
+        </View>
+        <View style={{ padding: 16, gap: 16 }}>
+          {Array.from({ length: 3 }).map((_, i) => (
+            <View key={i} style={styles.skeletonCard}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                <Skeleton width={44} height={44} radius={10} />
+                <View style={{ flex: 1, gap: 8 }}>
+                  <Skeleton width="60%" height={15} />
+                  <Skeleton width="30%" height={11} />
+                </View>
+              </View>
+              {Array.from({ length: 3 }).map((__, j) => (
+                <View key={j} style={styles.skeletonSetRow}>
+                  <Skeleton width={26} height={26} radius={8} />
+                  <Skeleton width={72} height={26} radius={8} />
+                  <Skeleton width={72} height={26} radius={8} />
+                  <View style={{ flex: 1 }} />
+                  <Skeleton width={26} height={26} radius={13} />
+                </View>
+              ))}
+            </View>
+          ))}
+        </View>
+      </View>
+    );
   }
 
   if (isError || !session) {
@@ -1048,9 +1163,26 @@ export default function SessionScreen() {
   }
 
   const doneCount = session.entries.reduce((n, e) => n + e.sets.filter((s) => s.completed).length, 0);
+  const sessionVolume = session.entries.reduce((sum, e) => sum + totalVolume(e.sets), 0);
   const hasMartialArts = session.entries.some((e) => e.kind === 'martial_arts');
   const canFinish = doneCount > 0 || hasMartialArts;
   const isActive = session.status !== 'completed';
+
+  // Link/unlink an exercise into a superset with the entry above it.
+  const sessId = session.id;
+  const allEntries = session.entries;
+  function toggleSuperset(prev: SessionEntryWithSets, curr: SessionEntryWithSets, linked: boolean) {
+    if (linked) {
+      updateEntry.mutate({ sessionId: sessId, entryId: curr.id, supersetGroup: null });
+      return;
+    }
+    const maxGroup = Math.max(0, ...allEntries.map((e) => e.supersetGroup ?? 0));
+    const group = prev.supersetGroup ?? maxGroup + 1;
+    if (prev.supersetGroup == null) {
+      updateEntry.mutate({ sessionId: sessId, entryId: prev.id, supersetGroup: group });
+    }
+    updateEntry.mutate({ sessionId: sessId, entryId: curr.id, supersetGroup: group });
+  }
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -1102,8 +1234,8 @@ export default function SessionScreen() {
         <RestTimer
           seconds={restSeconds}
           total={restTotal}
-          onSkip={() => setRestSeconds(null)}
-          onAdd={() => { setRestTotal((t) => t + 15); setRestSeconds((s) => (s ?? 0) + 15); }}
+          onSkip={handleRestSkip}
+          onAdd={handleRestAdd}
         />
       )}
 
@@ -1119,29 +1251,67 @@ export default function SessionScreen() {
           </View>
         )}
 
-        {session.entries.map((entry) => {
-          if (entry.kind === 'exercise') {
-            return (
-              <StrengthEntryCard
-                key={entry.id}
-                entry={entry}
-                sessionId={session.id}
-                onSetCompleted={handleSetCompleted}
-                exerciseType={entry.exerciseId ? exerciseTypeMap.get(entry.exerciseId) : undefined}
-              />
-            );
-          }
-          if (entry.kind === 'martial_arts') {
-            return (
-              <MartialArtsEntryCard
-                key={entry.id}
-                entry={entry}
-                sessionId={session.id}
-                disciplines={disciplines ?? []}
-              />
-            );
-          }
-          return null;
+        {sessionVolume > 0 && (
+          <View style={styles.summaryBar}>
+            <View style={styles.summaryStat}>
+              <Text style={styles.summaryNum}>{doneCount}</Text>
+              <Text style={styles.summaryKey}>sets done</Text>
+            </View>
+            <View style={styles.summaryDivider} />
+            <View style={styles.summaryStat}>
+              <Text style={styles.summaryNum}>{Math.round(kgToUnit(sessionVolume, unit)).toLocaleString()}</Text>
+              <Text style={styles.summaryKey}>{unit} volume</Text>
+            </View>
+          </View>
+        )}
+
+        {session.entries.map((entry, i) => {
+          const prev = session.entries[i - 1];
+          const next = session.entries[i + 1];
+          const linkedAbove =
+            entry.kind === 'exercise' && prev?.kind === 'exercise' &&
+            entry.supersetGroup != null && entry.supersetGroup === prev.supersetGroup;
+          const grouped =
+            entry.supersetGroup != null &&
+            (entry.supersetGroup === prev?.supersetGroup || entry.supersetGroup === next?.supersetGroup);
+          const canLink = isActive && entry.kind === 'exercise' && prev?.kind === 'exercise';
+
+          return (
+            <View key={entry.id}>
+              {canLink && (
+                <TouchableOpacity
+                  style={styles.supersetLink}
+                  onPress={() => toggleSuperset(prev, entry, linkedAbove)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={linkedAbove ? 'link' : 'link-outline'}
+                    size={13}
+                    color={linkedAbove ? T.primary : T.muted}
+                  />
+                  <Text style={[styles.supersetLinkText, linkedAbove && { color: T.primary }]}>
+                    {linkedAbove ? 'Superset' : 'Superset with above'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              <View style={grouped ? styles.supersetGrouped : undefined}>
+                {entry.kind === 'exercise' ? (
+                  <StrengthEntryCard
+                    entry={entry}
+                    sessionId={session.id}
+                    onSetCompleted={handleSetCompleted}
+                    exerciseType={entry.exerciseId ? exerciseTypeMap.get(entry.exerciseId) : undefined}
+                  />
+                ) : (
+                  <MartialArtsEntryCard
+                    entry={entry}
+                    sessionId={session.id}
+                    disciplines={disciplines ?? []}
+                  />
+                )}
+              </View>
+            </View>
+          );
         })}
 
         {session.status !== 'completed' && (
@@ -1186,6 +1356,8 @@ function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
   screen: { flex: 1, backgroundColor: T.bg },
   loadingScreen: { flex: 1, backgroundColor: T.bg, alignItems: 'center', justifyContent: 'center' },
+  skeletonCard: { backgroundColor: T.surface, borderRadius: R.card, borderWidth: 1, borderColor: T.border, padding: 14 },
+  skeletonSetRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
   errorText: { fontFamily: F.ui, fontSize: 15, color: T.danger, textAlign: 'center' },
 
   // StrengthLog-style header
@@ -1221,6 +1393,18 @@ function makeStyles(T: ThemeColors) {
   body: { padding: D.pad, gap: D.stack },
 
   emptyEntries: { alignItems: 'center', paddingVertical: 48 },
+  summaryBar: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.card,
+    paddingVertical: 12, marginBottom: 4,
+  },
+  summaryStat: { flex: 1, alignItems: 'center', gap: 2 },
+  summaryDivider: { width: 1, alignSelf: 'stretch', backgroundColor: T.border, marginVertical: 4 },
+  summaryNum: { fontFamily: F.monoBold, fontSize: 20, color: T.text },
+  summaryKey: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.4 },
+  supersetLink: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 6, paddingLeft: 4 },
+  supersetLinkText: { fontFamily: F.uiMed, fontSize: 12, color: T.muted },
+  supersetGrouped: { borderLeftWidth: 2, borderLeftColor: withAlpha(T.primary, 0.5), paddingLeft: 8, marginLeft: 2 },
   emptyTitle: { fontFamily: F.uiSemi, fontSize: 16, color: T.textDim, marginBottom: 4 },
   emptySub: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, textAlign: 'center' },
 
@@ -1381,9 +1565,12 @@ function makeStyles(T: ThemeColors) {
     borderRadius: R.sm, paddingHorizontal: 14, paddingVertical: 10,
     fontFamily: F.uiMed, fontSize: 15, color: T.text, marginHorizontal: 16, marginBottom: 12,
   },
-  pickRow: { paddingHorizontal: 16, paddingVertical: 14 },
+  pickRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 12 },
+  pickThumb: { width: 44, height: 44, borderRadius: 8 },
+  pickThumbPlaceholder: { backgroundColor: T.surface2 },
+  pickInfo: { flex: 1 },
   pickName: { fontFamily: F.uiMed, fontSize: 16, color: T.text },
-  pickMeta: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim, marginTop: 2 },
+  pickMeta: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim, marginTop: 2, textTransform: 'capitalize' },
   separator: { height: 1, backgroundColor: T.border, marginLeft: 16 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
   emptyText: { fontFamily: F.uiMed, fontSize: 15, color: T.muted },

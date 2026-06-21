@@ -5,6 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { F, R, D, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
+import { useUnit } from '../../src/units/UnitContext';
+import type { WeightUnit } from '../../src/units/units';
 
 type ThemeMode = 'dark' | 'light' | 'system';
 
@@ -14,8 +16,14 @@ const MODES: { value: ThemeMode; label: string }[] = [
   { value: 'dark', label: 'Dark' },
 ];
 
+const UNITS: { value: WeightUnit; label: string }[] = [
+  { value: 'kg', label: 'Kilograms' },
+  { value: 'lbs', label: 'Pounds' },
+];
+
 export default function SettingsScreen() {
   const { T, mode, setMode } = useTheme();
+  const { unit, setUnit } = useUnit();
   const styles = useMemo(() => makeStyles(T), [T]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -43,6 +51,29 @@ export default function SettingsScreen() {
                   key={value}
                   style={[styles.segment, active && styles.segmentActive]}
                   onPress={() => setMode(value)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        <Text style={styles.sectionLabel}>Units</Text>
+
+        <View style={styles.card}>
+          <Text style={styles.rowLabel}>Weight</Text>
+          <View style={styles.segmentRow}>
+            {UNITS.map(({ value, label }) => {
+              const active = unit === value;
+              return (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.segment, active && styles.segmentActive]}
+                  onPress={() => setUnit(value)}
                   activeOpacity={0.75}
                 >
                   <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
