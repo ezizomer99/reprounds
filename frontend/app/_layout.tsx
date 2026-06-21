@@ -2,8 +2,6 @@ import '../global.css';
 import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import NetInfo from '@react-native-community/netinfo';
 import { NativeModules } from 'react-native';
 import { Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -30,19 +28,11 @@ GoogleSignin.configure({
   iosClientId: process.env.EXPO_PUBLIC_IOS_CLIENT_ID,
 });
 
-// Offline persistence relies on native AsyncStorage + NetInfo modules, which
-// are only present after an EAS build that includes them. Detect them so the
-// app degrades to an in-memory client (instead of crashing) on a dev client
-// that predates these deps.
+// Offline persistence relies on the native AsyncStorage + NetInfo modules,
+// which only exist after an EAS build that includes them. Statically importing
+// them throws at module evaluation on an older dev client, so detect the native
+// modules first and require them lazily — falling back to an in-memory client.
 const offlineReady = Boolean(NativeModules.RNCAsyncStorage && NativeModules.RNCNetInfo);
-
-// Drive React Query's online state from the device network status so mutations
-// pause while offline and resume on reconnect.
-if (offlineReady) {
-  onlineManager.setEventListener((setOnline) =>
-    NetInfo.addEventListener((state) => setOnline(Boolean(state.isConnected))),
-  );
-}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -68,9 +58,25 @@ const queryClient = new QueryClient({
   },
 });
 
-const asyncPersister = offlineReady
-  ? createAsyncStoragePersister({ storage: AsyncStorage })
-  : null;
+let asyncPersister: ReturnType<typeof createAsyncStoragePersister> | null = null;
+if (offlineReady) {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const NetInfo = require('@react-native-community/netinfo').default;
+    // Drive React Query's online state from the device network status so
+    // mutations pause while offline and resume on reconnect.
+    onlineManager.setEventListener((setOnline) =>
+      NetInfo.addEventListener((state: { isConnected: boolean | null }) =>
+        setOnline(Boolean(state.isConnected)),
+      ),
+    );
+    asyncPersister = createAsyncStoragePersister({ storage: AsyncStorage });
+  } catch {
+    asyncPersister = null;
+  }
+}
 
 function AppShell() {
   const { isDark } = useTheme();
