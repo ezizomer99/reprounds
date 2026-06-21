@@ -44,6 +44,8 @@ import { RestTimer } from '../../../src/components/RestTimer';
 import { Skeleton } from '../../../src/components/Skeleton';
 import { RoundLogger, BOXING_WEAPONS, MUAY_THAI_WEAPONS } from '../../../src/components/RoundLogger';
 import { PlateCalculator } from '../../../src/components/PlateCalculator';
+import { useUnit } from '../../../src/units/UnitContext';
+import { fmtWeight, kgToUnit, unitToKg } from '../../../src/units/units';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -208,8 +210,9 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   const isTime = exerciseType === 'conditioning';
   const isWarm = set.setType === 'warmup';
   const updateSet = useUpdateStrengthSet();
+  const { unit } = useUnit();
   const [reps, setReps] = useState(set.reps !== null ? String(set.reps) : '');
-  const [weight, setWeight] = useState(set.weight !== null ? String(set.weight) : '');
+  const [weight, setWeight] = useState(set.weight !== null ? fmtWeight(set.weight, unit) : '');
   const [duration, setDuration] = useState(set.reps !== null ? fmtDuration(set.reps) : '');
   const [rpe, setRpe] = useState(set.rpe !== null ? String(set.rpe) : '');
 
@@ -220,7 +223,8 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
 
   function handleBlurWeight() {
     const parsed = weight.trim() === '' ? null : Number(weight);
-    updateSet.mutate({ sessionId, entryId, setId: set.id, weight: isNaN(parsed as number) ? null : parsed });
+    const kg = parsed === null || isNaN(parsed) ? null : unitToKg(parsed, unit);
+    updateSet.mutate({ sessionId, entryId, setId: set.id, weight: kg });
   }
 
   function handleBlurDuration() {
@@ -303,7 +307,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
               editable={!isDone}
               textAlign="center"
             />
-            <Text style={styles.cellUnit}>kg</Text>
+            <Text style={styles.cellUnit}>{unit}</Text>
           </View>
 
           <View style={[styles.cell, isDone && styles.cellDone]}>
@@ -397,15 +401,16 @@ function SetActionsMenu({ set, onSetType, onDuplicate, onDelete, onPlateMath, on
 function LastTime({ exerciseId }: { exerciseId: string }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+  const { unit } = useUnit();
   const { data } = useExerciseHistory(exerciseId);
   const summary = useMemo(() => {
     if (!data?.history.length) return null;
     const sets = data.history[0].entry.sets.filter((s) => s.completed && s.reps !== null);
     if (!sets.length) return null;
     const s = sets[0];
-    const w = s.weight !== null ? `×${s.weight}kg` : '';
+    const w = s.weight !== null ? `×${fmtWeight(s.weight, unit)}${unit}` : '';
     return `Last: ${sets.length}×${s.reps}${w}`;
-  }, [data]);
+  }, [data, unit]);
   if (!summary) return null;
   return <Text style={styles.lastTimeText}>Last: <Text style={styles.lastTimeVal}>{summary.replace('Last: ', '')}</Text></Text>;
 }
@@ -992,6 +997,7 @@ export default function SessionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
+  const { unit } = useUnit();
   const { data: session, isLoading, isError } = useSession(id ?? null);
   const completeSession = useCompleteSession();
   const updateSession = useUpdateSession();
@@ -1225,8 +1231,8 @@ export default function SessionScreen() {
             </View>
             <View style={styles.summaryDivider} />
             <View style={styles.summaryStat}>
-              <Text style={styles.summaryNum}>{Math.round(sessionVolume).toLocaleString()}</Text>
-              <Text style={styles.summaryKey}>kg volume</Text>
+              <Text style={styles.summaryNum}>{Math.round(kgToUnit(sessionVolume, unit)).toLocaleString()}</Text>
+              <Text style={styles.summaryKey}>{unit} volume</Text>
             </View>
           </View>
         )}

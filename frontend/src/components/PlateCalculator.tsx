@@ -10,9 +10,13 @@ import {
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
 import { F, R, ThemeColors } from '../theme/colors';
+import { useUnit } from '../units/UnitContext';
+import { kgToUnit } from '../units/units';
 
-// Standard kg plate denominations, largest first.
+// Standard plate denominations per unit, largest first.
 const PLATES_KG = [25, 20, 15, 10, 5, 2.5, 1.25];
+const PLATES_LB = [45, 35, 25, 10, 5, 2.5];
+const DEFAULT_BAR = { kg: 20, lbs: 45 };
 
 interface PlateGroup {
   plate: number;
@@ -20,11 +24,11 @@ interface PlateGroup {
 }
 
 /** Greedily compute the plates loaded on each side of the bar. */
-function platesPerSide(target: number, bar: number): PlateGroup[] {
+function platesPerSide(target: number, bar: number, plates: number[]): PlateGroup[] {
   if (!(target > bar)) return [];
   let perSide = (target - bar) / 2;
   const result: PlateGroup[] = [];
-  for (const p of PLATES_KG) {
+  for (const p of plates) {
     const count = Math.floor(perSide / p + 1e-9);
     if (count > 0) {
       result.push({ plate: p, count });
@@ -37,12 +41,15 @@ function platesPerSide(target: number, bar: number): PlateGroup[] {
 export function PlateCalculator({ weightKg, onClose }: { weightKg: number; onClose: () => void }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const [bar, setBar] = useState('20');
-  const [target, setTarget] = useState(weightKg ? String(weightKg) : '');
+  const { unit } = useUnit();
+  const plateSet = unit === 'lbs' ? PLATES_LB : PLATES_KG;
+  const initialTarget = weightKg ? String(Math.round(kgToUnit(weightKg, unit) * 10) / 10) : '';
+  const [bar, setBar] = useState(String(DEFAULT_BAR[unit]));
+  const [target, setTarget] = useState(initialTarget);
 
   const barN = Number(bar) || 0;
   const targetN = Number(target) || 0;
-  const plates = platesPerSide(targetN, barN);
+  const plates = platesPerSide(targetN, barN, plateSet);
   const achieved = barN + plates.reduce((s, p) => s + p.plate * p.count * 2, 0);
   const exact = Math.abs(achieved - targetN) < 0.01;
 
@@ -55,7 +62,7 @@ export function PlateCalculator({ weightKg, onClose }: { weightKg: number; onClo
 
           <View style={styles.inputs}>
             <View style={styles.inputCol}>
-              <Text style={styles.label}>Target (kg)</Text>
+              <Text style={styles.label}>Target ({unit})</Text>
               <TextInput
                 style={styles.input}
                 value={target}
@@ -67,7 +74,7 @@ export function PlateCalculator({ weightKg, onClose }: { weightKg: number; onClo
               />
             </View>
             <View style={styles.inputCol}>
-              <Text style={styles.label}>Bar (kg)</Text>
+              <Text style={styles.label}>Bar ({unit})</Text>
               <TextInput
                 style={styles.input}
                 value={bar}
@@ -97,7 +104,7 @@ export function PlateCalculator({ weightKg, onClose }: { weightKg: number; onClo
 
           {plates.length > 0 && (
             <Text style={[styles.achieved, !exact && { color: T.gold }]}>
-              {exact ? `Loads to ${achieved} kg` : `Closest: ${achieved} kg`}
+              {exact ? `Loads to ${achieved} ${unit}` : `Closest: ${Math.round(achieved * 10) / 10} ${unit}`}
             </Text>
           )}
 

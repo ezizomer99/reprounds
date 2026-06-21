@@ -17,6 +17,7 @@ import {
 import { BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
+import { UnitProvider } from '../src/units/UnitContext';
 import { SubscriptionProvider } from '../src/context/SubscriptionContext';
 
 GoogleSignin.configure({
@@ -69,9 +70,11 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
-          <SubscriptionProvider>
-            <AppShell />
-          </SubscriptionProvider>
+          <UnitProvider>
+            <SubscriptionProvider>
+              <AppShell />
+            </SubscriptionProvider>
+          </UnitProvider>
         </ThemeProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>

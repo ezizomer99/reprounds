@@ -21,6 +21,8 @@ import {
   useDeleteWeightLog,
   useWeightLogs,
 } from '../../../src/hooks/useWeightLogs';
+import { useUnit } from '../../../src/units/UnitContext';
+import { fmtWeight, kgToUnit, unitToKg } from '../../../src/units/units';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 
@@ -40,6 +42,7 @@ export default function WeightScreen() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
 
+  const { unit } = useUnit();
   const { data, isLoading } = useWeightLogs();
   const deleteWeight = useDeleteWeightLog();
   const [showAdd, setShowAdd] = useState(false);
@@ -67,7 +70,7 @@ export default function WeightScreen() {
         ListHeaderComponent={
           <View style={styles.summaryCard}>
             <Text style={styles.summaryValue}>
-              {latest ? `${latest.weightKg} kg` : '—'}
+              {latest ? `${fmtWeight(latest.weightKg, unit)} ${unit}` : '—'}
             </Text>
             <Text style={styles.summaryKey}>Latest weigh-in</Text>
             {delta !== null && delta !== 0 && (
@@ -78,7 +81,7 @@ export default function WeightScreen() {
                   color={delta < 0 ? T.conditioning : T.gold}
                 />
                 <Text style={[styles.deltaText, { color: delta < 0 ? T.conditioning : T.gold }]}>
-                  {Math.abs(delta).toFixed(1)} kg since last
+                  {kgToUnit(Math.abs(delta), unit).toFixed(1)} {unit} since last
                 </Text>
               </View>
             )}
@@ -87,7 +90,7 @@ export default function WeightScreen() {
         renderItem={({ item }) => (
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.rowWeight}>{item.weightKg} kg</Text>
+              <Text style={styles.rowWeight}>{fmtWeight(item.weightKg, unit)} {unit}</Text>
               <Text style={styles.rowMeta}>
                 {formatDate(item.date)}{item.notes ? ` · ${item.notes}` : ''}
               </Text>
@@ -134,19 +137,24 @@ export default function WeightScreen() {
 function AddWeightModal({ onClose }: { onClose: () => void }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+  const { unit } = useUnit();
   const createWeight = useCreateWeightLog();
   const [weight, setWeight] = useState('');
   const [date, setDate] = useState(todayISO());
   const [notes, setNotes] = useState('');
 
   async function handleSave() {
-    const kg = Number(weight);
-    if (!weight.trim() || !Number.isFinite(kg) || kg <= 0) {
-      Alert.alert('Weight required', 'Enter a valid weight in kg.');
+    const entered = Number(weight);
+    if (!weight.trim() || !Number.isFinite(entered) || entered <= 0) {
+      Alert.alert('Weight required', `Enter a valid weight in ${unit}.`);
       return;
     }
     try {
-      await createWeight.mutateAsync({ date, weightKg: kg, notes: notes.trim() || null });
+      await createWeight.mutateAsync({
+        date,
+        weightKg: unitToKg(entered, unit),
+        notes: notes.trim() || null,
+      });
       onClose();
     } catch (err) {
       Alert.alert('Error', (err as Error).message ?? 'Failed to save weigh-in.');
@@ -161,7 +169,7 @@ function AddWeightModal({ onClose }: { onClose: () => void }) {
         <ScrollView keyboardShouldPersistTaps="handled">
           <Text style={styles.sheetTitle}>Log weight</Text>
 
-          <Text style={styles.sheetLabel}>Weight (kg)</Text>
+          <Text style={styles.sheetLabel}>Weight ({unit})</Text>
           <TextInput
             style={styles.sheetInput}
             value={weight}

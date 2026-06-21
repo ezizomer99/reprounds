@@ -6,6 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import type { ExerciseHistoryEntry, StrengthSet } from '@app/shared';
 import { totalVolume } from '@app/shared';
 import { useExerciseHistory, useExercisePRs } from '../../../../src/hooks/useSession';
+import { useUnit } from '../../../../src/units/UnitContext';
+import { fmtWeight, kgToUnit, type WeightUnit } from '../../../../src/units/units';
 import { Sparkline } from '../../../../src/components/Sparkline';
 import { useProGate } from '../../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../../src/theme/colors';
@@ -20,19 +22,19 @@ function formatDate(dateStr: string): { day: string; month: string } {
   };
 }
 
-function formatBestSet(set: StrengthSet | null): string {
+function formatBestSet(set: StrengthSet | null, unit: WeightUnit): string {
   if (!set) return '—';
   const parts: string[] = [];
-  if (set.weight) parts.push(`${set.weight} kg`);
+  if (set.weight) parts.push(`${fmtWeight(set.weight, unit)} ${unit}`);
   if (set.reps) parts.push(`× ${set.reps}`);
   return parts.join(' ') || '—';
 }
 
-function formatSets(sets: StrengthSet[]): string {
+function formatSets(sets: StrengthSet[], unit: WeightUnit): string {
   const done = sets.filter((s) => s.completed);
   if (!done.length) return 'No sets logged';
   const shown = done.slice(0, 3).map((s) => {
-    if (s.weight && s.reps) return `${s.weight}×${s.reps}`;
+    if (s.weight && s.reps) return `${fmtWeight(s.weight, unit)}×${s.reps}`;
     if (s.reps) return `${s.reps} reps`;
     return '—';
   });
@@ -49,6 +51,7 @@ function topWeight(sets: StrengthSet[]): number | null {
 function HistoryRow({ entry, isLast }: { entry: ExerciseHistoryEntry; isLast: boolean }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+  const { unit } = useUnit();
   const { day } = formatDate(entry.date);
   const top = topWeight(entry.entry.sets);
   const vol = totalVolume(entry.entry.sets);
@@ -56,13 +59,13 @@ function HistoryRow({ entry, isLast }: { entry: ExerciseHistoryEntry; isLast: bo
     <View style={[styles.historyRow, !isLast && { borderBottomWidth: 1, borderBottomColor: T.border }]}>
       <Text style={styles.historyDate}>{day}</Text>
       <View style={{ flex: 1 }}>
-        <Text style={styles.historySets}>{formatSets(entry.entry.sets)}</Text>
+        <Text style={styles.historySets}>{formatSets(entry.entry.sets, unit)}</Text>
         {vol > 0 && (
-          <Text style={styles.historyVol}>{Math.round(vol).toLocaleString()} kg volume</Text>
+          <Text style={styles.historyVol}>{Math.round(kgToUnit(vol, unit)).toLocaleString()} {unit} volume</Text>
         )}
       </View>
       {top !== null && (
-        <Text style={styles.historyTop}>{top}<Text style={styles.historyTopUnit}>kg</Text></Text>
+        <Text style={styles.historyTop}>{fmtWeight(top, unit)}<Text style={styles.historyTopUnit}>{unit}</Text></Text>
       )}
     </View>
   );
@@ -74,6 +77,7 @@ export default function ExerciseHistoryScreen() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { isPro, showPaywall } = useProGate();
+  const { unit } = useUnit();
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
 
   const { data: prsData, isLoading: prsLoading } = useExercisePRs(id ?? null);
@@ -168,13 +172,13 @@ export default function ExerciseHistoryScreen() {
                 <View style={styles.prStat}>
                   <Text style={styles.prKey}>Est. 1RM</Text>
                   <Text style={[styles.prVal, styles.prValGold]}>
-                    {prsData.estimatedOneRepMax !== null ? `${prsData.estimatedOneRepMax} kg` : '—'}
+                    {prsData.estimatedOneRepMax !== null ? `${fmtWeight(prsData.estimatedOneRepMax, unit)} ${unit}` : '—'}
                   </Text>
                 </View>
                 <View style={styles.prDivider} />
                 <View style={styles.prStat}>
                   <Text style={styles.prKey}>Best Set</Text>
-                  <Text style={styles.prVal}>{formatBestSet(prsData.bestSet)}</Text>
+                  <Text style={styles.prVal}>{formatBestSet(prsData.bestSet, unit)}</Text>
                 </View>
               </View>
               <Text style={styles.prTotal}>Total sessions: {prsData.totalSessions}</Text>
@@ -185,7 +189,7 @@ export default function ExerciseHistoryScreen() {
             <View style={styles.card}>
               <View style={styles.sparklineHeader}>
                 <Text style={styles.eyebrow}>Top set · last {topWeights.length}</Text>
-                <Text style={styles.sparklineRange}>{sparkMin}–{sparkMax} kg</Text>
+                <Text style={styles.sparklineRange}>{fmtWeight(sparkMin, unit)}–{fmtWeight(sparkMax, unit)} {unit}</Text>
               </View>
               <Sparkline values={topWeights} width={320} height={60} color={T.primary} />
             </View>
@@ -195,7 +199,9 @@ export default function ExerciseHistoryScreen() {
             <View style={styles.card}>
               <View style={styles.sparklineHeader}>
                 <Text style={styles.eyebrow}>Volume · last {volumes.length}</Text>
-                <Text style={styles.sparklineRange}>{volMin.toLocaleString()}–{volMax.toLocaleString()} kg</Text>
+                <Text style={styles.sparklineRange}>
+                  {Math.round(kgToUnit(volMin, unit)).toLocaleString()}–{Math.round(kgToUnit(volMax, unit)).toLocaleString()} {unit}
+                </Text>
               </View>
               <Sparkline values={volumes} width={320} height={60} color={T.gold} />
             </View>
