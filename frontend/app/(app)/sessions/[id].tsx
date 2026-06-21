@@ -418,21 +418,30 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, exerciseType }: {
   const addSet = useAddStrengthSet();
   const updateSet = useUpdateStrengthSet();
   const deleteSet = useDeleteStrengthSet();
+  const { data: history } = useExerciseHistory(entry.exerciseId);
   const restSeconds = entry.restSeconds ?? 120;
   const [menuSet, setMenuSet] = useState<StrengthSet | null>(null);
 
   const warmups = entry.sets.filter((s) => s.setType === 'warmup');
   const working = entry.sets.filter((s) => s.setType !== 'warmup');
 
+  // Last session's working sets, used to autofill when starting fresh.
+  const lastSessionWorking = useMemo(
+    () => (history?.history[0]?.entry.sets ?? []).filter((s) => s.setType !== 'warmup'),
+    [history],
+  );
+
   function handleAddWarmup() {
     addSet.mutate({ sessionId, entryId: entry.id, setNumber: entry.sets.length + 1, setType: 'warmup', completed: false });
   }
 
   function handleAddSet() {
-    const last = working[working.length - 1];
+    // Prefer the previous set in this session; otherwise autofill from the
+    // matching set in the last session so a fresh exercise isn't blank.
+    const source = working[working.length - 1] ?? lastSessionWorking[working.length] ?? null;
     addSet.mutate({
       sessionId, entryId: entry.id, setNumber: entry.sets.length + 1, setType: 'normal',
-      reps: last?.reps ?? null, weight: last?.weight ?? null, completed: false,
+      reps: source?.reps ?? null, weight: source?.weight ?? null, completed: false,
     });
   }
 
