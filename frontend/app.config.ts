@@ -22,6 +22,7 @@ const config: ExpoConfig = {
   plugins: [
     'expo-router',
     'expo-secure-store',
+    'expo-notifications',
     '@react-native-google-signin/google-signin',
   ],
   experiments: {

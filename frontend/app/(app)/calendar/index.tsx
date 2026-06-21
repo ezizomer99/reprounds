@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { CalendarItem, RoutineWithItems } from '@app/shared';
 import { useCalendar } from '../../../src/hooks/useCalendar';
+import { syncSessionReminders } from '../../../src/lib/sessionReminders';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { useRoutines, useSkipOccurrence, useUpdateRoutine } from '../../../src/hooks/useRoutines';
 import { useCreateSession, useDeleteSession } from '../../../src/hooks/useSession';
@@ -379,6 +380,15 @@ export default function CalendarScreen() {
 
   const items: CalendarItem[] = calendarData?.items ?? [];
   const routineList: RoutineWithItems[] = routines ?? [];
+
+  // Keep local reminders in sync with the upcoming planned schedule.
+  useEffect(() => {
+    if (items.length && routineList.length) {
+      void syncSessionReminders(items, routineList);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calendarData, routines]);
+
   const scheduledRoutines = routineList.filter((r) => r.rrule);
   const unscheduledRoutines = routineList.filter((r) => !r.rrule);
 

@@ -46,6 +46,7 @@ import { RoundLogger, BOXING_WEAPONS, MUAY_THAI_WEAPONS } from '../../../src/com
 import { PlateCalculator } from '../../../src/components/PlateCalculator';
 import { useUnit } from '../../../src/units/UnitContext';
 import { fmtWeight, kgToUnit, unitToKg } from '../../../src/units/units';
+import { cancelScheduled, scheduleInSeconds } from '../../../src/lib/notifications';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -1039,9 +1040,36 @@ export default function SessionScreen() {
     return () => clearInterval(intervalId);
   }, [session?.startedAt, session?.status]);
 
+  // Schedule a local notification for when the rest timer ends, so it still
+  // fires (with sound/vibration) if the app is backgrounded.
+  const restNotifId = useRef<string | null>(null);
+  async function armRestNotification(secs: number) {
+    await cancelScheduled(restNotifId.current);
+    restNotifId.current = await scheduleInSeconds(
+      secs,
+      'Rest complete',
+      'Time for your next set.',
+      { kind: 'rest' },
+    );
+  }
+
   function handleSetCompleted(secs: number) {
     setRestTotal(secs);
     setRestSeconds(secs);
+    armRestNotification(secs);
+  }
+
+  function handleRestSkip() {
+    cancelScheduled(restNotifId.current);
+    restNotifId.current = null;
+    setRestSeconds(null);
+  }
+
+  function handleRestAdd() {
+    const next = (restSeconds ?? 0) + 15;
+    setRestTotal((t) => t + 15);
+    setRestSeconds(next);
+    armRestNotification(next);
   }
 
   function handleBack() {
@@ -1206,8 +1234,8 @@ export default function SessionScreen() {
         <RestTimer
           seconds={restSeconds}
           total={restTotal}
-          onSkip={() => setRestSeconds(null)}
-          onAdd={() => { setRestTotal((t) => t + 15); setRestSeconds((s) => (s ?? 0) + 15); }}
+          onSkip={handleRestSkip}
+          onAdd={handleRestAdd}
         />
       )}
 
