@@ -44,7 +44,7 @@
     "tailwindcss": "^3.4.19"
   },
   "devDependencies": {
-    "@babel/core": "^7.25.0",
+    "@babel/core": "^8.0.1",
     "@types/react": "~19.0.14",
     "typescript": "^5.8.3"
   }
