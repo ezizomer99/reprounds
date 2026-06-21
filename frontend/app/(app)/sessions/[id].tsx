@@ -43,6 +43,7 @@ import { useRoutines } from '../../../src/hooks/useRoutines';
 import { RestTimer } from '../../../src/components/RestTimer';
 import { Skeleton } from '../../../src/components/Skeleton';
 import { RoundLogger, BOXING_WEAPONS, MUAY_THAI_WEAPONS } from '../../../src/components/RoundLogger';
+import { PlateCalculator } from '../../../src/components/PlateCalculator';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -350,11 +351,12 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
 
 // ─── Per-set actions menu ─────────────────────────────────────────────────────
 
-function SetActionsMenu({ set, onSetType, onDuplicate, onDelete, onClose }: {
+function SetActionsMenu({ set, onSetType, onDuplicate, onDelete, onPlateMath, onClose }: {
   set: StrengthSet;
   onSetType: (t: SetType) => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  onPlateMath: () => void;
   onClose: () => void;
 }) {
   const { T } = useTheme();
@@ -372,6 +374,10 @@ function SetActionsMenu({ set, onSetType, onDuplicate, onDelete, onClose }: {
             </TouchableOpacity>
           ))}
           <View style={styles.menuDivider} />
+          <TouchableOpacity style={styles.menuItem} onPress={() => { onPlateMath(); onClose(); }}>
+            <Ionicons name="barbell-outline" size={16} color={T.textDim} />
+            <Text style={styles.menuItemText}>Plate math</Text>
+          </TouchableOpacity>
           <TouchableOpacity style={styles.menuItem} onPress={() => { onDuplicate(); onClose(); }}>
             <Ionicons name="copy-outline" size={16} color={T.textDim} />
             <Text style={styles.menuItemText}>Duplicate set</Text>
@@ -421,6 +427,7 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, exerciseType }: {
   const { data: history } = useExerciseHistory(entry.exerciseId);
   const restSeconds = entry.restSeconds ?? 120;
   const [menuSet, setMenuSet] = useState<StrengthSet | null>(null);
+  const [plateWeight, setPlateWeight] = useState<number | null>(null);
 
   const warmups = entry.sets.filter((s) => s.setType === 'warmup');
   const working = entry.sets.filter((s) => s.setType !== 'warmup');
@@ -530,8 +537,13 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, exerciseType }: {
           onSetType={(t) => updateSet.mutate({ sessionId, entryId: entry.id, setId: menuSet.id, setType: t })}
           onDuplicate={() => handleDuplicate(menuSet)}
           onDelete={() => handleDelete(menuSet)}
+          onPlateMath={() => setPlateWeight(menuSet.weight ?? 0)}
           onClose={() => setMenuSet(null)}
         />
+      )}
+
+      {plateWeight !== null && (
+        <PlateCalculator weightKg={plateWeight} onClose={() => setPlateWeight(null)} />
       )}
     </View>
   );
