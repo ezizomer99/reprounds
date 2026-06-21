@@ -1,9 +1,10 @@
 import '../global.css';
-import { QueryClient, onlineManager } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
+import { NativeModules } from 'react-native';
 import { Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
@@ -29,11 +30,19 @@ GoogleSignin.configure({
   iosClientId: process.env.EXPO_PUBLIC_IOS_CLIENT_ID,
 });
 
+// Offline persistence relies on native AsyncStorage + NetInfo modules, which
+// are only present after an EAS build that includes them. Detect them so the
+// app degrades to an in-memory client (instead of crashing) on a dev client
+// that predates these deps.
+const offlineReady = Boolean(NativeModules.RNCAsyncStorage && NativeModules.RNCNetInfo);
+
 // Drive React Query's online state from the device network status so mutations
 // pause while offline and resume on reconnect.
-onlineManager.setEventListener((setOnline) =>
-  NetInfo.addEventListener((state) => setOnline(Boolean(state.isConnected))),
-);
+if (offlineReady) {
+  onlineManager.setEventListener((setOnline) =>
+    NetInfo.addEventListener((state) => setOnline(Boolean(state.isConnected))),
+  );
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -59,7 +68,9 @@ const queryClient = new QueryClient({
   },
 });
 
-const asyncPersister = createAsyncStoragePersister({ storage: AsyncStorage });
+const asyncPersister = offlineReady
+  ? createAsyncStoragePersister({ storage: AsyncStorage })
+  : null;
 
 function AppShell() {
   const { isDark } = useTheme();
@@ -84,24 +95,32 @@ export default function RootLayout() {
 
   if (!fontsLoaded) return null;
 
+  const tree = (
+    <ThemeProvider>
+      <UnitProvider>
+        <SubscriptionProvider>
+          <AppShell />
+        </SubscriptionProvider>
+      </UnitProvider>
+    </ThemeProvider>
+  );
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <PersistQueryClientProvider
-        client={queryClient}
-        persistOptions={{ persister: asyncPersister, maxAge: 24 * 60 * 60_000 }}
-        onSuccess={() => {
-          // Replay any mutations that were paused while offline.
-          void queryClient.resumePausedMutations();
-        }}
-      >
-        <ThemeProvider>
-          <UnitProvider>
-            <SubscriptionProvider>
-              <AppShell />
-            </SubscriptionProvider>
-          </UnitProvider>
-        </ThemeProvider>
-      </PersistQueryClientProvider>
+      {asyncPersister ? (
+        <PersistQueryClientProvider
+          client={queryClient}
+          persistOptions={{ persister: asyncPersister, maxAge: 24 * 60 * 60_000 }}
+          onSuccess={() => {
+            // Replay any mutations that were paused while offline.
+            void queryClient.resumePausedMutations();
+          }}
+        >
+          {tree}
+        </PersistQueryClientProvider>
+      ) : (
+        <QueryClientProvider client={queryClient}>{tree}</QueryClientProvider>
+      )}
     </GestureHandlerRootView>
   );
 }
