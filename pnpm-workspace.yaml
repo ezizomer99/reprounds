@@ -5,6 +5,7 @@ packages:
 nodeLinker: hoisted
 overrides:
   undici@<6.27.0: ^6.27.0
+  '@babel/core@>=8': ^7.29.7
 allowBuilds:
   esbuild: true
   sharp: true
