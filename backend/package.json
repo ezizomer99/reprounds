@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "node ../node_modules/wrangler/bin/wrangler.js dev",
-    "deploy": "node ../node_modules/wrangler/bin/wrangler.js deploy",
+    "deploy": "pnpm run db:migrate && node ../node_modules/wrangler/bin/wrangler.js deploy",
+    "deploy:no-migrate": "node ../node_modules/wrangler/bin/wrangler.js deploy",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx --env-file=../.env src/db/seed.ts",

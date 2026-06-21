@@ -66,6 +66,19 @@ pnpm --filter backend db:seed       # seed global defaults
 
 ---
 
+## Deploy
+
+```bash
+pnpm --filter backend deploy   # runs db:migrate against Neon, THEN wrangler deploy
+```
+
+The Worker is deployed manually — there is no CI deploy. `deploy` **always applies pending Drizzle migrations to production before publishing the Worker**, so schema-dependent code never ships ahead of the database. (Skipping this is how a missing `notes` column once broke `GET /sessions/:id` in prod while the session list kept working.)
+
+- The migrate step reads `DATABASE_URL` from the root `.env` via `drizzle.config.ts` — same as `db:migrate`.
+- Migrate-before-deploy is correct for **additive** migrations (new column/table). For a **destructive** change (drop/rename a column the live code still reads), deploy the new code first, then migrate — use `pnpm --filter backend deploy:no-migrate` followed by `pnpm --filter backend db:migrate`.
+
+---
+
 ## Specialized agents (`.claude/agents/`)
 
 Invoke these for deep domain work:
