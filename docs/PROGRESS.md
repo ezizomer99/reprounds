@@ -1,6 +1,6 @@
 # Glima — Build Progress
 
-*Last updated: 2026-06-14*
+*Last updated: 2026-06-21*
 
 ---
 
@@ -9,12 +9,18 @@
 | # | Phase | Status |
 |---|-------|--------|
 | 0 | Scaffold | Complete |
-| 1 | Auth | Complete |
-| 2 | Libraries | Complete |
-| 3 | Templates | Complete |
-| 4 | Logging | Not started |
-| 5 | Calendar + Recurrence | Not started |
-| 6 | History + Stats | Not started |
+| 1 | Auth (Google + guest) | Complete |
+| 2 | Libraries (exercises + disciplines) | Complete |
+| 3 | Routines/Templates | Complete |
+| 4 | Logging (sessions/entries/sets) | Complete |
+| 5 | Calendar + Recurrence (RRULE) | Complete |
+| 6 | History + Stats | Complete |
+| 7 | Subscriptions (RevenueCat / Pro gating) | Complete |
+| 8 | Differentiation & polish | In progress |
+
+The original MVP (Phases 0–6) plus subscriptions all ship. Phase 8 is a
+polish + differentiation round tracked on the GitHub project board
+(perceived-speed fixes, combat-sports logging, lifter tooling, engagement).
 
 ---
 
@@ -23,134 +29,51 @@
 ### Backend
 Deployed to `https://glima-api.oemerdigital.workers.dev`. All routes prefixed `/v1/`.
 
-| Method | Path | Notes |
-|--------|------|-------|
-| POST | /auth/google | Google ID token → session JWT |
-| GET | /auth/me | Current user |
-| GET | /exercises | `?type=&search=` filters |
-| POST | /exercises | |
-| PATCH | /exercises/:id | |
-| DELETE | /exercises/:id | |
-| GET | /disciplines | |
-| POST | /disciplines | |
-| PATCH | /disciplines/:id | |
-| DELETE | /disciplines/:id | |
-| GET | /templates | With items + resolved names |
-| POST | /templates | Accepts initial items array |
-| PATCH | /templates/:id | Metadata only |
-| DELETE | /templates/:id | |
-| POST | /templates/:id/items | |
-| DELETE | /templates/:id/items/:itemId | |
-| PUT | /templates/:id/items/order | Reorder by ID array |
+| Area | Routes |
+|------|--------|
+| Auth | `POST /auth/guest`, `POST /auth/google` (with guest→user migration), `GET /auth/me` |
+| Exercises | `GET/POST /exercises`, `PATCH/DELETE /exercises/:id`, `GET /exercises/:id/history`, `GET /exercises/:id/prs` |
+| Disciplines | `GET/POST /disciplines`, `PATCH/DELETE /disciplines/:id`, `GET /disciplines/:id/history` |
+| Partners | `GET/POST /partners`, `PATCH/DELETE /partners/:id` |
+| Fights | `GET/POST /fights`, `PATCH/DELETE /fights/:id` |
+| Promotions | `GET/POST /promotions`, `DELETE /promotions/:id` |
+| Weights | `GET/POST /weights`, `DELETE /weights/:id` |
+| Routines | `GET/POST /routines`, `PATCH/DELETE /routines/:id`, `POST /routines/:id/skip`, item add/update/delete/reorder |
+| Sessions | `GET/POST /sessions`, `GET/PATCH/DELETE /sessions/:id`, `POST /sessions/:id/complete`, entries + sets CRUD |
+| Calendar | `GET /calendar?from=&to=` — merges real sessions + server-side RRULE projections |
 
-### Frontend screens
-
-| Screen | Description |
-|--------|-------------|
-| `/(auth)/sign-in` | Google Sign-In |
-| `/(app)/index` | Home/dashboard with nav to Library and Templates |
-| `/(app)/library/exercises` | List with search, type filter, create, delete |
-| `/(app)/library/disciplines` | List with category filter, create, delete |
-| `/(app)/templates/index` | Template list, long-press to delete |
-| `/(app)/templates/[id]` | Editor — create new (`id=new`) or edit existing; add/remove gym + MA items |
-
-### Frontend hooks
-
-| File | Exports |
-|------|---------|
-| `useAuth.ts` | `useCurrentUser` |
-| `useExercises.ts` | `useExercises`, `useCreateExercise`, `useUpdateExercise`, `useDeleteExercise` |
-| `useDisciplines.ts` | `useDisciplines`, `useCreateDiscipline`, `useDeleteDiscipline` |
-| `useTemplates.ts` | `useTemplates`, `useCreateTemplate`, `useUpdateTemplate`, `useDeleteTemplate`, `useAddTemplateItem`, `useRemoveTemplateItem`, `useReorderTemplateItems` |
+### Frontend (Expo Router)
+Tabs: **Workout** (home with weekly strip + streak), **Exercises**, **Stats**,
+**Martial Arts**, **Profile**. Plus: session logger (`/sessions/[id]` — strength
+sets with optimistic logging, rest timer, supersets, plate calculator, and a
+category-aware martial-arts round logger), routine editor, calendar, history,
+per-exercise history (PRs / est. 1RM / volume trend), discipline detail
+(session history + fight record + belt progression), body-weight screen,
+subscription/paywall, and settings (theme + kg/lbs unit toggle).
 
 ### Shared package
-
-- **Enums**: `ActivityType`, `EntryKind`, `DisciplineCat`, `SessionStatus`, `SetType`, `GiType`
-- **FieldConfig**: `FieldType`, `FieldDef` (discriminated union), `FieldConfig`
-- **Models**: `User`, `Exercise`, `Discipline`, `Template`, `TemplateItem`, `TemplateItemWithDetails`, `TemplateWithItems`, `ScheduleRule`, `Session`, `SessionEntry`, `StrengthSet`, `CalendarItem`
-- **Request/response types**: All types through Phase 3 (exercises, disciplines, templates)
-- **Calculators**: `estimatedOneRepMax` (Epley formula), `bestSet`
+- **Enums**: activity/entry/discipline/session/set/gi, plus `FightResult`, `FightMethod`
+- **FieldConfig** engine for data-driven discipline forms
+- **Rounds model** (`rounds.ts`): category-aware grappling/striking/MMA round sessions + `isRoundsSession`
+- **Models**: users, exercises, disciplines, partners, fights, rank promotions, weight logs, routines, sessions, entries, sets, calendar
+- **Calculators**: `estimatedOneRepMax` (Epley), `bestSet`, `setVolume`/`totalVolume`
 
 ### Database
+Migrations `0000`–`0012`. Tables: `users`, `exercises`, `disciplines`,
+`partners`, `fights`, `rank_promotions`, `weight_logs`, `routines`,
+`routine_items`, `sessions`, `session_entries`, `strength_sets`.
+(`schedule_rules` were merged into `routines` in migration `0001`.)
 
-Single migration `0000_curvy_whizzer.sql` — all 9 tables in place:
-`users`, `exercises`, `disciplines`, `templates`, `template_items`, `schedule_rules`, `sessions`, `session_entries`, `strength_sets`
-
-**Seed** (`db:seed`): 7 strength exercises, 5 conditioning exercises, 1 discipline (BJJ with full fieldConfig).
-
----
-
-## What's missing
-
-### Phase 4 — Logging
-
-**Backend** — new route file `sessions.ts`:
-
-| Method | Path |
-|--------|------|
-| GET | /sessions/:id (with entries + sets) |
-| POST | /sessions |
-| PATCH | /sessions/:id |
-| DELETE | /sessions/:id |
-| POST | /sessions/:id/complete |
-
-**Shared** — new types:
-- `CreateSessionRequest`, `UpdateSessionRequest`, `SessionWithEntries`, `SessionListResponse`
-- `CreateSessionEntryRequest`, `SessionEntryWithSets`
-- `CreateStrengthSetRequest`
-
-**Frontend** — new screens:
-- Session logger — start from template or ad-hoc
-- Strength entry — per-set logging (set type, reps, weight, RPE/RIR), "last time" inline, rest timer
-- Conditioning entry — rounds/duration via `details`
-- Martial arts entry — dynamic form driven by `discipline.fieldConfig`
+**Seed** (`db:seed`): global exercises + disciplines (BJJ, Boxing, Muay Thai,
+MMA, Wrestling) with category-appropriate field templates.
 
 ---
 
-### Phase 5 — Calendar + Recurrence
+## What's missing (Phase 8 remainder)
 
-**Backend** — two new route files:
+These require a native dependency and on-device verification (not yet built):
 
-| Method | Path | Notes |
-|--------|------|-------|
-| GET | /schedule-rules | |
-| POST | /schedule-rules | |
-| PATCH | /schedule-rules/:id | `?mode=single\|following\|all` |
-| DELETE | /schedule-rules/:id | `?mode=single\|following\|all` |
-| GET | /calendar | `?from=&to=` — merges real sessions + RRULE projections |
-
-RRULE projection is server-side only (per spec). Needs an RRULE library in the backend package.
-
-**Shared** — new types:
-- `CreateScheduleRuleRequest`, `UpdateScheduleRuleRequest`
-- `CalendarResponse`
-
-**Frontend** — new screens:
-- Calendar screen — week/month view of planned + completed sessions
-- Schedule rule create/edit sheet
-- "Edit recurring event" modal with three modes: this one / this & following / all
-
----
-
-### Phase 6 — History + Stats
-
-**Backend** — two new endpoints (can add to `exercises.ts`):
-
-| Method | Path |
-|--------|------|
-| GET | /exercises/:id/history |
-| GET | /exercises/:id/prs |
-
-**Frontend** — new screens:
-- Session history list
-- Per-exercise history (progression, best sets)
-- PR/est. 1RM display (calculator already exists in shared)
-
----
-
-## Minor gaps (can be done alongside any phase)
-
-- `useUpdateDiscipline` hook missing (backend PATCH endpoint exists)
-- No edit UI on exercises screen (PATCH endpoint exists, delete-only UI)
-- Template editor has no drag-to-reorder UI (PUT endpoint exists)
-- Seed only has BJJ — could add Muay Thai, Judo, etc. (zero code change, just more rows)
+- **Local notifications** for calendar-scheduled sessions (`expo-notifications`).
+- **Background-safe rest timer** with sound/vibration on completion.
+- **Offline logging queue** — persist pending mutations and sync on reconnect
+  (React Query persistence + AsyncStorage).
