@@ -159,6 +159,7 @@ export const strengthSets = pgTable('strength_sets', {
   rpe:             numeric('rpe'),
   rir:             integer('rir'),
   completed:       boolean('completed').notNull().default(false),
+  notes:           text('notes'),
 }, (t) => ({
   sessionEntryIdIdx: index('strength_sets_session_entry_id_idx').on(t.sessionEntryId),
 }));

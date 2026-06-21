@@ -214,6 +214,7 @@ function mapSet(row: typeof strengthSets.$inferSelect): StrengthSet {
     rpe: row.rpe !== null ? Number(row.rpe) : null,
     rir: row.rir,
     completed: row.completed,
+    notes: row.notes,
   };
 }
 
@@ -314,6 +315,7 @@ exerciseRoutes.get('/:id/prs', async (c) => {
       rpe: strengthSets.rpe,
       rir: strengthSets.rir,
       completed: strengthSets.completed,
+      notes: strengthSets.notes,
       sessionId: sessions.id,
     })
     .from(strengthSets)

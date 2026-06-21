@@ -186,6 +186,7 @@ export interface StrengthSet {
   rpe: number | null;
   rir: number | null;
   completed: boolean;
+  notes: string | null;
 }
 
 export type CalendarItem =
@@ -392,6 +393,7 @@ export interface CreateStrengthSetRequest {
   rpe?: number | null;
   rir?: number | null;
   completed?: boolean;
+  notes?: string | null;
 }
 
 export interface UpdateStrengthSetRequest {
@@ -401,6 +403,7 @@ export interface UpdateStrengthSetRequest {
   rpe?: number | null;
   rir?: number | null;
   completed?: boolean;
+  notes?: string | null;
 }
 
 export interface SessionEntryWithSets extends SessionEntry {

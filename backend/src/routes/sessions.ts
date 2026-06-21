@@ -214,6 +214,7 @@ function mapSet(row: typeof strengthSets.$inferSelect): StrengthSet {
     rpe: row.rpe !== null ? Number(row.rpe) : null,
     rir: row.rir,
     completed: row.completed,
+    notes: row.notes,
   };
 }
 
@@ -511,6 +512,21 @@ sessionRoutes.post('/:id/entries', async (c) => {
   const kindErr = validateEntryKind(body);
   if (kindErr) return c.json({ error: kindErr }, 400);
 
+  // A session is either weightlifting or martial arts — never both. Reject an
+  // entry whose kind disagrees with entries already in the session.
+  const [existingKind] = await db
+    .select({ kind: sessionEntries.kind })
+    .from(sessionEntries)
+    .where(eq(sessionEntries.sessionId, sessionId))
+    .limit(1);
+
+  if (existingKind && existingKind.kind !== body.kind) {
+    return c.json(
+      { error: 'A session cannot mix weightlifting and martial arts entries.' },
+      400,
+    );
+  }
+
   const [maxRow] = await db
     .select({ maxOrder: max(sessionEntries.orderIndex) })
     .from(sessionEntries)
@@ -630,6 +646,7 @@ sessionRoutes.post('/:id/entries/:entryId/sets', async (c) => {
       rpe: body.rpe !== undefined && body.rpe !== null ? String(body.rpe) : null,
       rir: body.rir ?? null,
       completed: body.completed ?? false,
+      notes: body.notes ?? null,
     })
     .returning();
 
@@ -686,6 +703,7 @@ sessionRoutes.patch('/:id/entries/:entryId/sets/:setId', async (c) => {
   }
   if ('rir' in body) updates.rir = body.rir ?? null;
   if (body.completed !== undefined) updates.completed = body.completed;
+  if ('notes' in body) updates.notes = body.notes ?? null;
 
   if (Object.keys(updates).length > 0) {
     await db

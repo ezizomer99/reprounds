@@ -1,0 +1,1 @@
+ALTER TABLE "strength_sets" ADD COLUMN "notes" text;
