@@ -10,13 +10,23 @@
     "development": {
       "extends": "base",
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://reprounds-api.oemerdigital.workers.dev",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "548195273503-nd3fenok612m32b255r54852qccsjk3u.apps.googleusercontent.com",
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "REPLACE_WITH_REVENUECAT_ANDROID_SDK_KEY"
+      }
     },
     "preview": {
       "extends": "base",
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://reprounds-api.oemerdigital.workers.dev",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "548195273503-nd3fenok612m32b255r54852qccsjk3u.apps.googleusercontent.com",
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "REPLACE_WITH_REVENUECAT_ANDROID_SDK_KEY"
       }
     },
     "production": {
@@ -24,6 +34,11 @@
       "autoIncrement": true,
       "android": {
         "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://REPLACE_WITH_PROD_API_ORIGIN",
+        "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "548195273503-nd3fenok612m32b255r54852qccsjk3u.apps.googleusercontent.com",
+        "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "REPLACE_WITH_REVENUECAT_ANDROID_SDK_KEY"
       }
     }
   },
@@ -31,7 +46,7 @@
     "production": {
       "android": {
         "serviceAccountKeyPath": "./google-play-key.json",
-        "track": "internal"
+        "track": "alpha"
       }
     }
   }

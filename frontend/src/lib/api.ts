@@ -1,6 +1,5 @@
 import { getSessionToken } from './auth';
-
-const API_BASE_URL = 'https://reprounds-api.oemerdigital.workers.dev/v1';
+import { API_BASE_URL } from './config';
 
 async function buildHeaders(includeAuth: boolean): Promise<HeadersInit> {
   const headers: Record<string, string> = {
