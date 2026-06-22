@@ -1,0 +1,50 @@
+name: Release mobile
+
+# Builds the production Android AAB on EAS and submits it to Google Play.
+# Triggered deliberately by pushing a version tag (e.g. `git tag v1.0.0 && git push --tags`)
+# so app releases are intentional rather than on every merge.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  android:
+    name: EAS build & submit (Android)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.6.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.1
+          cache: pnpm
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Decode Google Play service account key
+        run: echo "${{ secrets.GOOGLE_PLAY_KEY_BASE64 }}" | base64 -d > frontend/google-play-key.json
+
+      - name: Build production AAB on EAS
+        working-directory: frontend
+        run: eas build --profile production --platform android --non-interactive --wait
+
+      - name: Submit latest build to Google Play
+        working-directory: frontend
+        run: eas submit --profile production --platform android --latest --non-interactive
+
+      - name: Remove service account key
+        if: always()
+        run: rm -f frontend/google-play-key.json

@@ -10,3 +10,7 @@ android/
 data/
 .claude/settings.json
 .claude/settings.local.json
+
+# Google Play service account key (decoded transiently in CI; never commit)
+google-play-key.json
+**/google-play-key.json
