@@ -10,10 +10,13 @@
     "dev:frontend": "pnpm --filter frontend start",
     "db:generate": "pnpm --filter backend db:generate",
     "db:migrate": "pnpm --filter backend db:migrate",
-    "db:seed": "pnpm --filter backend db:seed"
+    "db:seed": "pnpm --filter backend db:seed",
+    "test": "pnpm -r --if-present test",
+    "typecheck": "pnpm -r --if-present typecheck"
   },
   "devDependencies": {
     "typescript": "^5.5.0",
+    "vitest": "^3.2.4",
     "wrangler": "^4.103.0"
   }
 }
