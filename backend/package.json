@@ -8,6 +8,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "deploy": "pnpm run db:migrate && node ../node_modules/wrangler/bin/wrangler.js deploy",
     "deploy:no-migrate": "node ../node_modules/wrangler/bin/wrangler.js deploy",
+    "deploy:production": "pnpm run db:migrate && node ../node_modules/wrangler/bin/wrangler.js deploy --env production",
+    "deploy:production:no-migrate": "node ../node_modules/wrangler/bin/wrangler.js deploy --env production",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:seed": "tsx --env-file=../.env src/db/seed.ts",
