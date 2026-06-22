@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "node ../node_modules/wrangler/bin/wrangler.js dev",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
     "deploy": "pnpm run db:migrate && node ../node_modules/wrangler/bin/wrangler.js deploy",
     "deploy:no-migrate": "node ../node_modules/wrangler/bin/wrangler.js deploy",
     "db:generate": "drizzle-kit generate",
