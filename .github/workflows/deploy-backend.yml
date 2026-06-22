@@ -1,0 +1,50 @@
+name: Deploy backend
+
+# Deploys the Cloudflare Worker to the production environment on merge to main.
+# Preserves the migrate-before-deploy invariant (see CLAUDE.md): additive
+# migrations are applied to the prod Neon DB *before* the new Worker ships.
+#
+# For a DESTRUCTIVE migration (drop/rename a column live code still reads), do NOT
+# rely on this workflow — deploy the new code first, then migrate manually:
+#   pnpm --filter backend deploy:production:no-migrate
+#   DATABASE_URL=<prod> pnpm --filter backend db:migrate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'shared/**'
+      - '.github/workflows/deploy-backend.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Migrate prod DB & deploy Worker
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.6.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.1
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Migrate then deploy (production)
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: pnpm --filter backend deploy:production
