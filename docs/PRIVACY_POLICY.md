@@ -112,5 +112,5 @@ above and, for material changes, provide notice within the app.
 
 ## Contact
 
-[YOUR LEGAL NAME / DEVELOPER NAME]
-Email: **[CONTACT EMAIL]**
+Eziz Ømer
+Email: oemerdigital@gmail.com
