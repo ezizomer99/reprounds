@@ -22,9 +22,10 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
 import { UnitProvider } from '../src/units/UnitContext';
 import { SubscriptionProvider } from '../src/context/SubscriptionContext';
+import { GOOGLE_WEB_CLIENT_ID } from '../src/lib/config';
 
 GoogleSignin.configure({
-  webClientId: '548195273503-nd3fenok612m32b255r54852qccsjk3u.apps.googleusercontent.com',
+  webClientId: GOOGLE_WEB_CLIENT_ID,
   iosClientId: process.env.EXPO_PUBLIC_IOS_CLIENT_ID,
 });
 
