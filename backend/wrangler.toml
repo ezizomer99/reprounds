@@ -18,3 +18,26 @@ id = "db7f181b10b5414c9b28ef51aa37cee3"
 [[r2_buckets]]
 binding = "EXERCISES_BUCKET"
 bucket_name = "ma-fitness-exercises"
+
+# ---------------------------------------------------------------------------
+# Production environment — deploy with `wrangler deploy --env production`.
+# Bindings/vars do NOT inherit from the top level, so they are re-declared here.
+# Set secrets separately: `wrangler secret put JWT_SECRET --env production`
+#                         `wrangler secret put GOOGLE_CLIENT_ID --env production`
+# ---------------------------------------------------------------------------
+[env.production]
+name = "reprounds-api-prod"
+
+[env.production.vars]
+# Real pub-<hash>.r2.dev URL (or custom domain) for the prod bucket.
+R2_PUBLIC_BASE_URL = "https://pub-REPLACE_ME.r2.dev"
+
+# Dedicated PROD Hyperdrive config pointing at the production Neon database.
+# Create it (`wrangler hyperdrive create ...`) and paste its id below.
+[[env.production.hyperdrive]]
+binding = "HYPERDRIVE"
+id = "REPLACE_WITH_PROD_HYPERDRIVE_ID"
+
+[[env.production.r2_buckets]]
+binding = "EXERCISES_BUCKET"
+bucket_name = "ma-fitness-exercises"
