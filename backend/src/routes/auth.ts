@@ -154,4 +154,18 @@ authRoutes.get('/me', authMiddleware, async (c) => {
   return c.json({ user: toUserShape(dbUser) });
 });
 
+// ── Delete account (and all associated data) ───────────────────────────────
+// Required by Google Play for apps with account creation. Every user-owned table
+// FKs to users.id with onDelete: 'cascade', so deleting the user row removes all
+// of their exercises, disciplines, partners, routines, sessions, sets, weight
+// logs, fights and promotions in one shot.
+authRoutes.delete('/me', authMiddleware, async (c) => {
+  const userId = c.get('userId');
+  const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+
+  await db.delete(users).where(eq(users.id, userId));
+
+  return c.body(null, 204);
+});
+
 export { authRoutes };
