@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import type { User } from '@app/shared';
-import { apiGet, apiPost } from '../lib/api';
+import { apiGet, apiPost, apiDelete } from '../lib/api';
 import {
   clearSessionToken,
   setSessionToken,
@@ -82,4 +82,20 @@ export function useSignOut() {
   }
 
   return { signOut };
+}
+
+export function useDeleteAccount() {
+  const queryClient = useQueryClient();
+
+  // Permanently deletes the account server-side, then clears all local session
+  // state — mirrors signOut so the device is left in a clean signed-out state.
+  async function deleteAccount(): Promise<void> {
+    await apiDelete('/auth/me');
+    await clearSessionToken();
+    await clearGuestData();
+    try { await GoogleSignin.signOut(); } catch { /* ignore if not signed in via Google */ }
+    queryClient.clear();
+  }
+
+  return { deleteAccount };
 }

@@ -13,7 +13,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { statusCodes } from '@react-native-google-signin/google-signin';
-import { useCurrentUser, useSignIn, useSignOut } from '../../../src/hooks/useAuth';
+import { useCurrentUser, useSignIn, useSignOut, useDeleteAccount } from '../../../src/hooks/useAuth';
 import { useSessions } from '../../../src/hooks/useSession';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
@@ -55,7 +55,9 @@ export default function ProfileTab() {
   const { data: sessions } = useSessions('completed');
   const { signInWithGoogle } = useSignIn();
   const { signOut } = useSignOut();
+  const { deleteAccount } = useDeleteAccount();
   const [googleLinking, setGoogleLinking] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const isGuest = user?.isGuest ?? false;
   const completedCount = sessions?.length ?? 0;
@@ -74,6 +76,43 @@ export default function ProfileTab() {
         },
       },
     ]);
+  }
+
+  function handleDeleteAccount() {
+    Alert.alert(
+      'Delete account',
+      'This permanently deletes your account and all your workouts, sessions, body weight, and training data. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert(
+              'Are you absolutely sure?',
+              'All of your data will be permanently erased. This action is irreversible.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete account',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setDeleting(true);
+                    try {
+                      await deleteAccount();
+                      router.replace('/(auth)/sign-in' as never);
+                    } catch {
+                      Alert.alert('Delete failed', 'Could not delete your account. Please try again.');
+                    } finally {
+                      setDeleting(false);
+                    }
+                  },
+                },
+              ],
+            ),
+        },
+      ],
+    );
   }
 
   async function handleLinkGoogle() {
@@ -230,6 +269,20 @@ export default function ProfileTab() {
           <Ionicons name="log-out-outline" size={16} color={T.danger} />
           <Text style={styles.signOutText}>{isGuest ? 'Exit Guest Mode' : 'Sign Out'}</Text>
         </TouchableOpacity>
+
+        {/* Delete account (required by Google Play for account-based apps) */}
+        <TouchableOpacity
+          style={styles.deleteBtn}
+          onPress={handleDeleteAccount}
+          disabled={deleting}
+          activeOpacity={0.7}
+        >
+          {deleting ? (
+            <ActivityIndicator size="small" color={T.danger} />
+          ) : (
+            <Text style={styles.deleteText}>Delete account</Text>
+          )}
+        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -381,5 +434,14 @@ function makeStyles(T: ThemeColors) {
       marginTop: 8,
     },
     signOutText: { fontFamily: F.uiMed, fontSize: 15, color: T.danger },
+
+    // Delete account
+    deleteBtn: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 12,
+      marginTop: 2,
+    },
+    deleteText: { fontFamily: F.uiMed, fontSize: 13, color: T.muted },
   });
 }
