@@ -9,7 +9,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 # Replace with the actual pub-<hash>.r2.dev URL after enabling public access on the bucket
-R2_PUBLIC_BASE_URL = "https://pub-REPLACE_ME.r2.dev"
+R2_PUBLIC_BASE_URL = "https://pub-37f8c20e70eb48089923fa13413cc2c5.r2.dev"
 
 [[hyperdrive]]
 binding = "HYPERDRIVE"
@@ -30,13 +30,13 @@ name = "reprounds-api-prod"
 
 [env.production.vars]
 # Real pub-<hash>.r2.dev URL (or custom domain) for the prod bucket.
-R2_PUBLIC_BASE_URL = "https://pub-REPLACE_ME.r2.dev"
+R2_PUBLIC_BASE_URL = "https://pub-37f8c20e70eb48089923fa13413cc2c5.r2.dev"
 
 # Dedicated PROD Hyperdrive config pointing at the production Neon database.
 # Create it (`wrangler hyperdrive create ...`) and paste its id below.
 [[env.production.hyperdrive]]
 binding = "HYPERDRIVE"
-id = "REPLACE_WITH_PROD_HYPERDRIVE_ID"
+id = "f9e92cd1b44d4b95ad25237042c5fd32"
 
 [[env.production.r2_buckets]]
 binding = "EXERCISES_BUCKET"
