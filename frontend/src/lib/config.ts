@@ -7,7 +7,7 @@
 
 const DEV_API_ORIGIN = 'https://reprounds-api.oemerdigital.workers.dev';
 const DEV_GOOGLE_WEB_CLIENT_ID =
-  '548195273503-nd3fenok612m32b255r54852qccsjk3u.apps.googleusercontent.com';
+  '548195273503-mkd114c10dkhhv90621j2o019pdkgvkm.apps.googleusercontent.com';
 
 /** Origin of the API (no trailing slash, no version segment). */
 export function resolveApiOrigin(env: Record<string, string | undefined> = process.env): string {
