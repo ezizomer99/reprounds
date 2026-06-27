@@ -1,6 +1,6 @@
 # RepRounds — Build Progress
 
-*Last updated: 2026-06-21*
+*Last updated: 2026-06-27*
 
 ---
 
@@ -66,6 +66,20 @@ Migrations `0000`–`0012`. Tables: `users`, `exercises`, `disciplines`,
 
 **Seed** (`db:seed`): global exercises + disciplines (BJJ, Boxing, Muay Thai,
 MMA, Wrestling) with category-appropriate field templates.
+
+---
+
+## Google Play launch checklist (as of 2026-06-27)
+
+| § | Item | Status | Notes |
+|---|------|--------|-------|
+| 1 | GitHub secrets & branch protection | ✅ | All secrets added except `GOOGLE_PLAY_KEY_BASE64` (after §6); `production` env created; `main` branch protection rule in place |
+| 2 | Neon production database | ✅ | Prod DB exists (Hyperdrive wired in prev session); `PROD_DATABASE_URL` added to GitHub secrets |
+| 3 | Cloudflare prod Worker, Hyperdrive, R2 | ✅ | Done in prev session |
+| 4 | Google Cloud OAuth | ✅ | Android client verified (correct SHA-1 + package); consent screen Published + privacy policy URL added; `GOOGLE_CLIENT_ID` Wrangler secret updated to Web client on both dev + prod; `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` fixed to Web client (`mkd1…`) in all EAS profiles — **still need to add Play App Signing SHA-1 to Android OAuth client after §6** |
+| 5 | RevenueCat + Play subscriptions | ⬜ | RevenueCat pricing tiers not configured yet; needs Play app (§6) first |
+| 6 | Google Play Console — create app + store listing | ⬜ | Not started |
+| 7 | Closed testing (14-day gate) | ⬜ | Not started; this is the long pole |
 
 ---
 
