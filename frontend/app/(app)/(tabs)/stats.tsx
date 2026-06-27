@@ -110,7 +110,7 @@ export default function StatsTab() {
   );
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}>
+    <View style={styles.screen}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Stats</Text>
       </View>

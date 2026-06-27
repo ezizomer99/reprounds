@@ -252,7 +252,7 @@ export default function MatTab() {
   const list = disciplines ?? [];
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}>
+    <View style={styles.screen}>
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Martial Arts</Text>

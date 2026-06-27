@@ -68,4 +68,12 @@ export const F = {
   mono:      'JetBrainsMono_500Medium',
   monoBold:  'JetBrainsMono_600SemiBold',
   wordmark:  'BricolageGrotesque_800ExtraBold',
+  brand:     'Archivo_800ExtraBold',
+} as const;
+
+export const BRAND = {
+  ink:       '#17140F',
+  vermilion: '#D8432A',
+  cream:     '#EBE0CC',
+  bone:      '#F4F0E7',
 } as const;

@@ -18,6 +18,7 @@ import {
   JetBrainsMono_600SemiBold,
 } from '@expo-google-fonts/jetbrains-mono';
 import { BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque';
+import { Archivo_800ExtraBold } from '@expo-google-fonts/archivo';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
 import { UnitProvider } from '../src/units/UnitContext';
@@ -98,6 +99,7 @@ export default function RootLayout() {
     JetBrainsMono_500Medium,
     JetBrainsMono_600SemiBold,
     BricolageGrotesque_800ExtraBold,
+    Archivo_800ExtraBold,
   });
 
   if (!fontsLoaded) return null;

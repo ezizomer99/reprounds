@@ -69,7 +69,7 @@ export default function JournalTab() {
   }
 
   return (
-    <View style={[styles.screen, { paddingTop: insets.top }]}>
+    <View style={styles.screen}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Journal</Text>
         {list.length > 0 && (

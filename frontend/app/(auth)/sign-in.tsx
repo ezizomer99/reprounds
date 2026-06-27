@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { statusCodes } from '@react-native-google-signin/google-signin';
 import { useState, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { RepRoundsMark } from '../../src/components/RepRoundsMark';
+import { RepRoundsLockup } from '../../src/components/RepRoundsLockup';
 import { useSignIn } from '../../src/hooks/useAuth';
 import { F, R, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
@@ -11,7 +11,7 @@ import { useTheme } from '../../src/theme/ThemeContext';
 export default function SignInScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { T } = useTheme();
+  const { T, isDark } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { signInWithGoogle, signInAsGuest } = useSignIn();
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -59,10 +59,8 @@ export default function SignInScreen() {
   return (
     <View style={[styles.container, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
       <View style={styles.lockup}>
-        <RepRoundsMark size={72} color={T.text} />
-        <View style={styles.rule} />
-        <Text style={styles.wordmark}>REPROUNDS</Text>
-        <Text style={styles.tagline}>Martial Arts & Workout Log</Text>
+        <RepRoundsLockup size="lg" onDark={isDark} />
+        <Text style={styles.tagline}>Strength · Rounds · One Log</Text>
       </View>
 
       <View style={styles.bottom}>
@@ -115,28 +113,14 @@ function makeStyles(T: ThemeColors) {
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 16,
-    },
-    rule: {
-      width: 32,
-      height: 1,
-      backgroundColor: T.text,
-      opacity: 0.18,
-    },
-    wordmark: {
-      fontFamily: F.wordmark,
-      fontSize: 52,
-      color: T.text,
-      letterSpacing: 12,
-      paddingLeft: 12,
+      gap: 20,
     },
     tagline: {
-      fontFamily: F.uiMed,
-      fontSize: 12,
-      color: T.textDim,
-      letterSpacing: 3,
+      fontFamily: F.mono,
+      fontSize: 11,
+      color: '#A29B90',
+      letterSpacing: 2.4,
       textTransform: 'uppercase',
-      paddingLeft: 3,
     },
     bottom: {
       width: '100%',

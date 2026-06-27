@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { F, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { useActiveSession } from '../../../src/hooks/useSession';
+import { BrandedHeader } from '../../../src/components/BrandedHeader';
 
 export default function TabLayout() {
   const router = useRouter();
@@ -16,7 +17,8 @@ export default function TabLayout() {
     <View style={{ flex: 1 }}>
       <Tabs
         screenOptions={{
-          headerShown: false,
+          headerShown: true,
+          header: () => <BrandedHeader />,
           tabBarStyle: {
             backgroundColor: T.surface,
             borderTopColor: T.border,

@@ -8,13 +8,16 @@ const config: ExpoConfig = {
   orientation: 'portrait',
   scheme: 'reprounds',
   userInterfaceStyle: 'automatic',
+  icon: './assets/images/icon.png',
   ios: {
     supportsTablet: false,
     bundleIdentifier: 'com.reprounds.app',
+    icon: './assets/images/icon.png',
   },
   android: {
     adaptiveIcon: {
-      backgroundColor: '#0d0f14',
+      foregroundImage: './assets/images/icon-fg.png',
+      backgroundColor: '#D8432A',
     },
     package: 'com.reprounds.app',
     versionCode: 1,

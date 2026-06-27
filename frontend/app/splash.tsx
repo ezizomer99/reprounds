@@ -1,8 +1,9 @@
 import { useRouter } from 'expo-router';
 import { MotiView } from 'moti';
 import { useEffect, useRef } from 'react';
-import { Text, View } from 'react-native';
+import { View } from 'react-native';
 import { getSessionToken } from '../src/lib/auth';
+import { RepRoundsLockup } from '../src/components/RepRoundsLockup';
 
 export default function SplashScreen() {
   const router = useRouter();
@@ -26,7 +27,7 @@ export default function SplashScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#09090b', alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ flex: 1, backgroundColor: '#17140F', alignItems: 'center', justifyContent: 'center' }}>
       <MotiView
         from={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -37,16 +38,7 @@ export default function SplashScreen() {
           }
         }}
       >
-        <Text
-          style={{
-            fontFamily: 'BricolageGrotesque_800ExtraBold',
-            fontSize: 56,
-            color: '#ffffff',
-            letterSpacing: -1,
-          }}
-        >
-          RepRounds
-        </Text>
+        <RepRoundsLockup size="lg" onDark={true} />
       </MotiView>
     </View>
   );
