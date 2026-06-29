@@ -68,7 +68,8 @@ authRoutes.post('/guest', async (c) => {
     const sessionToken = await signJwt({ sub: dbUser.id }, c.env.JWT_SECRET, SESSION_EXPIRY_SECONDS);
 
     return c.json({ sessionToken, user: toUserShape(dbUser) });
-  } catch {
+  } catch (e) {
+    console.error('[auth/guest]', e);
     return c.json({ error: 'Internal error' }, 500);
   }
 });
@@ -89,7 +90,8 @@ authRoutes.post('/google', async (c) => {
   let googlePayload: Awaited<ReturnType<typeof verifyGoogleIdToken>>;
   try {
     googlePayload = await verifyGoogleIdToken(body.idToken, c.env.GOOGLE_CLIENT_ID);
-  } catch {
+  } catch (e) {
+    console.error('[auth/google] token verification failed', e);
     return c.json({ error: 'Invalid Google ID token' }, 401);
   }
 
@@ -141,7 +143,8 @@ authRoutes.post('/google', async (c) => {
     const sessionToken = await signJwt({ sub: dbUser.id }, c.env.JWT_SECRET, SESSION_EXPIRY_SECONDS);
 
     return c.json({ sessionToken, user: toUserShape(dbUser) });
-  } catch {
+  } catch (e) {
+    console.error('[auth/google]', e);
     return c.json({ error: 'Internal error' }, 500);
   }
 });
@@ -161,7 +164,8 @@ authRoutes.get('/me', authMiddleware, async (c) => {
     }
 
     return c.json({ user: toUserShape(dbUser) });
-  } catch {
+  } catch (e) {
+    console.error('[auth/me GET]', e);
     return c.json({ error: 'Internal error' }, 500);
   }
 });
@@ -177,7 +181,8 @@ authRoutes.delete('/me', authMiddleware, async (c) => {
     const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
     await db.delete(users).where(eq(users.id, userId));
     return c.body(null, 204);
-  } catch {
+  } catch (e) {
+    console.error('[auth/me DELETE]', e);
     return c.json({ error: 'Internal error' }, 500);
   }
 });

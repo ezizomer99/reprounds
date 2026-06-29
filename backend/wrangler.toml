@@ -13,7 +13,7 @@ R2_PUBLIC_BASE_URL = "https://pub-37f8c20e70eb48089923fa13413cc2c5.r2.dev"
 
 [[hyperdrive]]
 binding = "HYPERDRIVE"
-id = "db7f181b10b5414c9b28ef51aa37cee3"
+id = "f9e92cd1b44d4b95ad25237042c5fd32"
 
 [[r2_buckets]]
 binding = "EXERCISES_BUCKET"
