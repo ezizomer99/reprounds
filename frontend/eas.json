@@ -24,7 +24,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://reprounds-api.oemerdigital.workers.dev",
+        "EXPO_PUBLIC_API_URL": "https://reprounds-api-prod.oemerdigital.workers.dev",
         "EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID": "548195273503-mkd114c10dkhhv90621j2o019pdkgvkm.apps.googleusercontent.com",
         "EXPO_PUBLIC_REVENUECAT_ANDROID_KEY": "goog_ZpncuQvvJAPGFSlhgiTBbPGGVea"
       }
