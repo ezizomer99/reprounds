@@ -35,7 +35,8 @@ export default function SignInScreen() {
       } else if (e.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
         setError('Google Play Services not available.');
       } else {
-        setError(`Sign-in failed: ${e.message ?? 'unknown error'}`);
+        const status = (e as { status?: number }).status;
+        setError(`Sign-in failed${status ? ` (${status})` : ''}: ${e.message ?? 'unknown error'}`);
       }
     } finally {
       setGoogleLoading(false);
@@ -49,8 +50,8 @@ export default function SignInScreen() {
       await signInAsGuest();
       router.replace('/(app)');
     } catch (err: unknown) {
-      const e = err as { message?: string };
-      setError(`Could not continue as guest: ${e.message ?? 'unknown error'}`);
+      const e = err as { message?: string; status?: number };
+      setError(`Guest sign-in failed${e.status ? ` (${e.status})` : ''}: ${e.message ?? 'unknown error'}`);
     } finally {
       setGuestLoading(false);
     }

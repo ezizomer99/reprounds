@@ -46,27 +46,31 @@ authRoutes.post('/guest', async (c) => {
     return c.json({ error: 'deviceId is required' }, 400);
   }
 
-  const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+  try {
+    const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
-  // Upsert: find existing guest user by deviceId or create a new one
-  const [dbUser] = await db
-    .insert(users)
-    .values({
-      deviceId: body.deviceId,
-      isGuest: true,
-      email: null,
-      name: null,
-      avatarUrl: null,
-    })
-    .onConflictDoUpdate({
-      target: users.deviceId,
-      set: { isGuest: true }, // no-op update so RETURNING works
-    })
-    .returning();
+    // Upsert: find existing guest user by deviceId or create a new one
+    const [dbUser] = await db
+      .insert(users)
+      .values({
+        deviceId: body.deviceId,
+        isGuest: true,
+        email: null,
+        name: null,
+        avatarUrl: null,
+      })
+      .onConflictDoUpdate({
+        target: users.deviceId,
+        set: { isGuest: true }, // no-op update so RETURNING works
+      })
+      .returning();
 
-  const sessionToken = await signJwt({ sub: dbUser.id }, c.env.JWT_SECRET, SESSION_EXPIRY_SECONDS);
+    const sessionToken = await signJwt({ sub: dbUser.id }, c.env.JWT_SECRET, SESSION_EXPIRY_SECONDS);
 
-  return c.json({ sessionToken, user: toUserShape(dbUser) });
+    return c.json({ sessionToken, user: toUserShape(dbUser) });
+  } catch {
+    return c.json({ error: 'Internal error' }, 500);
+  }
 });
 
 // ── Google sign-in (with optional guest migration) ─────────────────────────
@@ -89,69 +93,77 @@ authRoutes.post('/google', async (c) => {
     return c.json({ error: 'Invalid Google ID token' }, 401);
   }
 
-  const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+  try {
+    const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
-  // Upsert the real Google user
-  const [dbUser] = await db
-    .insert(users)
-    .values({
-      googleSub: googlePayload.sub,
-      isGuest: false,
-      email: googlePayload.email,
-      name: googlePayload.name || null,
-      avatarUrl: googlePayload.picture || null,
-    })
-    .onConflictDoUpdate({
-      target: users.googleSub,
-      set: {
+    // Upsert the real Google user
+    const [dbUser] = await db
+      .insert(users)
+      .values({
+        googleSub: googlePayload.sub,
         isGuest: false,
         email: googlePayload.email,
         name: googlePayload.name || null,
         avatarUrl: googlePayload.picture || null,
-      },
-    })
-    .returning();
+      })
+      .onConflictDoUpdate({
+        target: users.googleSub,
+        set: {
+          isGuest: false,
+          email: googlePayload.email,
+          name: googlePayload.name || null,
+          avatarUrl: googlePayload.picture || null,
+        },
+      })
+      .returning();
 
-  // Migrate guest data if a guestUserId was provided
-  if (body.guestUserId && typeof body.guestUserId === 'string') {
-    const guestUser = await db.query.users.findFirst({
-      where: eq(users.id, body.guestUserId),
-    });
+    // Migrate guest data if a guestUserId was provided
+    if (body.guestUserId && typeof body.guestUserId === 'string') {
+      const guestUser = await db.query.users.findFirst({
+        where: eq(users.id, body.guestUserId),
+      });
 
-    if (guestUser?.isGuest && guestUser.id !== dbUser.id) {
-      // Reassign all guest-owned data to the real user
-      await db.update(exercises).set({ userId: dbUser.id }).where(eq(exercises.userId, guestUser.id));
-      await db.update(disciplines).set({ userId: dbUser.id }).where(eq(disciplines.userId, guestUser.id));
-      await db.update(partners).set({ userId: dbUser.id }).where(eq(partners.userId, guestUser.id));
-      await db.update(fights).set({ userId: dbUser.id }).where(eq(fights.userId, guestUser.id));
-      await db.update(rankPromotions).set({ userId: dbUser.id }).where(eq(rankPromotions.userId, guestUser.id));
-      await db.update(weightLogs).set({ userId: dbUser.id }).where(eq(weightLogs.userId, guestUser.id));
-      await db.update(routines).set({ userId: dbUser.id }).where(eq(routines.userId, guestUser.id));
-      await db.update(sessions).set({ userId: dbUser.id }).where(eq(sessions.userId, guestUser.id));
-      // session_entries and strength_sets cascade through sessions/routines — no direct user_id
-      await db.delete(users).where(eq(users.id, guestUser.id));
+      if (guestUser?.isGuest && guestUser.id !== dbUser.id) {
+        // Reassign all guest-owned data to the real user
+        await db.update(exercises).set({ userId: dbUser.id }).where(eq(exercises.userId, guestUser.id));
+        await db.update(disciplines).set({ userId: dbUser.id }).where(eq(disciplines.userId, guestUser.id));
+        await db.update(partners).set({ userId: dbUser.id }).where(eq(partners.userId, guestUser.id));
+        await db.update(fights).set({ userId: dbUser.id }).where(eq(fights.userId, guestUser.id));
+        await db.update(rankPromotions).set({ userId: dbUser.id }).where(eq(rankPromotions.userId, guestUser.id));
+        await db.update(weightLogs).set({ userId: dbUser.id }).where(eq(weightLogs.userId, guestUser.id));
+        await db.update(routines).set({ userId: dbUser.id }).where(eq(routines.userId, guestUser.id));
+        await db.update(sessions).set({ userId: dbUser.id }).where(eq(sessions.userId, guestUser.id));
+        // session_entries and strength_sets cascade through sessions/routines — no direct user_id
+        await db.delete(users).where(eq(users.id, guestUser.id));
+      }
     }
+
+    const sessionToken = await signJwt({ sub: dbUser.id }, c.env.JWT_SECRET, SESSION_EXPIRY_SECONDS);
+
+    return c.json({ sessionToken, user: toUserShape(dbUser) });
+  } catch {
+    return c.json({ error: 'Internal error' }, 500);
   }
-
-  const sessionToken = await signJwt({ sub: dbUser.id }, c.env.JWT_SECRET, SESSION_EXPIRY_SECONDS);
-
-  return c.json({ sessionToken, user: toUserShape(dbUser) });
 });
 
 // ── Current user ───────────────────────────────────────────────────────────
 authRoutes.get('/me', authMiddleware, async (c) => {
   const userId = c.get('userId');
-  const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+  try {
+    const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
-  const dbUser = await db.query.users.findFirst({
-    where: eq(users.id, userId),
-  });
+    const dbUser = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+    });
 
-  if (!dbUser) {
-    return c.json({ error: 'User not found' }, 404);
+    if (!dbUser) {
+      return c.json({ error: 'User not found' }, 404);
+    }
+
+    return c.json({ user: toUserShape(dbUser) });
+  } catch {
+    return c.json({ error: 'Internal error' }, 500);
   }
-
-  return c.json({ user: toUserShape(dbUser) });
 });
 
 // ── Delete account (and all associated data) ───────────────────────────────
@@ -161,11 +173,13 @@ authRoutes.get('/me', authMiddleware, async (c) => {
 // logs, fights and promotions in one shot.
 authRoutes.delete('/me', authMiddleware, async (c) => {
   const userId = c.get('userId');
-  const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
-
-  await db.delete(users).where(eq(users.id, userId));
-
-  return c.body(null, 204);
+  try {
+    const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+    await db.delete(users).where(eq(users.id, userId));
+    return c.body(null, 204);
+  } catch {
+    return c.json({ error: 'Internal error' }, 500);
+  }
 });
 
 export { authRoutes };
