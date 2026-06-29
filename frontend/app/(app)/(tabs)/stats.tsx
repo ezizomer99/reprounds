@@ -1,6 +1,5 @@
 import {
   ActivityIndicator,
-  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -211,13 +210,13 @@ export default function StatsTab() {
         />
 
         <CategoryCard
-          iconName="person-outline"
+          iconName="scale-outline"
           iconBg={withAlpha(T.primary, 0.18)}
           iconColor={T.primary}
-          title="Body"
-          subtitle="Muscle group distribution"
-          chips={['Muscle Coverage']}
-          onPress={() => Alert.alert('Coming soon', 'Muscle coverage tracking is coming in a future update.')}
+          title="Body weight"
+          subtitle="Track weigh-ins and trend over time"
+          chips={['Trend', 'Fight camp']}
+          onPress={() => router.push('/weight' as never)}
         />
       </ScrollView>
     </View>

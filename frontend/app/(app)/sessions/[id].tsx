@@ -201,7 +201,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   sessionId: string;
   entryId: string;
   displayNumber: number | null; // null = warm-up
-  onCompleted: () => void;
+  onCompleted: (weightKg: number | null) => void;
   onOpenMenu: () => void;
   exerciseType?: 'strength' | 'conditioning';
 }) {
@@ -250,9 +250,11 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
 
   function toggleComplete() {
     const next = !isDone;
+    const wKg = isTime || weight.trim() === '' ? null
+      : (() => { const v = unitToKg(Number(weight), unit); return isNaN(v) ? null : v; })();
     updateSet.mutate(
       { sessionId, entryId, setId: set.id, completed: next },
-      { onSuccess: () => { if (next) onCompleted(); } },
+      { onSuccess: () => { if (next) onCompleted(set.setType !== 'warmup' ? wKg : null); } },
     );
   }
 
@@ -449,10 +451,11 @@ function LastTime({ exerciseId }: { exerciseId: string }) {
 
 // ─── Strength entry card ──────────────────────────────────────────────────────
 
-function StrengthEntryCard({ entry, sessionId, onSetCompleted, exerciseType }: {
+function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseType }: {
   entry: SessionEntryWithSets;
   sessionId: string;
   onSetCompleted: (restSecs: number) => void;
+  onPR?: (exerciseName: string) => void;
   exerciseType?: 'strength' | 'conditioning';
 }) {
   const { T } = useTheme();
@@ -474,6 +477,20 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, exerciseType }: {
     () => (history?.history[0]?.entry.sets ?? []).filter((s) => s.setType !== 'warmup'),
     [history],
   );
+
+  // Max weight ever logged for this exercise (across all history).
+  const maxHistoryWeight = useMemo(() => {
+    if (!history?.history?.length) return null;
+    let max = 0;
+    for (const h of history.history) {
+      for (const s of h.entry.sets) {
+        if (s.completed && s.weight != null && s.setType !== 'warmup' && s.weight > max) {
+          max = s.weight;
+        }
+      }
+    }
+    return max > 0 ? max : null;
+  }, [history]);
 
   function handleAddWarmup() {
     addSet.mutate({ sessionId, entryId: entry.id, setNumber: entry.sets.length + 1, setType: 'warmup', completed: false });
@@ -529,6 +546,7 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, exerciseType }: {
         />
       ))}
 
+
       {/* Working sets */}
       <View style={styles.colHeaders}>
         <View style={styles.setCirclePlaceholder} />
@@ -551,7 +569,12 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, exerciseType }: {
           sessionId={sessionId}
           entryId={entry.id}
           displayNumber={i + 1}
-          onCompleted={() => onSetCompleted(restSeconds)}
+          onCompleted={(wKg) => {
+            onSetCompleted(restSeconds);
+            if (wKg !== null && maxHistoryWeight !== null && wKg > maxHistoryWeight) {
+              onPR?.(entry.exerciseName ?? 'Exercise');
+            }
+          }}
           onOpenMenu={() => setMenuSet(set)}
           exerciseType={exerciseType}
         />
@@ -1056,6 +1079,8 @@ export default function SessionScreen() {
   const [restSeconds, setRestSeconds] = useState<number | null>(null);
   const [restTotal, setRestTotal] = useState(REST_DEFAULT);
   const [elapsed, setElapsed] = useState(0);
+  const [prBanner, setPrBanner] = useState<string | null>(null);
+  const prTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (restSeconds === null || restSeconds <= 0) return;
@@ -1101,6 +1126,12 @@ export default function SessionScreen() {
     setRestTotal((t) => t + 15);
     setRestSeconds(next);
     armRestNotification(next);
+  }
+
+  function handlePR(exerciseName: string) {
+    if (prTimerRef.current) clearTimeout(prTimerRef.current);
+    setPrBanner(exerciseName);
+    prTimerRef.current = setTimeout(() => setPrBanner(null), 3000);
   }
 
   function handleBack() {
@@ -1261,20 +1292,10 @@ export default function SessionScreen() {
         )}
       </View>
 
-      {/* Rest timer (sticky, appears when active) */}
-      {restSeconds !== null && (
-        <RestTimer
-          seconds={restSeconds}
-          total={restTotal}
-          onSkip={handleRestSkip}
-          onAdd={handleRestAdd}
-        />
-      )}
-
       <ScrollView
         style={{ flex: 1 }}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 48 }]}
+        contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + (restSeconds !== null ? 140 : 48) }]}
       >
         {session.entries.length === 0 && (
           <View style={styles.emptyEntries}>
@@ -1332,6 +1353,7 @@ export default function SessionScreen() {
                     entry={entry}
                     sessionId={session.id}
                     onSetCompleted={handleSetCompleted}
+                    onPR={handlePR}
                     exerciseType={entry.exerciseId ? exerciseTypeMap.get(entry.exerciseId) : undefined}
                   />
                 ) : (
@@ -1365,6 +1387,25 @@ export default function SessionScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Floating rest timer */}
+      {restSeconds !== null && (
+        <RestTimer
+          seconds={restSeconds}
+          total={restTotal}
+          onSkip={handleRestSkip}
+          onAdd={handleRestAdd}
+          style={[styles.restTimerFloat, { bottom: insets.bottom + 16 }]}
+        />
+      )}
+
+      {/* PR banner */}
+      {prBanner !== null && (
+        <View style={[styles.prBanner, { bottom: insets.bottom + (restSeconds !== null ? 126 : 16) }]}>
+          <Ionicons name="trophy" size={15} color="#1A1200" style={{ marginRight: 6 }} />
+          <Text style={styles.prBannerText}>New PR — {prBanner}</Text>
+        </View>
+      )}
 
       <PickExerciseModal
         visible={showExercisePicker}
@@ -1587,6 +1628,29 @@ function makeStyles(T: ThemeColors) {
     paddingVertical: 11, alignItems: 'center', marginTop: 4,
   },
   maSaveBtnText: { fontFamily: F.uiSemi, fontSize: 15, color: T.onPrimary },
+
+  // Floating overlays
+  restTimerFloat: {
+    position: 'absolute',
+    left: 18,
+    right: 18,
+    zIndex: 50,
+    marginHorizontal: 0,
+  },
+  prBanner: {
+    position: 'absolute',
+    left: 18,
+    right: 18,
+    zIndex: 60,
+    backgroundColor: withAlpha('#F5C300', 0.95),
+    borderRadius: R.card,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  prBannerText: { fontFamily: F.uiBold, fontSize: 15, color: '#1A1200' },
 
   // Add entry row
   addEntryRow: { flexDirection: 'row', gap: D.gap },

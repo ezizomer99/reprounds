@@ -1,6 +1,6 @@
 import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useDeleteSession, useSessions } from '../../../src/hooks/useSession';
@@ -14,6 +14,13 @@ import { SessionRow, buildRoutineMap, rowSeparatorMargin, sessionIsMat } from '.
 
 const FREE_HISTORY_DAYS = 30;
 
+type Filter = 'all' | 'gym' | 'mat';
+const FILTERS: { key: Filter; label: string }[] = [
+  { key: 'all', label: 'All' },
+  { key: 'gym', label: 'Gym' },
+  { key: 'mat', label: 'Martial Arts' },
+];
+
 export default function HistoryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -23,6 +30,7 @@ export default function HistoryScreen() {
   const { data: sessions, isLoading, isError, error } = useSessions('completed');
   const { data: routines } = useRoutines();
   const deleteSession = useDeleteSession();
+  const [filter, setFilter] = useState<Filter>('all');
 
   const routineMap = buildRoutineMap(routines);
   const allSessions = sessions ?? [];
@@ -35,11 +43,18 @@ export default function HistoryScreen() {
     return d;
   }, [isPro]);
 
-  const list = cutoff
+  const windowed = cutoff
     ? allSessions.filter((s) => new Date(s.date + 'T00:00:00') >= cutoff)
     : allSessions;
 
-  const hiddenCount = cutoff ? allSessions.length - list.length : 0;
+  const list = useMemo(() => {
+    if (filter === 'all') return windowed;
+    return windowed.filter((s) =>
+      filter === 'mat' ? sessionIsMat(s) : s.kinds?.includes('exercise') ?? false,
+    );
+  }, [windowed, filter]);
+
+  const hiddenCount = cutoff ? allSessions.length - windowed.length : 0;
 
   function handleDelete(id: string, name: string) {
     Alert.alert(
@@ -63,6 +78,22 @@ export default function HistoryScreen() {
           {list.length > 0 && <Text style={styles.headerSub}>{list.length} sessions logged</Text>}
         </View>
         <View style={{ width: 40 }} />
+      </View>
+
+      <View style={styles.filterRow}>
+        {FILTERS.map(({ key, label }) => {
+          const active = filter === key;
+          return (
+            <TouchableOpacity
+              key={key}
+              style={[styles.filterChip, active && styles.filterChipActive]}
+              onPress={() => setFilter(key)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       {isLoading && (
@@ -106,8 +137,12 @@ export default function HistoryScreen() {
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
             <View style={styles.centered}>
-              <Text style={styles.emptyText}>No completed sessions yet.</Text>
-              <Text style={styles.emptySub}>Log a workout to see your history here.</Text>
+              <Text style={styles.emptyText}>No sessions yet.</Text>
+              <Text style={styles.emptySub}>
+                {filter === 'all'
+                  ? 'Log a workout to see your history here.'
+                  : 'Nothing logged for this filter yet.'}
+              </Text>
             </View>
           }
           ListFooterComponent={
@@ -143,6 +178,25 @@ function makeStyles(T: ThemeColors) {
     backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
     headerTitle: { fontFamily: F.uiSemi, fontSize: 19, color: T.text, letterSpacing: -0.2 },
     headerSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 1 },
+
+    filterRow: {
+      flexDirection: 'row',
+      gap: 8,
+      paddingHorizontal: D.pad,
+      paddingTop: 12,
+      paddingBottom: 4,
+    },
+    filterChip: {
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: T.border,
+      backgroundColor: T.surface,
+    },
+    filterChipActive: { backgroundColor: T.primary, borderColor: T.primary },
+    filterChipText: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim },
+    filterChipTextActive: { fontFamily: F.uiBold, color: T.onPrimary },
 
     skeletonRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: D.pad, paddingVertical: 14, gap: 12 },
     separator: { height: 1, backgroundColor: T.border, marginLeft: rowSeparatorMargin() },

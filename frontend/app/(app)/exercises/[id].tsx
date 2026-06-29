@@ -19,7 +19,7 @@ import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
-const HERO_HEIGHT = 280;
+const HERO_HEIGHT = 320;
 
 export default function ExerciseDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -80,15 +80,17 @@ export default function ExerciseDetailScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
       >
-        {exercise.imageUrl ? (
-          <Image
-            source={{ uri: exercise.imageUrl }}
-            style={styles.hero}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={[styles.hero, styles.heroPlaceholder]} />
-        )}
+        <View style={styles.heroContainer}>
+          {exercise.imageUrl ? (
+            <Image
+              source={{ uri: exercise.imageUrl }}
+              style={styles.hero}
+              resizeMode="contain"
+            />
+          ) : (
+            <View style={styles.heroPlaceholder} />
+          )}
+        </View>
 
         <View style={styles.body}>
           <Text style={styles.name}>{exercise.name}</Text>
@@ -174,11 +176,20 @@ function makeStyles(T: ThemeColors) {
       justifyContent: 'center',
     },
 
+    heroContainer: {
+      width: SCREEN_WIDTH,
+      height: HERO_HEIGHT,
+      backgroundColor: '#FFFFFF',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     hero: {
       width: SCREEN_WIDTH,
       height: HERO_HEIGHT,
     },
     heroPlaceholder: {
+      width: SCREEN_WIDTH,
+      height: HERO_HEIGHT,
       backgroundColor: T.surface2,
     },
 
