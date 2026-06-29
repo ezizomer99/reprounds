@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleProp, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
 import { F, R, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../lib/color';
@@ -9,9 +9,10 @@ interface RestTimerProps {
   total: number;
   onSkip: () => void;
   onAdd: () => void;
+  style?: StyleProp<ViewStyle>;
 }
 
-export function RestTimer({ seconds, total, onSkip, onAdd }: RestTimerProps) {
+export function RestTimer({ seconds, total, onSkip, onAdd, style }: RestTimerProps) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
 
@@ -20,7 +21,7 @@ export function RestTimer({ seconds, total, onSkip, onAdd }: RestTimerProps) {
   const ss = String(seconds % 60).padStart(2, '0');
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, style]}>
       <View style={styles.barTrack}>
         <View style={[styles.barFill, { width: `${frac * 100}%` as `${number}%` }]} />
       </View>

@@ -19,6 +19,7 @@ import {
   useDeleteDiscipline,
   useDisciplines,
 } from '../../../src/hooks/useDisciplines';
+import { fightRecord, useFights } from '../../../src/hooks/useFights';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
@@ -51,14 +52,27 @@ function categoryColor(cat: DisciplineCat, T: ThemeColors): string {
   return T.gold;
 }
 
+function FightRecordBadge({ disciplineId }: { disciplineId: string }) {
+  const { T } = useTheme();
+  const { data: fights } = useFights(disciplineId);
+  if (!fights || fights.length === 0) return null;
+  const { wins, losses, draws } = fightRecord(fights);
+  return (
+    <Text style={{ fontFamily: F.uiMed, fontSize: 11, color: T.textDim }}>
+      {wins}W–{losses}L–{draws}D
+    </Text>
+  );
+}
+
 interface DisciplineRowProps {
   discipline: Discipline;
   isOwned: boolean;
+  isPro: boolean;
   onDelete: (id: string) => void;
   onPress: (id: string, name: string) => void;
 }
 
-function DisciplineRow({ discipline, isOwned, onDelete, onPress }: DisciplineRowProps) {
+function DisciplineRow({ discipline, isOwned, isPro, onDelete, onPress }: DisciplineRowProps) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const catColor = categoryColor(discipline.category, T);
@@ -86,9 +100,12 @@ function DisciplineRow({ discipline, isOwned, onDelete, onPress }: DisciplineRow
       </View>
       <View style={styles.rowContent}>
         <Text style={styles.rowName}>{discipline.name}</Text>
-        <Text style={[styles.rowCat, { color: catColor }]}>
-          {CATEGORY_LABEL[discipline.category]}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={[styles.rowCat, { color: catColor }]}>
+            {CATEGORY_LABEL[discipline.category]}
+          </Text>
+          {isPro && <FightRecordBadge disciplineId={discipline.id} />}
+        </View>
       </View>
       {isOwned && (
         <TouchableOpacity
@@ -283,10 +300,27 @@ export default function MatTab() {
         <FlatList
           data={list}
           keyExtractor={(item) => item.id}
+          ListHeaderComponent={
+            <TouchableOpacity
+              style={styles.quickCard}
+              onPress={() => router.push('/sessions/new' as never)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.quickIconBox}>
+                <Ionicons name="flash" size={18} color={T.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.quickTitle}>Quick mat session</Text>
+                <Text style={styles.quickSub}>Log rounds and techniques right away</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={T.muted} />
+            </TouchableOpacity>
+          }
           renderItem={({ item }) => (
             <DisciplineRow
               discipline={item}
               isOwned={item.userId === currentUser?.id}
+              isPro={isPro}
               onDelete={handleDelete}
               onPress={handlePress}
             />
@@ -369,6 +403,30 @@ function makeStyles(T: ThemeColors) {
       borderRadius: R.sm,
       backgroundColor: withAlpha(T.danger, 0.1),
     },
+
+    quickCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      margin: D.pad,
+      marginBottom: 0,
+      padding: D.cardPad,
+      backgroundColor: T.surface,
+      borderWidth: 1,
+      borderColor: T.border,
+      borderRadius: R.card,
+    },
+    quickIconBox: {
+      width: 38,
+      height: 38,
+      borderRadius: R.sm,
+      backgroundColor: withAlpha(T.primary, 0.12),
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    },
+    quickTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text, marginBottom: 2 },
+    quickSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
 
     separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad + 42 + 12 },
     centered: {

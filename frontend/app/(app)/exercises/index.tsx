@@ -64,14 +64,16 @@ const MUSCLE_OPTIONS = [
 function ExerciseThumbnail({ uri, styles }: { uri: string | null; styles: ReturnType<typeof makeStyles> }) {
   if (uri) {
     return (
-      <Image
-        source={{ uri }}
-        style={styles.thumbnail}
-        resizeMode="cover"
-      />
+      <View style={styles.thumbnailContainer}>
+        <Image
+          source={{ uri }}
+          style={styles.thumbnail}
+          resizeMode="contain"
+        />
+      </View>
     );
   }
-  return <View style={[styles.thumbnail, styles.thumbnailPlaceholder]} />;
+  return <View style={[styles.thumbnailContainer, styles.thumbnailPlaceholder]} />;
 }
 
 interface ExerciseRowProps {
@@ -502,10 +504,18 @@ function makeStyles(T: ThemeColors) {
       paddingVertical: 10,
       gap: 12,
     },
-    thumbnail: {
+    thumbnailContainer: {
       width: 52,
       height: 52,
       borderRadius: R.sm,
+      backgroundColor: '#FFFFFF',
+      overflow: 'hidden',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    thumbnail: {
+      width: 52,
+      height: 52,
     },
     thumbnailPlaceholder: {
       backgroundColor: T.surface2 ?? T.surface,

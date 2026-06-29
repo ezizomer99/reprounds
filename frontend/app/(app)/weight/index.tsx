@@ -23,6 +23,7 @@ import {
 } from '../../../src/hooks/useWeightLogs';
 import { useUnit } from '../../../src/units/UnitContext';
 import { fmtWeight, kgToUnit, unitToKg } from '../../../src/units/units';
+import { Sparkline } from '../../../src/components/Sparkline';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 
@@ -51,6 +52,11 @@ export default function WeightScreen() {
   const latest = weights[0] ?? null;
   const previous = weights[1] ?? null;
   const delta = latest && previous ? latest.weightKg - previous.weightKg : null;
+  // Sparkline needs chronological order and numeric values in display unit
+  const sparkValues = useMemo(
+    () => [...weights].reverse().slice(-20).map((w) => kgToUnit(w.weightKg, unit)),
+    [weights, unit],
+  );
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -69,22 +75,29 @@ export default function WeightScreen() {
         keyExtractor={(item) => item.id}
         ListHeaderComponent={
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryValue}>
-              {latest ? `${fmtWeight(latest.weightKg, unit)} ${unit}` : '—'}
-            </Text>
-            <Text style={styles.summaryKey}>Latest weigh-in</Text>
-            {delta !== null && delta !== 0 && (
-              <View style={styles.deltaRow}>
-                <Ionicons
-                  name={delta < 0 ? 'arrow-down' : 'arrow-up'}
-                  size={14}
-                  color={delta < 0 ? T.conditioning : T.gold}
-                />
-                <Text style={[styles.deltaText, { color: delta < 0 ? T.conditioning : T.gold }]}>
-                  {kgToUnit(Math.abs(delta), unit).toFixed(1)} {unit} since last
+            <View style={styles.summaryTop}>
+              <View style={styles.summaryLeft}>
+                <Text style={styles.summaryValue}>
+                  {latest ? `${fmtWeight(latest.weightKg, unit)} ${unit}` : '—'}
                 </Text>
+                <Text style={styles.summaryKey}>Latest weigh-in</Text>
+                {delta !== null && delta !== 0 && (
+                  <View style={styles.deltaRow}>
+                    <Ionicons
+                      name={delta < 0 ? 'arrow-down' : 'arrow-up'}
+                      size={14}
+                      color={delta < 0 ? T.conditioning : T.gold}
+                    />
+                    <Text style={[styles.deltaText, { color: delta < 0 ? T.conditioning : T.gold }]}>
+                      {kgToUnit(Math.abs(delta), unit).toFixed(1)} {unit} since last
+                    </Text>
+                  </View>
+                )}
               </View>
-            )}
+              {sparkValues.length >= 2 && (
+                <Sparkline values={sparkValues} height={56} />
+              )}
+            </View>
           </View>
         }
         renderItem={({ item }) => (
@@ -231,8 +244,10 @@ function makeStyles(T: ThemeColors) {
 
     summaryCard: {
       backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.card,
-      paddingVertical: 20, alignItems: 'center', gap: 4, marginTop: D.pad,
+      padding: 20, marginTop: D.pad,
     },
+    summaryTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    summaryLeft: { gap: 4 },
     summaryValue: { fontFamily: F.monoBold, fontSize: 34, color: T.text },
     summaryKey: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.5 },
     deltaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
