@@ -58,7 +58,7 @@ export function useSignIn() {
     const data = await apiPost<AuthResponse>('/auth/google', { idToken, guestUserId });
     await setSessionToken(data.sessionToken);
     await clearGuestData();
-    queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+    queryClient.setQueryData<User>(['auth', 'me'], data.user);
   }
 
   async function signInAsGuest(): Promise<void> {
@@ -66,7 +66,7 @@ export function useSignIn() {
     const data = await apiPost<AuthResponse>('/auth/guest', { deviceId });
     await setSessionToken(data.sessionToken);
     await setGuestUserId(data.user.id);
-    queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+    queryClient.setQueryData<User>(['auth', 'me'], data.user);
   }
 
   return { signInWithGoogle, signInAsGuest };
