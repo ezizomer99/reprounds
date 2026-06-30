@@ -32,6 +32,7 @@ import {
   useSession,
   useCompleteSession,
   useUpdateSession,
+  useDeleteSession,
   useAddSessionEntry,
   useUpdateSessionEntry,
   useAddStrengthSet,
@@ -906,11 +907,12 @@ function CalendarPicker({ value, onChange }: { value: string; onChange: (d: stri
 
 // ─── Session settings sheet ──────────────────────────────────────────────────
 
-function SessionSettingsSheet({ session, routineName, onSave, onFinish, isPending }: {
+function SessionSettingsSheet({ session, routineName, onSave, onFinish, onDiscard, isPending }: {
   session: SessionWithEntries;
   routineName: string | null;
   onSave: (name: string, notes: string) => void;
   onFinish: (name: string, notes: string, date: string, durationMinutes: number) => void;
+  onDiscard: () => void;
   isPending: boolean;
 }) {
   const { T } = useTheme();
@@ -1035,6 +1037,15 @@ function SessionSettingsSheet({ session, routineName, onSave, onFinish, isPendin
               ? <ActivityIndicator size="small" color={T.onPrimary} />
               : <Text style={styles.settingsFinishBtnText}>Finish Workout</Text>}
           </TouchableOpacity>
+
+          {/* Discard button */}
+          <TouchableOpacity
+            style={[styles.settingsDiscardBtn, isPending && { opacity: 0.5 }]}
+            onPress={onDiscard}
+            disabled={isPending}
+          >
+            <Text style={styles.settingsDiscardBtnText}>Discard Workout</Text>
+          </TouchableOpacity>
         </ScrollView>
       </View>
     </Modal>
@@ -1055,6 +1066,7 @@ export default function SessionScreen() {
   const { unit } = useUnit();
   const { data: session, isLoading, isError } = useSession(id ?? null);
   const completeSession = useCompleteSession();
+  const deleteSession = useDeleteSession();
   const updateSession = useUpdateSession();
   const updateEntry = useUpdateSessionEntry();
   const addEntry = useAddSessionEntry();
@@ -1174,6 +1186,30 @@ export default function SessionScreen() {
       // silent — non-critical
     }
     setShowSettings(false);
+  }
+
+  function handleDiscard() {
+    Alert.alert(
+      'Discard Workout?',
+      'All logged entries will be permanently deleted.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: async () => {
+            if (!id) return;
+            try {
+              await deleteSession.mutateAsync({ id });
+              setShowSettings(false);
+              router.back();
+            } catch {
+              Alert.alert('Error', 'Failed to discard session.');
+            }
+          },
+        },
+      ],
+    );
   }
 
   if (isLoading) {
@@ -1424,6 +1460,7 @@ export default function SessionScreen() {
           routineName={routineName}
           onSave={handleSaveSettings}
           onFinish={doFinish}
+          onDiscard={handleDiscard}
           isPending={completeSession.isPending}
         />
       )}
@@ -1740,6 +1777,11 @@ function makeStyles(T: ThemeColors) {
     paddingVertical: 16, alignItems: 'center', marginTop: 16,
   },
   settingsFinishBtnText: { fontFamily: F.uiSemi, fontSize: 16, color: T.onPrimary },
+  settingsDiscardBtn: {
+    borderRadius: R.sm, borderWidth: 1, borderColor: T.danger,
+    paddingVertical: 16, alignItems: 'center', marginTop: 8,
+  },
+  settingsDiscardBtnText: { fontFamily: F.uiSemi, fontSize: 16, color: T.danger },
 
   // Calendar picker
   calContainer: {
