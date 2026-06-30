@@ -14,6 +14,7 @@ const db = drizzle(client);
 interface RawExercise {
   id: string;
   name: string;
+  type?: string;
   category?: string;
   body_part?: string;
   equipment?: string;
@@ -39,7 +40,7 @@ async function seed() {
     return {
       sourceId:         ex.id,
       name:             ex.name,
-      type:             'strength' as const,
+      type:             (ex.type ?? 'strength') as 'strength' | 'conditioning' | 'martial_arts',
       category:         ex.category ?? null,
       bodyPart:         ex.body_part ?? null,
       equipment:        ex.equipment ?? null,
