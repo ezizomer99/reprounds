@@ -46,6 +46,9 @@ importers:
       '@cloudflare/workers-types':
         specifier: ^4.20260621.1
         version: 4.20260621.1
+      csv-parse:
+        specifier: ^7.0.0
+        version: 7.0.0
       dotenv:
         specifier: ^16.4.0
         version: 16.4.7
@@ -2978,6 +2981,9 @@ packages:
 
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
+
+  csv-parse@7.0.0:
+    resolution: {integrity: sha512-CSssqPAK5us09FhMI9juM0jnqXUJP+rtWeIfivTYBLNH/8rnxkQlZvoRemF6MAyfNov9XU8mN2wwF/pP68sxTA==}
 
   data-urls@3.0.2:
     resolution: {integrity: sha512-Jy/tj3ldjZJo63sVAvg6LHt2mHvl4V6AgRAmNDtLdm7faqtsx+aJG42rsyCo9JCoRVKwPFzKlIPx3DIibwSIaQ==}
@@ -8787,6 +8793,8 @@ snapshots:
       cssom: 0.3.8
 
   csstype@3.2.3: {}
+
+  csv-parse@7.0.0: {}
 
   data-urls@3.0.2:
     dependencies:

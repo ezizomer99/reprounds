@@ -272,6 +272,7 @@ sessionRoutes.get('/', async (c) => {
     id: s.id,
     userId: s.userId,
     routineId: s.routineId ?? null,
+    name: s.name ?? null,
     date: s.date,
     status: s.status,
     startedAt: s.startedAt?.toISOString() ?? null,
