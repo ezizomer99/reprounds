@@ -22,6 +22,8 @@ import { Archivo_800ExtraBold } from '@expo-google-fonts/archivo';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
 import { UnitProvider } from '../src/units/UnitContext';
+import { RestTimerProvider } from '../src/restTimer/RestTimerContext';
+import { NotificationsProvider } from '../src/notifications/NotificationsContext';
 import { SubscriptionProvider } from '../src/context/SubscriptionContext';
 import { GOOGLE_WEB_CLIENT_ID } from '../src/lib/config';
 
@@ -107,9 +109,13 @@ export default function RootLayout() {
   const tree = (
     <ThemeProvider>
       <UnitProvider>
-        <SubscriptionProvider>
-          <AppShell />
-        </SubscriptionProvider>
+        <RestTimerProvider>
+          <NotificationsProvider>
+            <SubscriptionProvider>
+              <AppShell />
+            </SubscriptionProvider>
+          </NotificationsProvider>
+        </RestTimerProvider>
       </UnitProvider>
     </ThemeProvider>
   );

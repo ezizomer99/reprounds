@@ -286,8 +286,9 @@ export default function ExercisesScreen() {
 
     const groups = new Map<string, { title: string; items: Exercise[] }>();
     for (const ex of exercises) {
-      const key = ex.target ?? OTHER_KEY;
-      const title = ex.target ? titleForTarget(ex.target) : 'Other';
+      const groupKey = (ex.target ?? ex.muscleGroup ?? ex.bodyPart)?.toLowerCase() ?? null;
+      const key = groupKey ?? OTHER_KEY;
+      const title = groupKey ? titleForTarget(groupKey) : 'Other';
       let g = groups.get(key);
       if (!g) {
         g = { title, items: [] };

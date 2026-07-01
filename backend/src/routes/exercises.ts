@@ -116,6 +116,8 @@ exerciseRoutes.post('/', async (c) => {
       name: body.name,
       type: body.type,
       target: body.target ?? null,
+      muscleGroup: body.muscleGroup ?? null,
+      equipment: body.equipment ?? null,
     })
     .returning();
 

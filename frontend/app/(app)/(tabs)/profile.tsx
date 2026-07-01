@@ -1,5 +1,4 @@
 import {
-  ActivityIndicator,
   Alert,
   ScrollView,
   StyleSheet,
@@ -13,7 +12,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { statusCodes } from '@react-native-google-signin/google-signin';
-import { useCurrentUser, useSignIn, useSignOut, useDeleteAccount } from '../../../src/hooks/useAuth';
+import { useCurrentUser, useSignIn } from '../../../src/hooks/useAuth';
 import { useSessions } from '../../../src/hooks/useSession';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
@@ -54,66 +53,12 @@ export default function ProfileTab() {
   const { data: user } = useCurrentUser();
   const { data: sessions } = useSessions('completed');
   const { signInWithGoogle } = useSignIn();
-  const { signOut } = useSignOut();
-  const { deleteAccount } = useDeleteAccount();
   const [googleLinking, setGoogleLinking] = useState(false);
-  const [deleting, setDeleting] = useState(false);
 
   const isGuest = user?.isGuest ?? false;
   const completedCount = sessions?.length ?? 0;
   const displayName = user?.name ?? user?.email ?? 'Athlete';
   const firstName = isGuest ? 'Guest' : displayName.split(' ')[0];
-
-  async function handleSignOut() {
-    Alert.alert('Sign out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Sign out',
-        style: 'destructive',
-        onPress: async () => {
-          await signOut();
-          router.replace('/(auth)/sign-in' as never);
-        },
-      },
-    ]);
-  }
-
-  function handleDeleteAccount() {
-    Alert.alert(
-      'Delete account',
-      'This permanently deletes your account and all your workouts, sessions, body weight, and training data. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () =>
-            Alert.alert(
-              'Are you absolutely sure?',
-              'All of your data will be permanently erased. This action is irreversible.',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Delete account',
-                  style: 'destructive',
-                  onPress: async () => {
-                    setDeleting(true);
-                    try {
-                      await deleteAccount();
-                      router.replace('/(auth)/sign-in' as never);
-                    } catch {
-                      Alert.alert('Delete failed', 'Could not delete your account. Please try again.');
-                    } finally {
-                      setDeleting(false);
-                    }
-                  },
-                },
-              ],
-            ),
-        },
-      ],
-    );
-  }
 
   async function handleLinkGoogle() {
     setGoogleLinking(true);
@@ -253,36 +198,13 @@ export default function ProfileTab() {
             onPress={() => router.push('/subscription' as never)}
           />
           <NavRow
-            icon="color-palette-outline"
-            label="Appearance"
+            icon="settings-outline"
+            label="Settings"
             onPress={() => router.push('/settings' as never)}
             last
           />
         </View>
 
-        {/* Sign out */}
-        <TouchableOpacity
-          style={styles.signOutBtn}
-          onPress={handleSignOut}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="log-out-outline" size={16} color={T.danger} />
-          <Text style={styles.signOutText}>{isGuest ? 'Exit Guest Mode' : 'Sign Out'}</Text>
-        </TouchableOpacity>
-
-        {/* Delete account (required by Google Play for account-based apps) */}
-        <TouchableOpacity
-          style={styles.deleteBtn}
-          onPress={handleDeleteAccount}
-          disabled={deleting}
-          activeOpacity={0.7}
-        >
-          {deleting ? (
-            <ActivityIndicator size="small" color={T.danger} />
-          ) : (
-            <Text style={styles.deleteText}>Delete account</Text>
-          )}
-        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -421,27 +343,5 @@ function makeStyles(T: ThemeColors) {
     navRowLabel: { flex: 1, fontFamily: F.uiMed, fontSize: 15, color: T.text },
     rowDivider: { height: 1, backgroundColor: T.border, marginLeft: D.cardPad + 30 + 12 },
 
-    // Sign out
-    signOutBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      paddingVertical: 14,
-      borderRadius: R.card,
-      borderWidth: 1,
-      borderColor: withAlpha(T.danger, 0.3),
-      marginTop: 8,
-    },
-    signOutText: { fontFamily: F.uiMed, fontSize: 15, color: T.danger },
-
-    // Delete account
-    deleteBtn: {
-      alignItems: 'center',
-      justifyContent: 'center',
-      paddingVertical: 12,
-      marginTop: 2,
-    },
-    deleteText: { fontFamily: F.uiMed, fontSize: 13, color: T.muted },
   });
 }

@@ -1,0 +1,46 @@
+--- a/android/src/main/expo/modules/logbox/ExpoLogBoxDevSupportManager.kt
++++ b/android/src/main/expo/modules/logbox/ExpoLogBoxDevSupportManager.kt
+@@ -55,13 +55,20 @@
+   ) {
+ 
+   private var redBoxSurfaceDelegate: SurfaceDelegate? = null
++  private var _lastErrorTitle: String? = null
++  private var _lastErrorStack: Array<StackFrame>? = null
++
++  override val lastErrorTitle: String?
++    get() = _lastErrorTitle
++  override val lastErrorStack: Array<StackFrame>?
++    get() = _lastErrorStack
+ 
+   override fun hideRedboxDialog() {
+     redBoxSurfaceDelegate?.hide()
+   }
+ 
+-  override fun showNewJavaError(message: String?, e: Throwable) {
+-    showNewError(message, convertJavaStackTrace(e))
++  override fun showNewJavaError(message: String?, e: Throwable?) {
++    showNewError(message, if (e != null) convertJavaStackTrace(e) else emptyArray())
+   }
+ 
+   override fun showNewJSError(message: String?, details: ReadableArray?, errorCookie: Int) {
+@@ -70,8 +77,8 @@
+ 
+   private fun showNewError(message: String?, stack: Array<StackFrame>) {
+     UiThreadUtil.runOnUiThread {
+-      lastErrorTitle = message
+-      lastErrorStack = stack
++      _lastErrorTitle = message
++      _lastErrorStack = stack
+ 
+       if (redBoxSurfaceDelegate == null) {
+         this.redBoxSurfaceDelegate =
+@@ -125,8 +132,7 @@
+     pausedInDebuggerOverlayManager
+   ) {
+ 
+-  override val uniqueTag: String
+-    get() = "Bridgeless"
++  override fun getUniqueTag(): String = "Bridgeless"
+ 
+   override fun handleReloadJS() {
+     UiThreadUtil.assertOnUiThread()

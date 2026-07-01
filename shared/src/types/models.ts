@@ -262,6 +262,8 @@ export interface CreateExerciseRequest {
   name: string;
   type: Exclude<ActivityType, 'martial_arts'>;
   target?: string | null;
+  muscleGroup?: string | null;
+  equipment?: string | null;
 }
 
 export interface UpdateExerciseRequest {

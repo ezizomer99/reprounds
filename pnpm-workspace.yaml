@@ -10,6 +10,8 @@ allowBuilds:
   esbuild: true
   sharp: true
   workerd: true
+patchedDependencies:
+  '@expo/log-box@56.0.13': 'patches/@expo+log-box@56.0.13.patch'
 minimumReleaseAgeExclude:
   - miniflare@4.20260617.1
   - wrangler@4.103.0
