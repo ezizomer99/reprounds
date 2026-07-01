@@ -8,6 +8,9 @@ overrides:
   undici@<6.27.0: ^6.27.0
   '@babel/core@>=8': ^7.29.7
 
+patchedDependencies:
+  '@expo/log-box@56.0.13': 89bd5124113b89014f6b8d9158898b4b7c471d729eba80935ed120ebf280a2ea
+
 importers:
 
   .:
@@ -7158,7 +7161,7 @@ snapshots:
       '@babel/code-frame': 7.10.4
       json5: 2.2.3
 
-  '@expo/log-box@56.0.13(@expo/dom-webview@56.0.5)(expo@53.0.27)(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)':
+  '@expo/log-box@56.0.13(patch_hash=89bd5124113b89014f6b8d9158898b4b7c471d729eba80935ed120ebf280a2ea)(@expo/dom-webview@56.0.5)(expo@53.0.27)(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)':
     dependencies:
       '@expo/dom-webview': 56.0.5(expo@53.0.27)(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
       anser: 1.4.10
@@ -7198,7 +7201,7 @@ snapshots:
 
   '@expo/metro-runtime@56.0.15(@expo/log-box@56.0.13)(expo@53.0.27)(react-dom@19.2.7(react@19.0.0))(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)':
     dependencies:
-      '@expo/log-box': 56.0.13(@expo/dom-webview@56.0.5)(expo@53.0.27)(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
+      '@expo/log-box': 56.0.13(patch_hash=89bd5124113b89014f6b8d9158898b4b7c471d729eba80935ed120ebf280a2ea)(@expo/dom-webview@56.0.5)(expo@53.0.27)(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
       anser: 1.4.10
       expo: 53.0.27(@babel/core@7.29.7)(@expo/dom-webview@56.0.5)(@expo/metro-runtime@56.0.15)(react-native@0.79.6(@babel/core@7.29.7)(@types/react@19.0.14)(react@19.0.0))(react@19.0.0)
       pretty-format: 29.7.0

@@ -53,8 +53,10 @@ export function useCreateExercise() {
   const queryClient = useQueryClient();
 
   return useMutation<Exercise, Error, CreateExerciseRequest>({
-    mutationFn: (body) =>
-      apiPost<Exercise>('/exercises', body),
+    mutationFn: async (body) => {
+      const data = await apiPost<{ exercise: Exercise }>('/exercises', body);
+      return data.exercise;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['exercises'] });
     },

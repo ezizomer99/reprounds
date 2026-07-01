@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "5fcf4e98-ac49-4e12-b47b-73fb59f868a9"
+      }
+    },
+    "android": {
+      "package": "com.reprounds.app"
+    }
+  }
+}

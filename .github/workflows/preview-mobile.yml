@@ -1,0 +1,64 @@
+name: Preview mobile
+
+# Builds a preview APK on EAS and submits it to the Play Store internal testing
+# track whenever frontend or shared code is pushed to develop.
+# Use this to verify a feature end-to-end on a real device before merging to main.
+#
+# Prerequisites (GitHub secrets):
+#   EXPO_TOKEN            — personal access token from expo.dev/settings/access-tokens
+#   GOOGLE_PLAY_KEY_BASE64 — base64-encoded Google Play service account JSON key
+#
+# The build is only triggered when frontend or shared code changes; backend-only
+# changes on develop do not waste an EAS build quota slot.
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'frontend/**'
+      - 'shared/**'
+      - '.github/workflows/preview-mobile.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: preview-mobile
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: EAS preview build & submit (Android)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.6.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.13.1
+          cache: pnpm
+
+      - uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Decode Google Play service account key
+        run: echo "${{ secrets.GOOGLE_PLAY_KEY_BASE64 }}" | base64 -d > frontend/google-play-key.json
+
+      - name: Build preview APK on EAS
+        working-directory: frontend
+        run: eas build --profile preview --platform android --non-interactive --wait
+
+      - name: Submit to Play Store internal track
+        working-directory: frontend
+        run: eas submit --profile preview --platform android --latest --non-interactive
+
+      - name: Remove service account key
+        if: always()
+        run: rm -f frontend/google-play-key.json
