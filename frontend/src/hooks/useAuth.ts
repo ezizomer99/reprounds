@@ -69,7 +69,28 @@ export function useSignIn() {
     queryClient.setQueryData<User>(['auth', 'me'], data.user);
   }
 
-  return { signInWithGoogle, signInAsGuest };
+  async function registerWithEmail(email: string, password: string, name?: string): Promise<void> {
+    const guestUserId = await getGuestUserId();
+    const data = await apiPost<AuthResponse>('/auth/register', {
+      email,
+      password,
+      name: name && name.trim() ? name.trim() : null,
+      guestUserId,
+    });
+    await setSessionToken(data.sessionToken);
+    await clearGuestData();
+    queryClient.setQueryData<User>(['auth', 'me'], data.user);
+  }
+
+  async function signInWithEmail(email: string, password: string): Promise<void> {
+    const guestUserId = await getGuestUserId();
+    const data = await apiPost<AuthResponse>('/auth/login', { email, password, guestUserId });
+    await setSessionToken(data.sessionToken);
+    await clearGuestData();
+    queryClient.setQueryData<User>(['auth', 'me'], data.user);
+  }
+
+  return { signInWithGoogle, signInAsGuest, registerWithEmail, signInWithEmail };
 }
 
 export function useSignOut() {
