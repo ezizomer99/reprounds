@@ -11,6 +11,7 @@ import {
   text,
   time,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
@@ -25,15 +26,25 @@ export const fightResultEnum  = pgEnum('fight_result',  ['win', 'loss', 'draw'])
 export const fightMethodEnum  = pgEnum('fight_method',  ['ko', 'tko', 'submission', 'decision', 'points', 'other']);
 
 export const users = pgTable('users', {
-  id:         uuid('id').primaryKey().defaultRandom(),
-  googleSub:  text('google_sub').unique(),
-  deviceId:   text('device_id').unique(),
-  isGuest:    boolean('is_guest').notNull().default(false),
-  email:      text('email'),
-  name:       text('name'),
-  avatarUrl:  text('avatar_url'),
-  createdAt:  timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+  id:           uuid('id').primaryKey().defaultRandom(),
+  googleSub:    text('google_sub').unique(),
+  deviceId:     text('device_id').unique(),
+  isGuest:      boolean('is_guest').notNull().default(false),
+  email:        text('email'),
+  // Only set on email/password (credential) accounts. Self-describing hash
+  // format: algo$params$salt$hash (see backend/src/lib/password.ts).
+  passwordHash: text('password_hash'),
+  name:         text('name'),
+  avatarUrl:    text('avatar_url'),
+  createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  // Enforce email uniqueness for credential accounts only, case-insensitively.
+  // Google accounts (password_hash IS NULL) are excluded so they can freely
+  // share an email with — or exist independently of — a credential account.
+  credentialEmailIdx: uniqueIndex('users_credential_email_idx')
+    .on(sql`lower(${t.email})`)
+    .where(sql`${t.passwordHash} IS NOT NULL`),
+}));
 
 export const exercises = pgTable('exercises', {
   id:                 uuid('id').primaryKey().defaultRandom(),

@@ -99,6 +99,13 @@
       "when": 1782066006821,
       "tag": "0013_new_jean_grey",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1783013075879,
+      "tag": "0015_demonic_skin",
+      "breakpoints": true
     }
   ]
 }
