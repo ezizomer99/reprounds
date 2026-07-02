@@ -59,6 +59,12 @@ import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
 
+// Stable snap-point arrays. Passing a fresh array literal on every render makes
+// @gorhom/bottom-sheet re-run its snap-point memoization; hoisting keeps the
+// reference identity stable across renders.
+const SNAP_92: string[] = ['92%'];
+const SNAP_60: string[] = ['60%'];
+
 const SET_TYPE_CYCLE: SetType[] = ['warmup', 'normal', 'drop', 'failure', 'amrap'];
 const SET_TYPE_LABEL: Record<SetType, string> = {
   warmup: 'Warmup',
@@ -179,7 +185,8 @@ function PickExerciseModal({ visible, onClose, onPick }: {
     <>
       <BottomSheetModal
         ref={bottomSheetRef}
-        snapPoints={['92%']}
+        snapPoints={SNAP_92}
+        enableDynamicSizing={false}
         enablePanDownToClose
         onDismiss={onClose}
         backdropComponent={renderBackdrop}
@@ -448,7 +455,8 @@ function PickDisciplineModal({ visible, onClose, onPick }: {
   return (
     <BottomSheetModal
       ref={bottomSheetRef}
-      snapPoints={['60%']}
+      snapPoints={SNAP_60}
+      enableDynamicSizing={false}
       enablePanDownToClose
       onDismiss={onClose}
       backdropComponent={renderBackdrop}
