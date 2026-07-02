@@ -95,7 +95,11 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     const offerings = await Purchases.getOfferings();
     const current = offerings.current;
     if (!current) throw new Error('No offerings available.');
-    const pkg = current.availablePackages.find((p) => p.product.identifier === packageId);
+    // Google subscription identifiers come back as "productId:basePlanId",
+    // so match on the product id prefix as well as the exact id.
+    const pkg = current.availablePackages.find(
+      (p) => p.product.identifier === packageId || p.product.identifier.startsWith(`${packageId}:`),
+    );
     if (!pkg) throw new Error('Package not found.');
     const { customerInfo: info } = await Purchases.purchasePackage(pkg);
     applyInfo(info);
