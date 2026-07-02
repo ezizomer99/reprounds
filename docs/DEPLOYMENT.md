@@ -28,8 +28,9 @@ committed in config files.
 | `CLOUDFLARE_API_TOKEN` | `deploy-backend.yml` | Cloudflare dashboard → My Profile → API Tokens → "Edit Cloudflare Workers" template |
 | `CLOUDFLARE_ACCOUNT_ID` | `deploy-backend.yml` | Cloudflare dashboard → Workers overview (right sidebar) |
 | `PROD_DATABASE_URL` | `deploy-backend.yml` (migrate step) | Prod Neon connection string (§2) |
-| `EXPO_TOKEN` | `release-mobile.yml` | expo.dev → Account → Access tokens |
-| `GOOGLE_PLAY_KEY_BASE64` | `release-mobile.yml` | `base64 -w0 google-play-key.json` of the Play service-account JSON (§6) |
+| `EXPO_TOKEN` | `release-mobile.yml`, `preview-mobile.yml` | expo.dev → Account → Access tokens |
+| `GOOGLE_PLAY_KEY_BASE64` | `release-mobile.yml`, `preview-mobile.yml` | The Play service-account JSON (§6) — paste the raw JSON, or `base64 -w0 google-play-key.json`; both are accepted |
+| `NEON_API_KEY` | `neon_workflow.yml` (PR preview DB branches) | Neon console → Account → API keys (plus repo **variable** `NEON_PROJECT_ID`) |
 
 Also create a GitHub **Environment** named `production` (Settings → Environments) so the
 backend deploy can be gated/observed; the workflow already references it.
