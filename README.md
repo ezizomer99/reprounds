@@ -12,7 +12,8 @@ A mobile app for tracking gym workouts (strength + conditioning) and martial art
 | Navigation | Expo Router (file-based) |
 | Server state | TanStack Query (React Query) |
 | Secure storage | expo-secure-store |
-| Auth (device) | @react-native-google-signin/google-signin |
+| Auth | Google Sign-In (@react-native-google-signin), email/password, guest |
+| Subscriptions | RevenueCat (react-native-purchases) |
 | Backend | Cloudflare Workers + Hono |
 | DB proxy | Cloudflare Hyperdrive |
 | Database | Neon (serverless Postgres) |
@@ -28,7 +29,7 @@ A mobile app for tracking gym workouts (strength + conditioning) and martial art
 - **Wrangler CLI** — `pnpm add -g wrangler` (Cloudflare Worker dev + deploy)
 - **EAS CLI** — `pnpm add -g eas-cli` (device builds — Expo Go does not support Google sign-in)
 - A **Neon** Postgres database (free tier works)
-- A **Google Cloud** project with OAuth 2.0 credentials (Web + Android client IDs)
+- A **Google Cloud** project with OAuth 2.0 credentials (Web + Android client IDs) — only needed for Google sign-in; email/password and guest auth work without it
 
 ---
 
@@ -88,6 +89,8 @@ reprounds/
                      imported as @app/shared
   docs/
     BUILD_SPEC.md    Full specification — data model, API surface, build phases
+    DEPLOYMENT.md    Operator runbook for the Google Play launch
+    PROGRESS.md      Build phase status + launch checklist
   .claude/agents/    Specialized AI agents for domain work
   .githooks/         Pre-commit secret scanner + pre-push hook
 ```
@@ -112,6 +115,14 @@ pnpm --filter frontend start
 pnpm --filter backend db:generate   # generate Drizzle migration
 pnpm --filter backend db:migrate    # apply migrations to Neon
 pnpm --filter backend db:seed       # seed global defaults
+
+# Tests + typecheck (all workspaces)
+pnpm test
+pnpm typecheck
+
+# Deploy backend (applies pending migrations first, then wrangler deploy)
+pnpm --filter backend deploy              # dev worker
+pnpm --filter backend deploy:production   # production worker
 ```
 
 ---
