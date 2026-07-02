@@ -438,6 +438,29 @@ export interface ExercisePRsResponse {
   totalSessions: number;
 }
 
+// ---- Stats ----
+
+export interface MuscleSummaryItem {
+  muscleGroup: string | null;
+  secondaryMuscles: string[];
+}
+
+export interface MuscleSummaryResponse {
+  muscles: MuscleSummaryItem[];
+}
+
+export interface TopLift {
+  exerciseId: string;
+  exerciseName: string;
+  weight: number;
+  reps: number;
+  estimatedOneRepMax: number;
+}
+
+export interface TopLiftsResponse {
+  lifts: TopLift[];
+}
+
 // ---- Phase 5: Calendar + Recurrence ----
 
 export interface CalendarResponse {
