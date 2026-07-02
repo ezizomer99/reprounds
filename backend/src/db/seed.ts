@@ -63,6 +63,7 @@ async function seed() {
         target: exercises.sourceId,
         set: {
           name:             sql`excluded.name`,
+          type:             sql`excluded.type`,
           category:         sql`excluded.category`,
           bodyPart:         sql`excluded.body_part`,
           equipment:        sql`excluded.equipment`,

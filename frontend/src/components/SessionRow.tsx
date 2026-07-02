@@ -1,6 +1,7 @@
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
+import { Swipeable, RectButton } from 'react-native-gesture-handler';
 import type { RoutineWithItems, Session } from '@app/shared';
 import { F, R, D, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
@@ -42,30 +43,35 @@ export function SessionRow({ session, sessionName, routineName, isMat, onPress, 
   const duration = session.durationMinutes ? `${session.durationMinutes} min` : null;
   const displayName = sessionName ?? routineName ?? 'Session';
 
+  const renderRightActions = () => (
+    <RectButton style={styles.swipeDelete} onPress={onDelete}>
+      <Ionicons name="trash-outline" size={20} color="#fff" />
+    </RectButton>
+  );
+
   return (
-    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.dateBlock}>
-        <Text style={styles.dateDay}>{day}</Text>
-        <Text style={styles.dateMonth}>{month}</Text>
-      </View>
-      <View style={styles.rowDivider} />
-      <View style={styles.rowContent}>
-        <Text style={styles.rowName}>{displayName}</Text>
-        <Text style={styles.rowMeta}>
-          {duration ?? ''}
-          {duration ? ' · ' : ''}
-          {session.status}
-        </Text>
-      </View>
-      <View style={[styles.kindBadge, isMat && styles.kindBadgeMat]}>
-        {isMat
-          ? <Ionicons name="flash" size={12} color={T.grappling} />
-          : <Ionicons name="barbell" size={12} color={T.textDim} />}
-      </View>
-      <TouchableOpacity onPress={onDelete} style={styles.deleteBtn} hitSlop={8}>
-        <Ionicons name="trash-outline" size={17} color={T.danger} />
+    <Swipeable renderRightActions={renderRightActions} rightThreshold={40} overshootRight={false}>
+      <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.7}>
+        <View style={styles.dateBlock}>
+          <Text style={styles.dateDay}>{day}</Text>
+          <Text style={styles.dateMonth}>{month}</Text>
+        </View>
+        <View style={styles.rowDivider} />
+        <View style={styles.rowContent}>
+          <Text style={styles.rowName}>{displayName}</Text>
+          <Text style={styles.rowMeta}>
+            {duration ?? ''}
+            {duration ? ' · ' : ''}
+            {session.status}
+          </Text>
+        </View>
+        <View style={[styles.kindBadge, isMat && styles.kindBadgeMat]}>
+          {isMat
+            ? <Ionicons name="flash" size={12} color={T.grappling} />
+            : <Ionicons name="barbell" size={12} color={T.textDim} />}
+        </View>
       </TouchableOpacity>
-    </TouchableOpacity>
+    </Swipeable>
   );
 }
 
@@ -76,7 +82,7 @@ export function rowSeparatorMargin() {
 
 function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
-    row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: D.pad, paddingVertical: 13, gap: 12 },
+    row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: D.pad, paddingVertical: 13, gap: 12, backgroundColor: T.bg },
     dateBlock: { width: 46, alignItems: 'center', flexShrink: 0 },
     dateDay: { fontFamily: F.monoBold, fontSize: 19, color: T.text },
     dateMonth: { fontFamily: F.uiBold, fontSize: 10, color: T.textDim, letterSpacing: 0.6 },
@@ -89,6 +95,11 @@ function makeStyles(T: ThemeColors) {
       backgroundColor: T.surface2, alignItems: 'center', justifyContent: 'center',
     },
     kindBadgeMat: { backgroundColor: withAlpha(T.grappling, 0.12) },
-    deleteBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+    swipeDelete: {
+      backgroundColor: T.danger,
+      justifyContent: 'center',
+      alignItems: 'center',
+      width: 72,
+    },
   });
 }

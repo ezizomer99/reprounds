@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { StyleProp, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
+import * as Haptics from 'expo-haptics';
 import { F, R, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../lib/color';
@@ -31,10 +32,18 @@ export function RestTimer({ seconds, total, onSkip, onAdd, style }: RestTimerPro
           <Text style={styles.label}>Rest</Text>
           <Text style={styles.time}>{mm}:{ss}</Text>
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={onAdd} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.addBtn}
+          onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onAdd(); }}
+          activeOpacity={0.7}
+        >
           <Text style={styles.addBtnText}>+15s</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.skipBtn} onPress={onSkip} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.skipBtn}
+          onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onSkip(); }}
+          activeOpacity={0.7}
+        >
           <Text style={styles.skipBtnText}>Skip</Text>
         </TouchableOpacity>
       </View>

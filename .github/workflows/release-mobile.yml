@@ -41,9 +41,9 @@ jobs:
         working-directory: frontend
         run: eas build --profile production --platform android --non-interactive --wait
 
-      - name: Submit latest build to Google Play
+      - name: Submit latest build to Google Play (Closed testing / alpha track)
         working-directory: frontend
-        run: eas submit --profile production --platform android --latest --non-interactive
+        run: eas submit --profile alpha --platform android --latest --non-interactive
 
       - name: Remove service account key
         if: always()

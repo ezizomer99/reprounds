@@ -1,4 +1,5 @@
 import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -69,7 +70,7 @@ export default function JournalTab() {
   }
 
   return (
-    <View style={styles.screen}>
+    <Animated.View style={styles.screen} entering={FadeInDown.duration(280).springify()}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Journal</Text>
         {list.length > 0 && (
@@ -162,7 +163,7 @@ export default function JournalTab() {
           showsVerticalScrollIndicator={false}
         />
       )}
-    </View>
+    </Animated.View>
   );
 }
 

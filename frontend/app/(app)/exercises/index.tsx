@@ -1,7 +1,6 @@
 import {
   ActivityIndicator,
   Alert,
-  Modal,
   ScrollView,
   SectionList,
   StyleSheet,
@@ -11,7 +10,10 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'react-native';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { Swipeable, RectButton } from 'react-native-gesture-handler';
+import { BottomSheetModal, BottomSheetScrollView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import type { BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,7 +27,7 @@ import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
-import { withAlpha } from '../../../src/lib/color';
+import { Skeleton } from '../../../src/components/Skeleton';
 
 const FREE_CUSTOM_EXERCISE_LIMIT = 3;
 
@@ -86,7 +88,10 @@ interface ExerciseRowProps {
 }
 
 function ExerciseRow({ exercise, isOwned, onPress, onDelete, styles, T }: ExerciseRowProps) {
+  const swipeableRef = useRef<Swipeable>(null);
+
   function handleDelete() {
+    swipeableRef.current?.close();
     Alert.alert(
       'Delete exercise',
       `Remove "${exercise.name}"? This cannot be undone.`,
@@ -99,30 +104,33 @@ function ExerciseRow({ exercise, isOwned, onPress, onDelete, styles, T }: Exerci
 
   const meta = exercise.equipment ?? exercise.muscleGroup ?? exercise.category;
 
+  const renderRightActions = () => (
+    <RectButton style={styles.swipeDelete} onPress={handleDelete}>
+      <Ionicons name="trash-outline" size={18} color="#fff" />
+    </RectButton>
+  );
+
   return (
-    <TouchableOpacity
-      style={styles.row}
-      onPress={() => onPress(exercise.id)}
-      activeOpacity={0.7}
+    <Swipeable
+      ref={swipeableRef}
+      renderRightActions={isOwned ? renderRightActions : undefined}
+      rightThreshold={40}
+      overshootRight={false}
     >
-      <ExerciseThumbnail uri={exercise.imageUrl} styles={styles} />
-      <View style={styles.rowContent}>
-        <Text style={styles.rowName} numberOfLines={1}>{exercise.name}</Text>
-        {meta ? (
-          <Text style={styles.rowMeta} numberOfLines={1}>{meta}</Text>
-        ) : null}
-      </View>
-      {isOwned && (
-        <TouchableOpacity
-          onPress={handleDelete}
-          style={styles.deleteButton}
-          activeOpacity={0.7}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="trash-outline" size={15} color={T.danger} />
-        </TouchableOpacity>
-      )}
-    </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.row}
+        onPress={() => onPress(exercise.id)}
+        activeOpacity={0.7}
+      >
+        <ExerciseThumbnail uri={exercise.imageUrl} styles={styles} />
+        <View style={styles.rowContent}>
+          <Text style={styles.rowName} numberOfLines={1}>{exercise.name}</Text>
+          {meta ? (
+            <Text style={styles.rowMeta} numberOfLines={1}>{meta}</Text>
+          ) : null}
+        </View>
+      </TouchableOpacity>
+    </Swipeable>
   );
 }
 
@@ -134,10 +142,16 @@ interface AddExerciseModalProps {
 function AddExerciseModal({ visible, onClose }: AddExerciseModalProps) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+  const bottomSheetRef = useRef<BottomSheetModal>(null);
   const [name, setName] = useState('');
   const [type, setType] = useState<Exclude<ActivityType, 'martial_arts'>>('strength');
   const [target, setTarget] = useState<string | null>(null);
   const createExercise = useCreateExercise();
+
+  useEffect(() => {
+    if (visible) bottomSheetRef.current?.present();
+    else bottomSheetRef.current?.dismiss();
+  }, [visible]);
 
   function reset() {
     setName('');
@@ -147,6 +161,7 @@ function AddExerciseModal({ visible, onClose }: AddExerciseModalProps) {
 
   function handleClose() {
     reset();
+    bottomSheetRef.current?.dismiss();
     onClose();
   }
 
@@ -157,26 +172,31 @@ function AddExerciseModal({ visible, onClose }: AddExerciseModalProps) {
       return;
     }
     try {
-      await createExercise.mutateAsync({
-        name: trimmed,
-        type,
-        target,
-      });
+      await createExercise.mutateAsync({ name: trimmed, type, target });
       handleClose();
     } catch (err) {
       Alert.alert('Error', (err as Error).message ?? 'Failed to create exercise.');
     }
   }
 
+  const renderBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
+    ),
+    [],
+  );
+
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={handleClose}
+    <BottomSheetModal
+      ref={bottomSheetRef}
+      snapPoints={['90%']}
+      enablePanDownToClose
+      onDismiss={onClose}
+      backdropComponent={renderBackdrop}
+      backgroundStyle={{ backgroundColor: T.bg }}
+      handleIndicatorStyle={{ backgroundColor: T.textDim }}
     >
-      <ScrollView
-        style={styles.modalContainer}
+      <BottomSheetScrollView
         contentContainerStyle={styles.modalContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -257,8 +277,8 @@ function AddExerciseModal({ visible, onClose }: AddExerciseModalProps) {
             <Text style={styles.submitText}>Add Exercise</Text>
           )}
         </TouchableOpacity>
-      </ScrollView>
-    </Modal>
+      </BottomSheetScrollView>
+    </BottomSheetModal>
   );
 }
 
@@ -273,7 +293,7 @@ export default function ExercisesScreen() {
   const [search, setSearch] = useState('');
   const [showAdd, setShowAdd] = useState(false);
 
-  const { data: exercises, isLoading, isError, error } = useExercises({
+  const { data: exercises, isLoading, isError, error, refetch, isRefetching } = useExercises({
     search: search.trim() || undefined,
   });
 
@@ -374,8 +394,23 @@ export default function ExercisesScreen() {
       </View>
 
       {isLoading && (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color={T.primary} />
+        <View style={{ paddingTop: 8 }}>
+          {Array.from({ length: 3 }).map((_, si) => (
+            <View key={si}>
+              <View style={styles.skeletonSectionHeader}>
+                <Skeleton width={80} height={11} />
+              </View>
+              {Array.from({ length: 4 }).map((_, ri) => (
+                <View key={ri} style={styles.skeletonRow}>
+                  <Skeleton width={38} height={38} radius={R.sm} />
+                  <View style={{ flex: 1, gap: 7 }}>
+                    <Skeleton width="55%" height={14} />
+                    <Skeleton width="33%" height={11} />
+                  </View>
+                </View>
+              ))}
+            </View>
+          ))}
         </View>
       )}
 
@@ -432,6 +467,8 @@ export default function ExercisesScreen() {
             { paddingBottom: insets.bottom + 32 },
           ]}
           showsVerticalScrollIndicator={false}
+          onRefresh={() => void refetch()}
+          refreshing={isRefetching}
         />
       )}
 
@@ -504,6 +541,7 @@ function makeStyles(T: ThemeColors) {
       paddingHorizontal: D.pad,
       paddingVertical: 10,
       gap: 12,
+      backgroundColor: T.bg,
     },
     thumbnailContainer: {
       width: 52,
@@ -524,17 +562,17 @@ function makeStyles(T: ThemeColors) {
     rowContent: { flex: 1, gap: 3 },
     rowName: { fontFamily: F.uiMed, fontSize: 15, color: T.text },
     rowMeta: { fontFamily: F.ui, fontSize: 12, color: T.textDim },
-    deleteButton: {
-      width: 32,
-      height: 32,
-      alignItems: 'center',
+    swipeDelete: {
+      backgroundColor: T.danger,
       justifyContent: 'center',
-      borderRadius: R.sm,
-      backgroundColor: withAlpha(T.danger, 0.1),
+      alignItems: 'center',
+      width: 72,
     },
 
     separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad + 52 + 12 },
     centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
+    skeletonSectionHeader: { paddingHorizontal: D.pad, paddingVertical: 10 },
+    skeletonRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: D.pad, paddingVertical: 12, gap: 12 },
     emptyText: { fontFamily: F.uiMed, fontSize: 15, color: T.muted },
     errorText: {
       fontFamily: F.uiMed,

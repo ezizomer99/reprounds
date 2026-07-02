@@ -17,6 +17,7 @@ import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
+import { Skeleton } from '../../../src/components/Skeleton';
 
 const FREE_ROUTINE_LIMIT = 2;
 
@@ -123,7 +124,17 @@ export default function RoutinesScreen() {
       </View>
 
       {isLoading && (
-        <View style={styles.centered}><ActivityIndicator size="large" color={T.primary} /></View>
+        <View style={{ paddingTop: 8 }}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <View key={i} style={styles.skeletonRow}>
+              <View style={{ flex: 1, gap: 8 }}>
+                <Skeleton width="45%" height={15} />
+                <Skeleton width="65%" height={11} />
+              </View>
+              <Skeleton width={32} height={32} radius={R.sm} />
+            </View>
+          ))}
+        </View>
       )}
 
       {isError && (
@@ -192,6 +203,7 @@ function makeStyles(T: ThemeColors) {
 
     separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad + 40 + 12 },
     centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
+    skeletonRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: D.pad, paddingVertical: 16, gap: 12, borderBottomWidth: 1, borderBottomColor: T.border },
     emptyText: { fontFamily: F.uiSemi, fontSize: 15, color: T.textDim, marginBottom: 4 },
     emptySub: { fontFamily: F.uiMed, fontSize: 13, color: T.muted },
     errorText: { fontFamily: F.uiMed, fontSize: 15, color: T.danger, textAlign: 'center', paddingHorizontal: 24 },

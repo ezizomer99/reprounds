@@ -6,6 +6,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -104,7 +106,7 @@ function RoutineCard({
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   return (
-    <TouchableOpacity style={styles.routineCard} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={styles.routineCard} onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPress(); }} activeOpacity={0.7}>
       <View style={styles.routineIconBox}>
         <Ionicons name="layers-outline" size={20} color={T.primary} />
       </View>
@@ -143,7 +145,7 @@ export default function WorkoutTab() {
   }, [sessions]);
 
   return (
-    <View style={styles.screen}>
+    <Animated.View style={styles.screen} entering={FadeInDown.duration(280).springify()}>
       <View style={styles.header}>
         <Text style={styles.greeting}>{greeting(user?.name ?? null)}</Text>
         <Text style={styles.todayLabel}>{todayLabel()}</Text>
@@ -271,7 +273,7 @@ export default function WorkoutTab() {
           </View>
         )}
       </ScrollView>
-    </View>
+    </Animated.View>
   );
 }
 

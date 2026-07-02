@@ -49,6 +49,12 @@
         "track": "internal"
       }
     },
+    "alpha": {
+      "android": {
+        "serviceAccountKeyPath": "./google-play-key.json",
+        "track": "alpha"
+      }
+    },
     "production": {
       "android": {
         "serviceAccountKeyPath": "./google-play-key.json",

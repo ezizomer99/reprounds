@@ -11,6 +11,8 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'react-native';
+import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
+import type { RenderItemParams } from 'react-native-draggable-flatlist';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,6 +31,7 @@ import {
   useAddRoutineItem,
   useCreateRoutine,
   useRemoveRoutineItem,
+  useReorderRoutineItems,
   useRoutines,
   useUpdateRoutine,
   useUpdateRoutineItem,
@@ -116,17 +119,19 @@ interface ItemRowProps {
   targetSummary: string | null;
   onPress?: () => void;
   onRemove: () => void;
+  drag?: () => void;
+  isActive?: boolean;
 }
 
-function ItemRow({ name, kind, targetSummary, onPress, onRemove }: ItemRowProps) {
+function ItemRow({ name, kind, targetSummary, onPress, onRemove, drag, isActive }: ItemRowProps) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const tappable = kind === 'exercise' && !!onPress;
   return (
-    <View style={styles.itemRow}>
-      <View style={styles.gripHandle}>
-        <Ionicons name="reorder-three-outline" size={16} color={T.muted} />
-      </View>
+    <View style={[styles.itemRow, isActive && styles.itemRowActive]}>
+      <TouchableOpacity onLongPress={drag} style={styles.gripHandle} activeOpacity={0.6} disabled={!drag}>
+        <Ionicons name="reorder-three-outline" size={16} color={drag ? T.textDim : T.muted} />
+      </TouchableOpacity>
       <View style={[styles.kindBadge, kind === 'martial_arts' && styles.kindBadgeMat]}>
         {kind === 'martial_arts' ? (
           <Ionicons name="flash" size={13} color={T.grappling} />
@@ -549,6 +554,7 @@ export default function RoutineEditorScreen() {
   const addItem = useAddRoutineItem();
   const removeItem = useRemoveRoutineItem();
   const updateItem = useUpdateRoutineItem();
+  const reorderItems = useReorderRoutineItems();
 
   const { data: allExercises } = useExercises();
   const [editingTarget, setEditingTarget] = useState<{ id: string; isPending: boolean } | null>(null);
@@ -736,35 +742,63 @@ export default function RoutineEditorScreen() {
         </View>
 
         {isNew ? (
-          pendingItems.length > 0 ? pendingItems.map((item) => (
-            <ItemRow
-              key={item._localId}
-              name={item._displayName}
-              kind={item.kind}
-              targetSummary={formatTarget(asTarget(item.target), typeOf(item.exerciseId), unit)}
-              onPress={() => setEditingTarget({ id: item._localId, isPending: true })}
-              onRemove={() => setPendingItems((prev) => prev.filter((i) => i._localId !== item._localId))}
+          pendingItems.length > 0 ? (
+            <DraggableFlatList
+              data={pendingItems}
+              keyExtractor={(item) => item._localId}
+              onDragEnd={({ data }) => setPendingItems(data)}
+              scrollEnabled={false}
+              renderItem={({ item, drag, isActive }: RenderItemParams<PendingItem>) => (
+                <ScaleDecorator>
+                  <ItemRow
+                    name={item._displayName}
+                    kind={item.kind}
+                    targetSummary={formatTarget(asTarget(item.target), typeOf(item.exerciseId), unit)}
+                    onPress={() => setEditingTarget({ id: item._localId, isPending: true })}
+                    onRemove={() => setPendingItems((prev) => prev.filter((i) => i._localId !== item._localId))}
+                    drag={drag}
+                    isActive={isActive}
+                  />
+                </ScaleDecorator>
+              )}
             />
-          )) : (
+          ) : (
             <Text style={styles.emptyItemsText}>No items yet. Add exercises or disciplines below.</Text>
           )
         ) : (
-          (existingRoutine?.items ?? []).length > 0 ? (existingRoutine?.items ?? []).map((item) => (
-            <ItemRow
-              key={item.id}
-              name={item.exerciseName ?? item.disciplineName ?? 'Unknown'}
-              kind={item.kind}
-              targetSummary={formatTarget(asTarget(item.target), typeOf(item.exerciseId), unit)}
-              onPress={() => setEditingTarget({ id: item.id, isPending: false })}
-              onRemove={() => {
+          (existingRoutine?.items ?? []).length > 0 ? (
+            <DraggableFlatList
+              data={existingRoutine?.items ?? []}
+              keyExtractor={(item) => item.id}
+              onDragEnd={({ data }) => {
                 if (!existingRoutine) return;
-                removeItem.mutate(
-                  { routineId: existingRoutine.id, itemId: item.id },
-                  { onError: (err) => Alert.alert('Error', err.message ?? 'Failed to remove item.') },
+                reorderItems.mutate(
+                  { routineId: existingRoutine.id, order: data.map((i) => i.id) },
+                  { onError: (err) => Alert.alert('Error', err.message ?? 'Failed to reorder items.') },
                 );
               }}
+              scrollEnabled={false}
+              renderItem={({ item, drag, isActive }) => (
+                <ScaleDecorator>
+                  <ItemRow
+                    name={item.exerciseName ?? item.disciplineName ?? 'Unknown'}
+                    kind={item.kind}
+                    targetSummary={formatTarget(asTarget(item.target), typeOf(item.exerciseId), unit)}
+                    onPress={() => setEditingTarget({ id: item.id, isPending: false })}
+                    onRemove={() => {
+                      if (!existingRoutine) return;
+                      removeItem.mutate(
+                        { routineId: existingRoutine.id, itemId: item.id },
+                        { onError: (err) => Alert.alert('Error', err.message ?? 'Failed to remove item.') },
+                      );
+                    }}
+                    drag={drag}
+                    isActive={isActive}
+                  />
+                </ScaleDecorator>
+              )}
             />
-          )) : (
+          ) : (
             <Text style={styles.emptyItemsText}>No items yet. Add exercises or disciplines below.</Text>
           )
         )}
@@ -883,6 +917,7 @@ function makeStyles(T: ThemeColors) {
     borderBottomWidth: 1, borderBottomColor: T.border,
     backgroundColor: T.bg,
   },
+  itemRowActive: { backgroundColor: T.surface2 },
 
   gripHandle: { width: 24, alignItems: 'center' },
   kindBadge: {

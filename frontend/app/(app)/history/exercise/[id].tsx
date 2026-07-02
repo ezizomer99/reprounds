@@ -1,14 +1,17 @@
 import { ActivityIndicator, FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import Body from 'react-native-body-highlighter';
 import type { ExerciseHistoryEntry, StrengthSet } from '@app/shared';
 import { totalVolume } from '@app/shared';
 import { useExerciseHistory, useExercisePRs } from '../../../../src/hooks/useSession';
+import { useExercise } from '../../../../src/hooks/useExercises';
 import { useUnit } from '../../../../src/units/UnitContext';
 import { fmtWeight, kgToUnit, type WeightUnit } from '../../../../src/units/units';
 import { Sparkline } from '../../../../src/components/Sparkline';
+import { buildBodyData } from '../../../../src/lib/muscleSlugMap';
 import { useProGate } from '../../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../../src/theme/colors';
 import { useTheme } from '../../../../src/theme/ThemeContext';
@@ -80,8 +83,10 @@ export default function ExerciseHistoryScreen() {
   const { unit } = useUnit();
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
 
+  const [muscleView, setMuscleView] = useState<'front' | 'back'>('front');
   const { data: prsData, isLoading: prsLoading } = useExercisePRs(id ?? null);
   const { data: historyData, isLoading: histLoading, isError, error } = useExerciseHistory(id ?? null);
+  const { data: exerciseDetail } = useExercise(id ?? null);
 
   const history = historyData?.history ?? [];
   const headerTitle = name ?? history[0]?.entry.exerciseName ?? 'Exercise';
@@ -114,6 +119,11 @@ export default function ExerciseHistoryScreen() {
       </View>
     );
   }
+
+  const bodyData = useMemo(
+    () => buildBodyData(exerciseDetail?.muscleGroup ?? null, exerciseDetail?.secondaryMuscles ?? null),
+    [exerciseDetail],
+  );
 
   const topWeights = history
     .map((e) => topWeight(e.entry.sets))
@@ -182,6 +192,37 @@ export default function ExerciseHistoryScreen() {
                 </View>
               </View>
               <Text style={styles.prTotal}>Total sessions: {prsData.totalSessions}</Text>
+            </View>
+          )}
+
+          {bodyData.length > 0 && (
+            <View style={styles.card}>
+              <View style={styles.muscleHeader}>
+                <Text style={styles.eyebrow}>Muscles Targeted</Text>
+                <View style={styles.muscleToggle}>
+                  {(['front', 'back'] as const).map((side) => (
+                    <TouchableOpacity
+                      key={side}
+                      style={[styles.muscleToggleBtn, muscleView === side && styles.muscleToggleBtnActive]}
+                      onPress={() => setMuscleView(side)}
+                    >
+                      <Text style={[styles.muscleToggleText, muscleView === side && styles.muscleToggleTextActive]}>
+                        {side.charAt(0).toUpperCase() + side.slice(1)}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+              <View style={{ alignItems: 'center', paddingVertical: 4 }}>
+                <Body
+                  data={bodyData}
+                  side={muscleView}
+                  scale={0.9}
+                  colors={[withAlpha(T.primary, 0.45), T.primary]}
+                  border={T.border}
+                  defaultFill={T.surface2}
+                />
+              </View>
             </View>
           )}
 
@@ -255,6 +296,13 @@ function makeStyles(T: ThemeColors) {
     prVal: { fontFamily: F.monoBold, fontSize: 24, color: T.text, letterSpacing: -0.5 },
     prValGold: { color: T.gold },
     prTotal: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, textAlign: 'center' },
+
+    muscleHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+    muscleToggle: { flexDirection: 'row', gap: 4 },
+    muscleToggleBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: R.chip, backgroundColor: T.surface2 },
+    muscleToggleBtnActive: { backgroundColor: T.primary },
+    muscleToggleText: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim },
+    muscleToggleTextActive: { color: T.onPrimary },
 
     card: { backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.card, padding: D.cardPad, paddingBottom: 10, overflow: 'hidden' },
     sparklineHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },

@@ -9,6 +9,7 @@ import { routineRoutes } from './routes/routines';
 import { sessionRoutes } from './routes/sessions';
 import { calendarRoutes } from './routes/calendar';
 import { weightRoutes } from './routes/weights';
+import { statsRoutes } from './routes/stats';
 
 type Env = {
   Bindings: {
@@ -36,5 +37,6 @@ app.route('/v1/routines', routineRoutes);
 app.route('/v1/sessions', sessionRoutes);
 app.route('/v1/calendar', calendarRoutes);
 app.route('/v1/weights', weightRoutes);
+app.route('/v1/stats', statsRoutes);
 
 export default app;
