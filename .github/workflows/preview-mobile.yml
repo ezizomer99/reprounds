@@ -6,7 +6,8 @@ name: Preview mobile
 #
 # Prerequisites (GitHub secrets):
 #   EXPO_TOKEN            — personal access token from expo.dev/settings/access-tokens
-#   GOOGLE_PLAY_KEY_BASE64 — base64-encoded Google Play service account JSON key
+#   GOOGLE_PLAY_KEY_BASE64 — Google Play service account JSON key, base64-encoded
+#                            (raw JSON is also accepted)
 #
 # The build is only triggered when frontend or shared code changes; backend-only
 # changes on develop do not waste an EAS build quota slot.
@@ -61,6 +62,21 @@ jobs:
             echo "GOOGLE_PLAY_KEY_BASE64 secret not set — skipping Play Store submission"
             exit 0
           fi
-          echo "$GOOGLE_PLAY_KEY" | base64 -d > google-play-key.json
+          # The secret may be raw JSON or base64 (possibly line-wrapped from the encoder).
+          trimmed=$(printf '%s' "$GOOGLE_PLAY_KEY" | tr -d '[:space:]')
+          case "$trimmed" in
+            {*) printf '%s' "$GOOGLE_PLAY_KEY" > google-play-key.json ;;
+            *)
+              if ! printf '%s' "$trimmed" | base64 -d > google-play-key.json 2>/dev/null; then
+                echo "::error::GOOGLE_PLAY_KEY_BASE64 is neither raw JSON nor valid base64"
+                exit 1
+              fi
+              ;;
+          esac
+          if ! node -e "JSON.parse(require('fs').readFileSync('google-play-key.json', 'utf8'))" 2>/dev/null; then
+            echo "::error::GOOGLE_PLAY_KEY_BASE64 decoded, but the result is not valid JSON"
+            rm -f google-play-key.json
+            exit 1
+          fi
           eas submit --profile preview --platform android --latest --non-interactive
           rm -f google-play-key.json
