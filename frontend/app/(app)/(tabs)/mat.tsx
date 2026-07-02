@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useState, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -269,7 +270,7 @@ export default function MatTab() {
   const list = disciplines ?? [];
 
   return (
-    <View style={styles.screen}>
+    <Animated.View style={styles.screen} entering={FadeInDown.duration(280).springify()}>
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Martial Arts</Text>
@@ -344,7 +345,7 @@ export default function MatTab() {
       )}
 
       <AddDisciplineModal visible={showAdd} onClose={() => setShowAdd(false)} />
-    </View>
+    </Animated.View>
   );
 }
 

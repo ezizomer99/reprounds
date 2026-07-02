@@ -1,7 +1,6 @@
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Modal,
   ScrollView,
   StyleSheet,
@@ -12,6 +11,10 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'react-native';
+import LottieView from 'lottie-react-native';
+import * as Haptics from 'expo-haptics';
+import { BottomSheetModal, BottomSheetFlatList, BottomSheetTextInput, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import type { BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -126,18 +129,27 @@ function PickExerciseModal({ visible, onClose, onPick }: {
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+  const bottomSheetRef = useRef<BottomSheetModal>(null);
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState('');
   const { data: exercises, isLoading } = useExercises({ search: search.trim() || undefined });
   const { isPro, showPaywall } = useProGate();
 
-  function handleClose() { setSearch(''); setShowCreate(false); onClose(); }
+  useEffect(() => {
+    if (visible) bottomSheetRef.current?.present();
+    else bottomSheetRef.current?.dismiss();
+  }, [visible]);
+
+  function handleClose() {
+    setSearch('');
+    setShowCreate(false);
+    bottomSheetRef.current?.dismiss();
+    onClose();
+  }
 
   function handleCreatePress() {
     const allCustom = (exercises ?? []).filter((e) => e.userId != null);
-    // When searching, count may undercount — open create form which does its own check
-    // unless we're clearly at or over the limit with no search active
     const searchActive = search.trim().length > 0;
     if (!isPro && !searchActive && allCustom.length >= FREE_CUSTOM_EXERCISE_LIMIT) {
       Alert.alert(
@@ -156,58 +168,71 @@ function PickExerciseModal({ visible, onClose, onPick }: {
 
   const trimmed = search.trim();
 
+  const renderBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
+    ),
+    [],
+  );
+
   return (
     <>
-      <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
-        <View style={styles.modal}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Add Exercise</Text>
-            <TouchableOpacity onPress={handleClose}>
-              <Text style={styles.modalCancel}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-          <TextInput
-            style={styles.modalSearch}
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search exercises..."
-            placeholderTextColor={T.muted}
-            clearButtonMode="while-editing"
-          />
-          {isLoading ? (
-            <View style={styles.centered}><ActivityIndicator color={T.primary} /></View>
-          ) : (
-            <FlatList
-              data={exercises ?? []}
-              keyExtractor={(i) => i.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity style={styles.pickRow} onPress={() => { onPick(item); handleClose(); }}>
-                  {item.imageUrl ? (
-                    <Image source={{ uri: item.imageUrl }} style={styles.pickThumb} resizeMode="cover" />
-                  ) : (
-                    <View style={[styles.pickThumb, styles.pickThumbPlaceholder]} />
-                  )}
-                  <View style={styles.pickInfo}>
-                    <Text style={styles.pickName}>{item.name}</Text>
-                    <Text style={styles.pickMeta}>{item.equipment ?? item.muscleGroup ?? item.type}</Text>
-                  </View>
-                </TouchableOpacity>
-              )}
-              ItemSeparatorComponent={() => <View style={styles.separator} />}
-              ListEmptyComponent={
-                trimmed ? (
-                  <TouchableOpacity style={styles.createExRow} onPress={handleCreatePress} activeOpacity={0.7}>
-                    <Ionicons name="add-circle-outline" size={20} color={T.primary} />
-                    <Text style={styles.createExText}>Create exercise "{trimmed}"</Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={styles.centered}><Text style={styles.emptyText}>No exercises found.</Text></View>
-                )
-              }
-            />
-          )}
+      <BottomSheetModal
+        ref={bottomSheetRef}
+        snapPoints={['92%']}
+        enablePanDownToClose
+        onDismiss={onClose}
+        backdropComponent={renderBackdrop}
+        backgroundStyle={{ backgroundColor: T.bg }}
+        handleIndicatorStyle={{ backgroundColor: T.textDim }}
+      >
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Add Exercise</Text>
+          <TouchableOpacity onPress={handleClose}>
+            <Text style={styles.modalCancel}>Cancel</Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
+        <BottomSheetTextInput
+          style={[styles.modalSearch, { color: T.text }]}
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search exercises..."
+          placeholderTextColor={T.muted}
+          clearButtonMode="while-editing"
+        />
+        {isLoading ? (
+          <View style={styles.centered}><ActivityIndicator color={T.primary} /></View>
+        ) : (
+          <BottomSheetFlatList
+            data={exercises ?? []}
+            keyExtractor={(i) => i.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity style={styles.pickRow} onPress={() => { onPick(item); handleClose(); }}>
+                {item.imageUrl ? (
+                  <Image source={{ uri: item.imageUrl }} style={styles.pickThumb} resizeMode="cover" />
+                ) : (
+                  <View style={[styles.pickThumb, styles.pickThumbPlaceholder]} />
+                )}
+                <View style={styles.pickInfo}>
+                  <Text style={styles.pickName}>{item.name}</Text>
+                  <Text style={styles.pickMeta}>{item.equipment ?? item.muscleGroup ?? item.type}</Text>
+                </View>
+              </TouchableOpacity>
+            )}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            ListEmptyComponent={
+              trimmed ? (
+                <TouchableOpacity style={styles.createExRow} onPress={handleCreatePress} activeOpacity={0.7}>
+                  <Ionicons name="add-circle-outline" size={20} color={T.primary} />
+                  <Text style={styles.createExText}>Create exercise "{trimmed}"</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.centered}><Text style={styles.emptyText}>No exercises found.</Text></View>
+              )
+            }
+          />
+        )}
+      </BottomSheetModal>
       <CreateExerciseInSessionModal
         visible={showCreate}
         initialName={createName}
@@ -405,32 +430,54 @@ function PickDisciplineModal({ visible, onClose, onPick }: {
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+  const bottomSheetRef = useRef<BottomSheetModal>(null);
   const { data: disciplines, isLoading } = useDisciplines();
+
+  useEffect(() => {
+    if (visible) bottomSheetRef.current?.present();
+    else bottomSheetRef.current?.dismiss();
+  }, [visible]);
+
+  const renderBackdrop = useCallback(
+    (props: BottomSheetBackdropProps) => (
+      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
+    ),
+    [],
+  );
+
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={styles.modal}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Add Discipline</Text>
-          <TouchableOpacity onPress={onClose}><Text style={styles.modalCancel}>Cancel</Text></TouchableOpacity>
-        </View>
-        {isLoading ? (
-          <View style={styles.centered}><ActivityIndicator color={T.primary} /></View>
-        ) : (
-          <FlatList
-            data={disciplines ?? []}
-            keyExtractor={(i) => i.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity style={styles.pickRow} onPress={() => { onPick(item); onClose(); }}>
-                <Text style={styles.pickName}>{item.name}</Text>
-                <Text style={styles.pickMeta}>{item.category}</Text>
-              </TouchableOpacity>
-            )}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
-            ListEmptyComponent={<View style={styles.centered}><Text style={styles.emptyText}>No disciplines found.</Text></View>}
-          />
-        )}
+    <BottomSheetModal
+      ref={bottomSheetRef}
+      snapPoints={['60%']}
+      enablePanDownToClose
+      onDismiss={onClose}
+      backdropComponent={renderBackdrop}
+      backgroundStyle={{ backgroundColor: T.bg }}
+      handleIndicatorStyle={{ backgroundColor: T.textDim }}
+    >
+      <View style={styles.modalHeader}>
+        <Text style={styles.modalTitle}>Add Discipline</Text>
+        <TouchableOpacity onPress={() => { bottomSheetRef.current?.dismiss(); onClose(); }}>
+          <Text style={styles.modalCancel}>Cancel</Text>
+        </TouchableOpacity>
       </View>
-    </Modal>
+      {isLoading ? (
+        <View style={styles.centered}><ActivityIndicator color={T.primary} /></View>
+      ) : (
+        <BottomSheetFlatList
+          data={disciplines ?? []}
+          keyExtractor={(i) => i.id}
+          renderItem={({ item }) => (
+            <TouchableOpacity style={styles.pickRow} onPress={() => { onPick(item); bottomSheetRef.current?.dismiss(); onClose(); }}>
+              <Text style={styles.pickName}>{item.name}</Text>
+              <Text style={styles.pickMeta}>{item.category}</Text>
+            </TouchableOpacity>
+          )}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListEmptyComponent={<View style={styles.centered}><Text style={styles.emptyText}>No disciplines found.</Text></View>}
+        />
+      )}
+    </BottomSheetModal>
   );
 }
 
@@ -492,6 +539,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
     const next = !isDone;
     const wKg = isTime || weight.trim() === '' ? null
       : (() => { const v = unitToKg(Number(weight), unit); return isNaN(v) ? null : v; })();
+    if (next) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     updateSet.mutate(
       { sessionId, entryId, setId: set.id, completed: next },
       { onSuccess: () => { if (next) onCompleted(set.setType !== 'warmup' ? wKg : null); } },
@@ -734,10 +782,12 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseTyp
   }, [history]);
 
   function handleAddWarmup() {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     addSet.mutate({ sessionId, entryId: entry.id, setNumber: entry.sets.length + 1, setType: 'warmup', completed: false });
   }
 
   function handleAddSet() {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     // Prefer the previous set in this session; otherwise autofill from the
     // matching set in the last session so a fresh exercise isn't blank.
     const source = working[working.length - 1] ?? lastSessionWorking[working.length] ?? null;
@@ -1327,6 +1377,7 @@ export default function SessionScreen() {
   const [elapsed, setElapsed] = useState(0);
   const [prBanner, setPrBanner] = useState<string | null>(null);
   const prTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showCelebration, setShowCelebration] = useState(false);
 
   useEffect(() => {
     if (restSeconds === null || restSeconds <= 0) return;
@@ -1376,6 +1427,7 @@ export default function SessionScreen() {
 
   function handlePR(exerciseName: string) {
     if (prTimerRef.current) clearTimeout(prTimerRef.current);
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setPrBanner(exerciseName);
     prTimerRef.current = setTimeout(() => setPrBanner(null), 3000);
   }
@@ -1406,7 +1458,9 @@ export default function SessionScreen() {
         date,
       });
       setShowSettings(false);
-      router.back();
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setShowCelebration(true);
+      setTimeout(() => router.back(), 1800);
     } catch (err) {
       Alert.alert('Error', (err as Error).message ?? 'Failed to complete session.');
     }
@@ -1644,13 +1698,13 @@ export default function SessionScreen() {
             {/* A session is either weightlifting or martial arts — never both.
                 Once the first entry sets the kind, only that kind can be added. */}
             {!hasMartialArts && (
-              <TouchableOpacity style={styles.addEntryBtn} onPress={() => setShowExercisePicker(true)}>
+              <TouchableOpacity style={styles.addEntryBtn} onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowExercisePicker(true); }}>
                 <Ionicons name="add" size={16} color={T.textDim} />
                 <Text style={styles.addEntryText}>Exercise</Text>
               </TouchableOpacity>
             )}
             {!hasExercise && (
-              <TouchableOpacity style={styles.addEntryBtn} onPress={() => setShowDisciplinePicker(true)}>
+              <TouchableOpacity style={styles.addEntryBtn} onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowDisciplinePicker(true); }}>
                 <Ionicons name="add" size={16} color={T.textDim} />
                 <Text style={styles.addEntryText}>Discipline</Text>
               </TouchableOpacity>
@@ -1698,6 +1752,17 @@ export default function SessionScreen() {
           onDiscard={handleDiscard}
           isPending={completeSession.isPending}
         />
+      )}
+
+      {showCelebration && (
+        <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+          <LottieView
+            source={require('../../../assets/celebration.json')}
+            autoPlay
+            loop={false}
+            style={{ flex: 1 }}
+          />
+        </View>
       )}
     </View>
   );

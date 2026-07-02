@@ -1,4 +1,7 @@
-import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Animated, { FadeOutLeft, LinearTransition } from 'react-native-reanimated';
+import { FlashList } from '@shopify/flash-list';
+import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,8 +30,8 @@ export default function HistoryScreen() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { isPro, showPaywall } = useProGate();
-  const { data: sessions, isLoading, isError, error } = useSessions('completed');
-  const { data: routines } = useRoutines();
+  const { data: sessions, isLoading, isError, error, refetch, isRefetching } = useSessions('completed');
+  const { data: routines, refetch: refetchRoutines } = useRoutines();
   const deleteSession = useDeleteSession();
   const [filter, setFilter] = useState<Filter>('all');
 
@@ -87,7 +90,7 @@ export default function HistoryScreen() {
             <TouchableOpacity
               key={key}
               style={[styles.filterChip, active && styles.filterChipActive]}
-              onPress={() => setFilter(key)}
+              onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setFilter(key); }}
               activeOpacity={0.7}
             >
               <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{label}</Text>
@@ -117,21 +120,23 @@ export default function HistoryScreen() {
       )}
 
       {!isLoading && !isError && (
-        <FlatList
+        <FlashList
           data={list}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => {
             const routineName = item.routineId ? (routineMap.get(item.routineId) ?? null) : null;
             const displayName = item.name ?? routineName ?? 'Session';
             return (
-              <SessionRow
-                session={item}
-                sessionName={item.name}
-                routineName={routineName}
-                isMat={sessionIsMat(item)}
-                onPress={() => router.push({ pathname: '/sessions/[id]', params: { id: item.id } } as never)}
-                onDelete={() => handleDelete(item.id, displayName)}
-              />
+              <Animated.View layout={LinearTransition} exiting={FadeOutLeft.duration(220)}>
+                <SessionRow
+                  session={item}
+                  sessionName={item.name}
+                  routineName={routineName}
+                  isMat={sessionIsMat(item)}
+                  onPress={() => router.push({ pathname: '/sessions/[id]', params: { id: item.id } } as never)}
+                  onDelete={() => handleDelete(item.id, displayName)}
+                />
+              </Animated.View>
             );
           }}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -156,11 +161,10 @@ export default function HistoryScreen() {
               </TouchableOpacity>
             ) : null
           }
-          contentContainerStyle={[
-            list.length === 0 && { flex: 1 },
-            { paddingBottom: insets.bottom + 32 },
-          ]}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
           showsVerticalScrollIndicator={false}
+          onRefresh={() => { void refetch(); void refetchRoutines(); }}
+          refreshing={isRefetching}
         />
       )}
     </View>

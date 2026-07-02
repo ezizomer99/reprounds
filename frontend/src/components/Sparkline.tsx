@@ -1,6 +1,6 @@
-import { StyleSheet, View } from 'react-native';
+import { useWindowDimensions } from 'react-native';
+import { LineChart } from 'react-native-gifted-charts';
 import { useTheme } from '../theme/ThemeContext';
-import { withAlpha } from '../lib/color';
 
 interface SparklineProps {
   values: number[];
@@ -9,54 +9,37 @@ interface SparklineProps {
   color?: string;
 }
 
-export function Sparkline({ values, height = 60, color }: SparklineProps) {
+export function Sparkline({ values, height = 60, color, width }: SparklineProps) {
   const { T } = useTheme();
-  const barColor = color ?? T.primary;
+  const { width: screenWidth } = useWindowDimensions();
+  const lineColor = color ?? T.primary;
 
   if (values.length < 2) return null;
 
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const barH = height - 8;
+  const data = values.map((v) => ({ value: v }));
+  const chartWidth = (width ?? screenWidth - 64) - 4;
 
   return (
-    <View style={[styles.container, { height }]}>
-      {values.map((v, i) => {
-        const fillRatio = (v - min) / range;
-        const h = Math.max(4, Math.round(fillRatio * barH));
-        const isLast = i === values.length - 1;
-        return (
-          <View key={i} style={[styles.barWrap, { height: barH }]}>
-            <View
-              style={[
-                styles.bar,
-                {
-                  height: h,
-                  backgroundColor: isLast ? T.gold : withAlpha(barColor, 0.75),
-                  width: isLast ? 5 : 3,
-                  borderRadius: 2,
-                },
-              ]}
-            />
-          </View>
-        );
-      })}
-    </View>
+    <LineChart
+      data={data}
+      width={chartWidth}
+      height={height}
+      color={lineColor}
+      thickness={2}
+      curved
+      areaChart
+      startFillColor={lineColor}
+      endFillColor={lineColor}
+      startOpacity={0.22}
+      endOpacity={0.02}
+      hideRules
+      yAxisColor="transparent"
+      xAxisColor="transparent"
+      hideYAxisText
+      dataPointsColor={lineColor}
+      dataPointsRadius={3}
+      initialSpacing={0}
+      endSpacing={0}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 3,
-    paddingHorizontal: 4,
-  },
-  barWrap: {
-    flex: 1,
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-  },
-  bar: {},
-});
