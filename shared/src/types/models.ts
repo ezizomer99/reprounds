@@ -18,6 +18,23 @@ export interface GoogleAuthRequest {
   guestUserId?: string | null;
 }
 
+// Email/password (credential) account registration. Like the Google flow, an
+// optional guestUserId migrates an existing guest account's data into the new
+// credential account.
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  name?: string | null;
+  guestUserId?: string | null;
+}
+
+// Email/password login. guestUserId migrates guest data on first sign-in.
+export interface LoginRequest {
+  email: string;
+  password: string;
+  guestUserId?: string | null;
+}
+
 export interface AuthResponse {
   sessionToken: string;
   user: User;
