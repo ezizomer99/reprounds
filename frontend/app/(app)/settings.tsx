@@ -1,6 +1,7 @@
 import {
   ActivityIndicator,
   Alert,
+  Linking,
   ScrollView,
   StyleSheet,
   Switch,
@@ -83,6 +84,12 @@ export default function SettingsScreen() {
         },
       },
     ]);
+  }
+
+  function handleSendFeedback() {
+    const subject = encodeURIComponent('RepRounds Feedback');
+    const body = encodeURIComponent("Hi,\n\nI'd like to share the following feedback or feature request:\n\n");
+    void Linking.openURL(`mailto:oemerdigital@gmail.com?subject=${subject}&body=${body}`);
   }
 
   function handleDeleteAccount() {
@@ -275,6 +282,16 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Help & Feedback */}
+        <Text style={styles.sectionLabel}>Help & Feedback</Text>
+        <View style={styles.card}>
+          <TouchableOpacity style={styles.feedbackRow} onPress={handleSendFeedback} activeOpacity={0.7}>
+            <Ionicons name="mail-outline" size={18} color={T.textDim} />
+            <Text style={styles.feedbackLabel}>Send feedback</Text>
+            <Ionicons name="chevron-forward" size={16} color={T.textDim} style={{ marginLeft: 'auto' }} />
+          </TouchableOpacity>
+        </View>
+
         {/* Destructive actions */}
         <TouchableOpacity
           style={styles.signOutBtn}
@@ -381,6 +398,11 @@ function makeStyles(T: ThemeColors) {
     switchRow: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     },
+    // Help & Feedback
+    feedbackRow: {
+      flexDirection: 'row', alignItems: 'center', gap: 12,
+    },
+    feedbackLabel: { fontFamily: F.uiMed, fontSize: 15, color: T.text },
     // Destructive actions
     signOutBtn: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
