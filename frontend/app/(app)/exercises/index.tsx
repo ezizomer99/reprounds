@@ -31,6 +31,9 @@ import { Skeleton } from '../../../src/components/Skeleton';
 
 const FREE_CUSTOM_EXERCISE_LIMIT = 3;
 
+// Stable snap-point array (see note in sessions/[id].tsx).
+const SNAP_90: string[] = ['90%'];
+
 const OTHER_KEY = '__other__';
 
 interface ExerciseSection {
@@ -189,7 +192,8 @@ function AddExerciseModal({ visible, onClose }: AddExerciseModalProps) {
   return (
     <BottomSheetModal
       ref={bottomSheetRef}
-      snapPoints={['90%']}
+      snapPoints={SNAP_90}
+      enableDynamicSizing={false}
       enablePanDownToClose
       onDismiss={onClose}
       backdropComponent={renderBackdrop}
