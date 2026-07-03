@@ -72,7 +72,14 @@ export const disciplines = pgTable('disciplines', {
   category:    disciplineCatEnum('category').notNull(),
   fieldConfig: jsonb('field_config').notNull().default(sql`'[]'::jsonb`),
   createdAt:   timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  // One global seed row per name — gives the seeder an ON CONFLICT target so
+  // re-seeding can update field_config/category on existing rows instead of
+  // only ever inserting missing names.
+  globalNameIdx: uniqueIndex('disciplines_global_name_idx')
+    .on(t.name)
+    .where(sql`${t.userId} IS NULL`),
+}));
 
 // Training partners — people the user rolls/spars with, referenced from
 // martial-arts rounds. Name only; one row per user-owned partner.
@@ -135,6 +142,9 @@ export const sessions = pgTable('sessions', {
   createdAt:       timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   userIdDateIdx: index('sessions_user_id_date_idx').on(t.userId, t.date),
+  // Six hot paths filter on (user_id, status): exercise history/PRs, both
+  // stats endpoints, the active-session guard, and GET /sessions?status=.
+  userIdStatusIdx: index('sessions_user_id_status_idx').on(t.userId, t.status),
 }));
 
 export const sessionEntries = pgTable('session_entries', {

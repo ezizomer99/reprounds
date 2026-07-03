@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, asc, desc, eq, ilike, inArray, isNull, or } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { createDb } from '../db';
 import { disciplines, exercises, sessionEntries, sessions, strengthSets } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
@@ -83,11 +83,21 @@ exerciseRoutes.get('/', async (c) => {
     conditions.push(eq(exercises.equipment, equipmentFilter));
   }
 
+  // Hard ceiling so the response can't grow unboundedly with custom
+  // exercises; the app browses the full (seeded ~800-row) catalog today, so
+  // the default stays permissive. Clients can page with limit/offset.
+  const limitParam = Number(c.req.query('limit'));
+  const offsetParam = Number(c.req.query('offset'));
+  const limit = Number.isInteger(limitParam) && limitParam > 0 ? Math.min(limitParam, 1000) : 1000;
+  const offset = Number.isInteger(offsetParam) && offsetParam > 0 ? offsetParam : 0;
+
   const rows = await db
     .select()
     .from(exercises)
     .where(and(...conditions))
-    .orderBy(exercises.name);
+    .orderBy(exercises.name)
+    .limit(limit)
+    .offset(offset);
 
   const result: ExerciseListResponse = {
     exercises: rows.map((r) => mapExercise(r, false)),
@@ -323,20 +333,44 @@ exerciseRoutes.get('/:id/prs', async (c) => {
   const exerciseId = c.req.param('id');
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
-  const allSetsRows = await db
-    .select({
-      id: strengthSets.id,
-      sessionEntryId: strengthSets.sessionEntryId,
-      setNumber: strengthSets.setNumber,
-      setType: strengthSets.setType,
-      reps: strengthSets.reps,
-      weight: strengthSets.weight,
-      rpe: strengthSets.rpe,
-      rir: strengthSets.rir,
-      completed: strengthSets.completed,
-      notes: strengthSets.notes,
-      sessionId: sessions.id,
-    })
+  // The PR is a max — compute it in the database instead of shipping every
+  // completed set ever logged into the Worker (grows unboundedly with
+  // training history). Mirrors estimatedOneRepMax: Epley, reps=1 → weight.
+  const e1rmExpr = sql`CASE WHEN ${strengthSets.reps} = 1 THEN ${strengthSets.weight} ELSE ${strengthSets.weight} * (1 + ${strengthSets.reps} / 30.0) END`;
+
+  const baseJoin = () =>
+    db
+      .select({
+        id: strengthSets.id,
+        sessionEntryId: strengthSets.sessionEntryId,
+        setNumber: strengthSets.setNumber,
+        setType: strengthSets.setType,
+        reps: strengthSets.reps,
+        weight: strengthSets.weight,
+        rpe: strengthSets.rpe,
+        rir: strengthSets.rir,
+        completed: strengthSets.completed,
+        notes: strengthSets.notes,
+      })
+      .from(strengthSets)
+      .innerJoin(sessionEntries, eq(strengthSets.sessionEntryId, sessionEntries.id))
+      .innerJoin(sessions, eq(sessionEntries.sessionId, sessions.id));
+
+  const [bestRow] = await baseJoin()
+    .where(
+      and(
+        eq(sessionEntries.exerciseId, exerciseId),
+        eq(sessions.userId, userId),
+        eq(strengthSets.completed, true),
+        isNotNull(strengthSets.weight),
+        isNotNull(strengthSets.reps),
+      ),
+    )
+    .orderBy(sql`${e1rmExpr} DESC`)
+    .limit(1);
+
+  const [countRow] = await db
+    .select({ totalSessions: sql<number>`COUNT(DISTINCT ${sessions.id})::int` })
     .from(strengthSets)
     .innerJoin(sessionEntries, eq(strengthSets.sessionEntryId, sessionEntries.id))
     .innerJoin(sessions, eq(sessionEntries.sessionId, sessions.id))
@@ -348,34 +382,16 @@ exerciseRoutes.get('/:id/prs', async (c) => {
       ),
     );
 
-  const mappedSets = allSetsRows.map((row) => mapSet(row));
-
-  const completedWithWeightAndReps = mappedSets.filter(
-    (s): s is StrengthSet & { weight: number; reps: number } =>
-      s.weight !== null && s.reps !== null,
-  );
-
-  let bestEstimated1RM: number | null = null;
-  let bestSetResult: StrengthSet | null = null;
-
-  if (completedWithWeightAndReps.length > 0) {
-    let bestE1RM = -Infinity;
-    for (const s of completedWithWeightAndReps) {
-      const e1rm = estimatedOneRepMax(s.weight, s.reps);
-      if (e1rm > bestE1RM) {
-        bestE1RM = e1rm;
-        bestSetResult = s;
-      }
-    }
-    bestEstimated1RM = bestE1RM === -Infinity ? null : bestE1RM;
-  }
-
-  const uniqueSessionIds = new Set(allSetsRows.map((r) => r.sessionId));
+  const bestSetResult: StrengthSet | null = bestRow ? mapSet(bestRow) : null;
+  const bestEstimated1RM =
+    bestSetResult && bestSetResult.weight !== null && bestSetResult.reps !== null
+      ? estimatedOneRepMax(bestSetResult.weight, bestSetResult.reps)
+      : null;
 
   const result: ExercisePRsResponse = {
     estimatedOneRepMax: bestEstimated1RM,
     bestSet: bestSetResult,
-    totalSessions: uniqueSessionIds.size,
+    totalSessions: countRow?.totalSessions ?? 0,
   };
 
   return c.json(result);

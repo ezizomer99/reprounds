@@ -68,8 +68,17 @@ statsRoutes.get('/top-lifts', async (c) => {
   const userId = c.get('userId');
   const db = getDb(c.env);
 
+  // Bound the scan: default to the last two years so the join chain doesn't
+  // traverse a power user's entire training history on every stats view.
+  const sinceParam = c.req.query('since');
+  const since =
+    sinceParam && /^\d{4}-\d{2}-\d{2}$/.test(sinceParam)
+      ? sinceParam
+      : new Date(Date.now() - 2 * 365.25 * 86_400_000).toISOString().slice(0, 10);
+
   // DISTINCT ON picks the best set per exercise (highest estimated 1RM), then we
-  // sort across exercises and take the top 10.
+  // sort across exercises and take the top 10. The CASE mirrors the shared
+  // estimatedOneRepMax calculator (Epley, reps=1 → weight).
   const rows = await db.execute(sql`
     SELECT x.exercise_id, x.exercise_name, x.weight::float AS weight, x.reps,
            x.estimated_1rm::float AS estimated_1rm
@@ -79,17 +88,20 @@ statsRoutes.get('/top-lifts', async (c) => {
         e.name        AS exercise_name,
         ss.weight::numeric AS weight,
         ss.reps,
-        ss.weight::numeric * (1.0 + ss.reps::numeric / 30.0) AS estimated_1rm
+        CASE WHEN ss.reps = 1 THEN ss.weight::numeric
+             ELSE ss.weight::numeric * (1.0 + ss.reps::numeric / 30.0) END AS estimated_1rm
       FROM strength_sets ss
       JOIN session_entries se ON ss.session_entry_id = se.id
       JOIN sessions s         ON se.session_id = s.id
       JOIN exercises e        ON se.exercise_id = e.id
       WHERE s.user_id    = ${userId}
         AND s.status     = 'completed'
+        AND s.date       >= ${since}
         AND ss.completed = TRUE
         AND ss.weight    IS NOT NULL
         AND ss.reps      IS NOT NULL
-      ORDER BY e.id, (ss.weight::numeric * (1.0 + ss.reps::numeric / 30.0)) DESC
+      ORDER BY e.id, (CASE WHEN ss.reps = 1 THEN ss.weight::numeric
+                           ELSE ss.weight::numeric * (1.0 + ss.reps::numeric / 30.0) END) DESC
     ) x
     ORDER BY x.estimated_1rm DESC
     LIMIT 10

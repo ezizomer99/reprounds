@@ -106,19 +106,21 @@ async function seed() {
     { name: 'MMA',       category: 'mixed'     as const, fieldConfig: mixedTemplate },
   ];
 
-  const existingGlobal = await db
-    .select({ name: disciplines.name })
-    .from(disciplines)
-    .where(isNull(disciplines.userId));
-  const existingNames = new Set(existingGlobal.map((d) => d.name));
-
-  const toInsert = globalDisciplines.filter((d) => !existingNames.has(d.name));
-  if (toInsert.length > 0) {
-    await db.insert(disciplines).values(toInsert);
-    console.log(`Seeded ${toInsert.length} disciplines: ${toInsert.map((d) => d.name).join(', ')}`);
-  } else {
-    console.log('All global disciplines already present — skipping.');
-  }
+  // Upsert on the global-name partial unique index so template changes here
+  // propagate to already-seeded databases (insert-only seeding could never
+  // correct an existing row's field_config).
+  await db
+    .insert(disciplines)
+    .values(globalDisciplines)
+    .onConflictDoUpdate({
+      target: [disciplines.name],
+      targetWhere: isNull(disciplines.userId),
+      set: {
+        category: sql`excluded.category`,
+        fieldConfig: sql`excluded.field_config`,
+      },
+    });
+  console.log(`Upserted ${globalDisciplines.length} global disciplines.`);
 
   await client.end();
 }
