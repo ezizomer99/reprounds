@@ -155,6 +155,11 @@ disciplineRoutes.get('/:id/history', async (c) => {
   const disciplineId = c.req.param('id');
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
+  // Bounded like the exercise-history counterpart — this previously returned
+  // every entry ever logged (~450 rows/year for a 3×-week practitioner).
+  const limitParam = Number(c.req.query('limit'));
+  const limit = Number.isInteger(limitParam) && limitParam > 0 ? Math.min(limitParam, 200) : 50;
+
   const entryRows = await db
     .select({
       entryId: sessionEntries.id,
@@ -181,7 +186,8 @@ disciplineRoutes.get('/:id/history', async (c) => {
         eq(sessions.status, 'completed'),
       ),
     )
-    .orderBy(desc(sessions.date));
+    .orderBy(desc(sessions.date))
+    .limit(limit);
 
   const history: ExerciseHistoryEntry[] = entryRows.map((row) => {
     const entry: SessionEntryWithSets = {
