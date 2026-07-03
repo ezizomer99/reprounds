@@ -298,6 +298,153 @@ describe('DELETE /sessions/:id/entries/:entryId/sets/:setId', () => {
 });
 
 // ---------------------------------------------------------------------------
+// DELETE /sessions/:id/entries/:entryId
+// ---------------------------------------------------------------------------
+describe('DELETE /sessions/:id/entries/:entryId', () => {
+  it('returns 404 when the session is not owned by the caller', async () => {
+    mock.selectQueue.push([]); // session owner check: not found
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/entries/${ENTRY_ID}`,
+      { method: 'DELETE', headers: await bearer() },
+      env,
+    );
+
+    expect(res.status).toBe(404);
+    expect((await res.json() as { error: string }).error).toBe('Not found');
+  });
+
+  it('returns 404 when the entry belongs to a different session', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]); // session owned ✓
+    mock.selectQueue.push([]);                    // entry not found in this session
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/entries/${ENTRY_ID}`,
+      { method: 'DELETE', headers: await bearer() },
+      env,
+    );
+
+    expect(res.status).toBe(404);
+    expect((await res.json() as { error: string }).error).toBe('Entry not found');
+  });
+
+  it('deletes the entry and returns success', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]); // session owned ✓
+    mock.selectQueue.push([{ id: ENTRY_ID }]);   // entry found ✓
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/entries/${ENTRY_ID}`,
+      { method: 'DELETE', headers: await bearer() },
+      env,
+    );
+
+    expect(res.status).toBe(200);
+    expect(mock.delete).toHaveBeenCalledTimes(1);
+    expect((await res.json() as { success: boolean }).success).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /sessions/:id/entries/:entryId — exerciseId swap
+// ---------------------------------------------------------------------------
+describe('PATCH /sessions/:id/entries/:entryId — exerciseId swap', () => {
+  const NEW_EXERCISE_ID = 'ex-new-abc';
+
+  it('returns 400 when trying to swap exerciseId to null', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]); // session owned ✓
+    mock.selectQueue.push([{ id: ENTRY_ID }]);   // entry found ✓
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/entries/${ENTRY_ID}`,
+      {
+        method: 'PATCH',
+        headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exerciseId: null }),
+      },
+      env,
+    );
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe(
+      'exerciseId cannot be null for exercise entries',
+    );
+  });
+
+  it('returns 400 when the entry kind is not exercise', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]);                  // session owned ✓
+    mock.selectQueue.push([{ id: ENTRY_ID }]);                    // entry found ✓
+    mock.selectQueue.push([{ kind: 'martial_arts' as const }]);   // kind re-fetch
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/entries/${ENTRY_ID}`,
+      {
+        method: 'PATCH',
+        headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exerciseId: NEW_EXERCISE_ID }),
+      },
+      env,
+    );
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe(
+      'exerciseId can only be updated on exercise entries',
+    );
+  });
+
+  it('returns 404 when the new exercise is not visible to the user', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]);                // session owned ✓
+    mock.selectQueue.push([{ id: ENTRY_ID }]);                  // entry found ✓
+    mock.selectQueue.push([{ kind: 'exercise' as const }]);     // kind re-fetch ✓
+    mock.selectQueue.push([]);                                   // exercise not visible
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/entries/${ENTRY_ID}`,
+      {
+        method: 'PATCH',
+        headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exerciseId: NEW_EXERCISE_ID }),
+      },
+      env,
+    );
+
+    expect(res.status).toBe(404);
+    expect((await res.json() as { error: string }).error).toBe('Exercise not found');
+  });
+
+  it('swaps the exercise and returns the updated entry', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]);                // session owned ✓
+    mock.selectQueue.push([{ id: ENTRY_ID }]);                  // entry found ✓
+    mock.selectQueue.push([{ kind: 'exercise' as const }]);     // kind re-fetch ✓
+    mock.selectQueue.push([{ id: NEW_EXERCISE_ID }]);           // exercise visible ✓
+    // fetchEntryWithSets: entry row then sets
+    mock.selectQueue.push([{
+      id: ENTRY_ID, sessionId: SESSION_ID, kind: 'exercise' as const,
+      exerciseId: NEW_EXERCISE_ID, disciplineId: null, gi: null,
+      orderIndex: 0, supersetGroup: null, restSeconds: null,
+      details: null, notes: null,
+      exerciseName: 'Bench Press', disciplineName: null,
+    }]);
+    mock.selectQueue.push([]); // sets (empty)
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/entries/${ENTRY_ID}`,
+      {
+        method: 'PATCH',
+        headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ exerciseId: NEW_EXERCISE_ID }),
+      },
+      env,
+    );
+
+    expect(res.status).toBe(200);
+    expect(mock.update).toHaveBeenCalledTimes(1);
+    const json = await res.json() as { entry: { exerciseId: string; exerciseName: string } };
+    expect(json.entry.exerciseId).toBe(NEW_EXERCISE_ID);
+    expect(json.entry.exerciseName).toBe('Bench Press');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // POST /sessions/:id/complete
 // ---------------------------------------------------------------------------
 describe('POST /sessions/:id/complete', () => {

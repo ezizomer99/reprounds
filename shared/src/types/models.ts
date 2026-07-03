@@ -406,6 +406,8 @@ export interface UpdateSessionEntryRequest {
   details?: Record<string, unknown> | null;
   notes?: string | null;
   supersetGroup?: number | null;
+  /** Swap the exercise on an exercise-kind entry. Cannot be null (use a real UUID). */
+  exerciseId?: string | null;
 }
 
 export interface CreateStrengthSetRequest {
