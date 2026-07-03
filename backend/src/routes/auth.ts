@@ -3,7 +3,7 @@ import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { createDb } from '../db';
 import { users, exercises, disciplines, fights, partners, rankPromotions, routines, sessions, weightLogs } from '../db/schema';
 import { verifyGoogleIdToken } from '../lib/googleAuth';
-import { signJwt } from '../lib/jwt';
+import { signJwt, verifyJwt } from '../lib/jwt';
 import { hashPassword, verifyPassword } from '../lib/password';
 import { authMiddleware } from '../middleware/auth';
 import type { User } from '@app/shared';
@@ -14,6 +14,7 @@ type Env = {
     DATABASE_URL?: string;
     JWT_SECRET: string;
     GOOGLE_CLIENT_ID: string;
+    AUTH_RATE_LIMITER?: RateLimit;
   };
   Variables: {
     userId: string;
@@ -21,6 +22,22 @@ type Env = {
 };
 
 const SESSION_EXPIRY_SECONDS = 7 * 24 * 60 * 60;
+
+// Per-IP brute-force guard for the endpoints that accept credentials or mint
+// accounts. Uses the Workers Rate Limiting binding when configured; absent
+// (local dev, vitest) it allows everything. Returns a 429 response to send,
+// or null to proceed.
+async function rateLimited(
+  c: { env: Env['Bindings']; req: { header: (name: string) => string | undefined }; json: (obj: unknown, status: 429) => Response },
+  route: string,
+): Promise<Response | null> {
+  const limiter = c.env.AUTH_RATE_LIMITER;
+  if (!limiter) return null;
+  const ip = c.req.header('CF-Connecting-IP') ?? 'unknown';
+  const { success } = await limiter.limit({ key: `${route}:${ip}` });
+  if (success) return null;
+  return c.json({ error: 'Too many attempts — try again in a minute' }, 429);
+}
 
 function toUserShape(dbUser: { id: string; email: string | null; name: string | null; avatarUrl: string | null; isGuest: boolean }): User {
   return {
@@ -38,6 +55,25 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 8;
 
 type Db = ReturnType<typeof createDb>;
+
+// Resolve a guest-migration request to a verified guest user id. The caller
+// must present the guest session's own JWT — possession of the token is the
+// proof; a bare user id is never trusted. Returns null when no token was
+// sent; throws GuestTokenError when a token was sent but fails verification
+// (expired/tampered) so routes reject loudly instead of silently dropping the
+// user's guest history.
+class GuestTokenError extends Error {}
+
+async function resolveGuestId(guestToken: unknown, jwtSecret: string): Promise<string | null> {
+  if (guestToken == null) return null;
+  if (typeof guestToken !== 'string' || !guestToken) throw new GuestTokenError();
+  try {
+    const payload = await verifyJwt(guestToken, jwtSecret);
+    return payload.sub;
+  } catch {
+    throw new GuestTokenError();
+  }
+}
 
 // Reassign a guest account's data to a real (Google or credential) user, then
 // delete the guest row. Mirrors the merge used by the Google flow so every
@@ -65,6 +101,9 @@ const authRoutes = new Hono<Env>();
 
 // ── Guest sign-in ──────────────────────────────────────────────────────────
 authRoutes.post('/guest', async (c) => {
+  const limited = await rateLimited(c, 'guest');
+  if (limited) return limited;
+
   let body: { deviceId?: string };
   try {
     body = await c.req.json();
@@ -106,7 +145,7 @@ authRoutes.post('/guest', async (c) => {
 
 // ── Google sign-in (with optional guest migration) ─────────────────────────
 authRoutes.post('/google', async (c) => {
-  let body: { idToken?: string; guestUserId?: string | null };
+  let body: { idToken?: string; guestToken?: string | null };
   try {
     body = await c.req.json();
   } catch {
@@ -115,6 +154,13 @@ authRoutes.post('/google', async (c) => {
 
   if (!body.idToken) {
     return c.json({ error: 'idToken is required' }, 400);
+  }
+
+  let guestId: string | null;
+  try {
+    guestId = await resolveGuestId(body.guestToken, c.env.JWT_SECRET);
+  } catch {
+    return c.json({ error: 'Invalid guest token' }, 401);
   }
 
   let googlePayload: Awaited<ReturnType<typeof verifyGoogleIdToken>>;
@@ -149,9 +195,9 @@ authRoutes.post('/google', async (c) => {
       })
       .returning();
 
-    // Migrate guest data if a guestUserId was provided
-    if (body.guestUserId && typeof body.guestUserId === 'string') {
-      await migrateGuestData(db, body.guestUserId, dbUser.id);
+    // Migrate guest data if a verified guest token was provided
+    if (guestId) {
+      await migrateGuestData(db, guestId, dbUser.id);
     }
 
     const sessionToken = await signJwt({ sub: dbUser.id }, c.env.JWT_SECRET, SESSION_EXPIRY_SECONDS);
@@ -165,7 +211,10 @@ authRoutes.post('/google', async (c) => {
 
 // ── Register (email/password, with optional guest migration) ────────────────
 authRoutes.post('/register', async (c) => {
-  let body: { email?: string; password?: string; name?: string | null; guestUserId?: string | null };
+  const limited = await rateLimited(c, 'register');
+  if (limited) return limited;
+
+  let body: { email?: string; password?: string; name?: string | null; guestToken?: string | null };
   try {
     body = await c.req.json();
   } catch {
@@ -181,6 +230,15 @@ authRoutes.post('/register', async (c) => {
   }
   if (password.length < MIN_PASSWORD_LENGTH) {
     return c.json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }, 400);
+  }
+
+  // Verify before creating the account so a bad token can't leave a fresh
+  // account with the guest data stranded behind it.
+  let guestId: string | null;
+  try {
+    guestId = await resolveGuestId(body.guestToken, c.env.JWT_SECRET);
+  } catch {
+    return c.json({ error: 'Invalid guest token' }, 401);
   }
 
   try {
@@ -225,8 +283,8 @@ authRoutes.post('/register', async (c) => {
       return c.json({ error: 'An account with this email already exists' }, 409);
     }
 
-    if (body.guestUserId && typeof body.guestUserId === 'string') {
-      await migrateGuestData(db, body.guestUserId, dbUser.id);
+    if (guestId) {
+      await migrateGuestData(db, guestId, dbUser.id);
     }
 
     const sessionToken = await signJwt({ sub: dbUser.id }, c.env.JWT_SECRET, SESSION_EXPIRY_SECONDS);
@@ -240,7 +298,10 @@ authRoutes.post('/register', async (c) => {
 
 // ── Login (email/password, with optional guest migration) ───────────────────
 authRoutes.post('/login', async (c) => {
-  let body: { email?: string; password?: string; guestUserId?: string | null };
+  const limited = await rateLimited(c, 'login');
+  if (limited) return limited;
+
+  let body: { email?: string; password?: string; guestToken?: string | null };
   try {
     body = await c.req.json();
   } catch {
@@ -256,6 +317,13 @@ authRoutes.post('/login', async (c) => {
 
   if (!EMAIL_RE.test(email) || password.length < MIN_PASSWORD_LENGTH) {
     return c.json({ error: INVALID }, 401);
+  }
+
+  let guestId: string | null;
+  try {
+    guestId = await resolveGuestId(body.guestToken, c.env.JWT_SECRET);
+  } catch {
+    return c.json({ error: 'Invalid guest token' }, 401);
   }
 
   try {
@@ -274,8 +342,8 @@ authRoutes.post('/login', async (c) => {
       return c.json({ error: INVALID }, 401);
     }
 
-    if (body.guestUserId && typeof body.guestUserId === 'string') {
-      await migrateGuestData(db, body.guestUserId, dbUser.id);
+    if (guestId) {
+      await migrateGuestData(db, guestId, dbUser.id);
     }
 
     const sessionToken = await signJwt({ sub: dbUser.id }, c.env.JWT_SECRET, SESSION_EXPIRY_SECONDS);

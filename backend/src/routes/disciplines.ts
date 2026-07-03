@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import { createDb } from '../db';
-import { disciplines, sessionEntries, sessions } from '../db/schema';
+import { disciplines, fights, rankPromotions, sessionEntries, sessions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type {
   CreateDisciplineRequest,
@@ -220,6 +220,38 @@ disciplineRoutes.delete('/:id', async (c) => {
 
   if (existing.length === 0) {
     return c.json({ error: 'Not found' }, 404);
+  }
+
+  // Logged sessions (NO ACTION), fights and promotions (RESTRICT) all block
+  // this delete at the FK level — check first and answer with a clear 409
+  // instead of a raw constraint 500.
+  const [logged] = await db
+    .select({ id: sessionEntries.id })
+    .from(sessionEntries)
+    .where(eq(sessionEntries.disciplineId, id))
+    .limit(1);
+  if (logged) {
+    return c.json(
+      { error: 'This discipline has logged sessions and cannot be deleted' },
+      409,
+    );
+  }
+
+  const [fight] = await db
+    .select({ id: fights.id })
+    .from(fights)
+    .where(eq(fights.disciplineId, id))
+    .limit(1);
+  const [promotion] = await db
+    .select({ id: rankPromotions.id })
+    .from(rankPromotions)
+    .where(eq(rankPromotions.disciplineId, id))
+    .limit(1);
+  if (fight || promotion) {
+    return c.json(
+      { error: 'This discipline has fight or promotion records — delete those first' },
+      409,
+    );
   }
 
   await db

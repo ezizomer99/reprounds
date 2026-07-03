@@ -107,6 +107,16 @@ calendarRoutes.get('/', async (c) => {
     return c.json({ error: 'from and to query params are required' }, 400);
   }
 
+  // Malformed dates would otherwise become Invalid Date (RRule.between then
+  // silently projects nothing) or throw inside Postgres on the date columns.
+  const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+  if (!ISO_DATE.test(from) || !ISO_DATE.test(to)) {
+    return c.json({ error: 'from and to must be YYYY-MM-DD dates' }, 400);
+  }
+  if (from > to) {
+    return c.json({ error: 'from must be on or before to' }, 400);
+  }
+
   const db = getDb(c.env);
 
   const scheduledRoutines = await db

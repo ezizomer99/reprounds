@@ -505,6 +505,10 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   const SET_TYPE_COLOR = useMemo(() => setTypeColors(T), [T]);
   const isTime = exerciseType === 'conditioning';
   const isWarm = set.setType === 'warmup';
+  // A just-added set carries a temporary client id until the list refetches;
+  // any PATCH/DELETE against that id would 404, and the id swap remounts the
+  // row anyway — so hold off all interaction until the real id lands.
+  const isOptimistic = set.id.startsWith('optimistic-');
   const updateSet = useUpdateStrengthSet();
   const { unit } = useUnit();
   const [reps, setReps] = useState(set.reps !== null ? String(set.reps) : '');
@@ -515,27 +519,32 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   const [showNote, setShowNote] = useState(false);
 
   function handleBlurNotes() {
+    if (isOptimistic) return;
     updateSet.mutate({ sessionId, entryId, setId: set.id, notes: notes.trim() || null });
   }
 
   function handleBlurReps() {
+    if (isOptimistic) return;
     const parsed = reps.trim() === '' ? null : Number(reps);
     updateSet.mutate({ sessionId, entryId, setId: set.id, reps: isNaN(parsed as number) ? null : parsed });
   }
 
   function handleBlurWeight() {
+    if (isOptimistic) return;
     const parsed = weight.trim() === '' ? null : Number(weight);
     const kg = parsed === null || isNaN(parsed) ? null : unitToKg(parsed, unit);
     updateSet.mutate({ sessionId, entryId, setId: set.id, weight: kg });
   }
 
   function handleBlurDuration() {
+    if (isOptimistic) return;
     const secs = parseDuration(duration);
     if (secs !== null) setDuration(fmtDuration(secs));
     updateSet.mutate({ sessionId, entryId, setId: set.id, reps: secs });
   }
 
   function handleBlurRpe() {
+    if (isOptimistic) return;
     const parsed = rpe.trim() === '' ? null : Number(rpe);
     updateSet.mutate({ sessionId, entryId, setId: set.id, rpe: isNaN(parsed as number) ? null : parsed });
   }
@@ -544,6 +553,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   const hasNote = (set.notes ?? '').trim().length > 0;
 
   function toggleComplete() {
+    if (isOptimistic) return;
     const next = !isDone;
     const wKg = isTime || weight.trim() === '' ? null
       : (() => { const v = unitToKg(Number(weight), unit); return isNaN(v) ? null : v; })();
@@ -566,7 +576,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
             isDone && styles.setCircleDone,
           ]}
           onPress={toggleComplete}
-          disabled={updateSet.isPending}
+          disabled={updateSet.isPending || isOptimistic}
         >
           {isDone ? (
             <Ionicons name="checkmark" size={16} color={T.onPrimary} />
@@ -594,7 +604,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
             placeholderTextColor={T.muted}
             keyboardType="default"
             returnKeyType="done"
-            editable={!isDone}
+            editable={!isDone && !isOptimistic}
             textAlign="center"
           />
           <Text style={styles.cellUnit}>min</Text>
@@ -611,7 +621,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
               placeholderTextColor={T.muted}
               keyboardType="decimal-pad"
               returnKeyType="done"
-              editable={!isDone}
+              editable={!isDone && !isOptimistic}
               textAlign="center"
             />
             <Text style={styles.cellUnit}>{unit}</Text>
@@ -627,7 +637,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
               placeholderTextColor={T.muted}
               keyboardType="number-pad"
               returnKeyType="done"
-              editable={!isDone}
+              editable={!isDone && !isOptimistic}
               textAlign="center"
             />
             <Text style={styles.cellUnit}>reps</Text>
@@ -644,7 +654,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
                 placeholderTextColor={T.muted}
                 keyboardType="decimal-pad"
                 returnKeyType="done"
-                editable={!isDone}
+                editable={!isDone && !isOptimistic}
                 textAlign="center"
               />
               <Text style={styles.cellUnit}>RPE</Text>
@@ -661,7 +671,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
         />
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.menuBtn} onPress={onOpenMenu}>
+      <TouchableOpacity style={styles.menuBtn} onPress={onOpenMenu} disabled={isOptimistic}>
         <Ionicons name="ellipsis-vertical" size={16} color={T.muted} />
       </TouchableOpacity>
     </View>

@@ -180,7 +180,9 @@ export const strengthSets = pgTable('strength_sets', {
 export const fights = pgTable('fights', {
   id:           uuid('id').primaryKey().defaultRandom(),
   userId:       uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  disciplineId: uuid('discipline_id').notNull().references(() => disciplines.id, { onDelete: 'cascade' }),
+  // restrict, not cascade: a discipline delete must never silently erase the
+  // user's fight record — the route checks and reports instead.
+  disciplineId: uuid('discipline_id').notNull().references(() => disciplines.id, { onDelete: 'restrict' }),
   date:         date('date').notNull(),
   opponent:     text('opponent'),
   result:       fightResultEnum('result').notNull(),
@@ -199,7 +201,8 @@ export const fights = pgTable('fights', {
 export const rankPromotions = pgTable('rank_promotions', {
   id:           uuid('id').primaryKey().defaultRandom(),
   userId:       uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  disciplineId: uuid('discipline_id').notNull().references(() => disciplines.id, { onDelete: 'cascade' }),
+  // restrict for the same reason as fights: belt history is irreplaceable.
+  disciplineId: uuid('discipline_id').notNull().references(() => disciplines.id, { onDelete: 'restrict' }),
   rank:         text('rank').notNull(),
   stripes:      integer('stripes'),
   date:         date('date').notNull(),
