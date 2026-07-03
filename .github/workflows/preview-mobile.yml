@@ -50,8 +50,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build preview APK on EAS
+        id: eas_build
         working-directory: frontend
-        run: eas build --profile preview --platform android --non-interactive --wait
+        # Capture the build id so the submit step targets exactly this build —
+        # `eas submit --latest` can pick an older, already-submitted build.
+        run: |
+          BUILD_JSON=$(eas build --profile preview --platform android --non-interactive --wait --json)
+          echo "$BUILD_JSON" | jq -r '.[0].id' | xargs -I{} echo "build_id={}" >> "$GITHUB_OUTPUT"
 
       - name: Submit to Play Store internal track
         working-directory: frontend
@@ -78,5 +83,5 @@ jobs:
             rm -f google-play-key.json
             exit 1
           fi
-          eas submit --profile preview --platform android --latest --non-interactive
+          eas submit --profile preview --platform android --id "${{ steps.eas_build.outputs.build_id }}" --non-interactive
           rm -f google-play-key.json
