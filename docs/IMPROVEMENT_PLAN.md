@@ -311,43 +311,49 @@ PR #46 (customer identify) in flight; purchase not verified end-to-end;
 Phases are ordered by risk-adjusted value; each bullet ≈ one focused PR.
 Suggested agent per item in parentheses.
 
+> **Status 2026-07-03:** Phases A (PR #49), B (PR #50), C (PR #51) and the
+> E-slices in PR #52/#53 are merged. Struck-through items are done. Still
+> open: 16/18 (F1 decomposition), 21 (U4), 22 (U6), 11 (T5 Dependabot),
+> 23–25 (X-items), plus the two owner decisions (S8 Hyperdrive split, S9d
+> offline-cache encryption).
+
 **Phase A — Correctness & safety (do first, small diffs)**
-1. S3 calendar date validation + S5 global `onError` (backend-worker)
-2. S2 guest-merge proof-of-possession (auth) — *breaking client change: app
-   must send the guest token at sign-in; coordinate frontend+backend in one PR*
-3. S1 rate limiting on login/register (backend-worker)
-4. S7-now: authMiddleware user-existence check (auth)
-5. F2 optimistic-set guard (frontend-rn)
-6. S4+D7: reference pre-checks on exercise/discipline/routine delete, FK
-   `restrict` on fights/promotions (database + backend-worker)
+~~1. S3 calendar date validation + S5 global `onError` (backend-worker)~~
+~~2. S2 guest-merge proof-of-possession (auth) — *breaking client change: app~~
+   ~~must send the guest token at sign-in; coordinate frontend+backend in one PR*~~
+~~3. S1 rate limiting on login/register (backend-worker)~~
+~~4. S7-now: authMiddleware user-existence check (auth)~~
+~~5. F2 optimistic-set guard (frontend-rn)~~
+~~6. S4+D7: reference pre-checks on exercise/discipline/routine delete, FK~~
+   ~~`restrict` on fights/promotions (database + backend-worker)~~
 
 **Phase B — Testing & tooling foundation**
-7. T1a `projectOccurrences` unit tests (calendar-recurrence) — lands with A1
-8. T3 ESLint+Prettier + T4 CI lint step + push-to-develop trigger
-9. T1b sessions/routines route tests (backend-worker)
-10. T2 extract + test frontend pure logic (frontend-rn)
+~~7. T1a `projectOccurrences` unit tests (calendar-recurrence) — lands with A1~~
+~~8. T3 ESLint+Prettier + T4 CI lint step + push-to-develop trigger~~
+~~9. T1b sessions/routines route tests (backend-worker)~~
+~~10. T2 extract + test frontend pure logic (frontend-rn)~~
 11. T5 Dependabot triage (merge patches, EAS-test native majors)
 
 **Phase C — Performance (before user data grows)**
-12. D1 PRs-in-SQL + D2 discipline-history LIMIT (database)
-13. D3 `(user_id, status)` index + D4 top-lifts time bound (database)
-14. D5 exercises pagination (backend-worker + frontend-rn)
-15. D6 seed upsert for field_config (database)
+~~12. D1 PRs-in-SQL + D2 discipline-history LIMIT (database)~~
+~~13. D3 `(user_id, status)` index + D4 top-lifts time bound (database)~~
+~~14. D5 exercises pagination (backend-worker + frontend-rn)~~
+~~15. D6 seed upsert for field_config (database)~~
 
 **Phase D — Refactoring (unlocks faster feature work)**
 16. F1 decompose sessions/[id].tsx (frontend-rn; fold U5 labels in per
     component as it's extracted)
-17. F3 shared ExerciseForm + F4 cache invalidation + F5/F6 cleanups
+~~17. F3 shared ExerciseForm + F4 cache invalidation + F5/F6 cleanups~~
 18. F1b decompose routines/[id].tsx
 
 **Phase E — User-facing wins (the fun sprint)**
-19. U3 full "last time" ghost sets — highest visible payoff (frontend-rn)
-20. U1 swap exercise + U2 rest chip (frontend-rn)
+~~19. U3 full "last time" ghost sets — highest visible payoff (frontend-rn)~~
+~~20. U1 swap exercise + U2 rest chip (frontend-rn)~~
 21. U4 warm-up suggestions + plate-calc promotion
 22. U6a password change endpoint; U6b reset flow once email infra chosen
 
 **Phase F — Docs & decisions**
-23. X1 BUILD_SPEC amendment
+~~23. X1 BUILD_SPEC amendment~~
 24. X2 JWT refresh decision (write it down in CLAUDE.md when made)
 25. X3 keep DEPLOYMENT.md checklist current through Play launch
 
