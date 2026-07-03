@@ -1,5 +1,4 @@
 import {
-  ActivityIndicator,
   Alert,
   SectionList,
   StyleSheet,
@@ -16,19 +15,18 @@ import type { BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import type { ActivityType, Exercise } from '@app/shared';
+import type { Exercise } from '@app/shared';
+import { FREE_CUSTOM_EXERCISE_LIMIT } from '@app/shared';
 import {
-  useCreateExercise,
   useDeleteExercise,
   useExercises,
 } from '../../../src/hooks/useExercises';
+import { ExerciseForm } from '../../../src/components/ExerciseForm';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { Skeleton } from '../../../src/components/Skeleton';
-
-const FREE_CUSTOM_EXERCISE_LIMIT = 3;
 
 // Stable snap-point array (see note in sessions/[id].tsx).
 const SNAP_90: string[] = ['90%'];
@@ -47,23 +45,6 @@ function titleForTarget(target: string): string {
   return target.replace(/\b\w/g, (ch) => ch.toUpperCase());
 }
 
-// Raw `target` values — chosen to merge into the existing muscle sections.
-const MUSCLE_OPTIONS = [
-  'abs',
-  'biceps',
-  'triceps',
-  'forearms',
-  'pectorals',
-  'delts',
-  'lats',
-  'upper back',
-  'traps',
-  'glutes',
-  'quads',
-  'hamstrings',
-  'calves',
-  'cardiovascular system',
-] as const;
 
 function ExerciseThumbnail({ uri, styles }: { uri: string | null; styles: ReturnType<typeof makeStyles> }) {
   if (uri) {
@@ -145,40 +126,17 @@ function AddExerciseModal({ visible, onClose }: AddExerciseModalProps) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const bottomSheetRef = useRef<BottomSheetModal>(null);
-  const [name, setName] = useState('');
-  const [type, setType] = useState<Exclude<ActivityType, 'martial_arts'>>('strength');
-  const [target, setTarget] = useState<string | null>(null);
-  const createExercise = useCreateExercise();
+  const [formKey, setFormKey] = useState(0);
 
   useEffect(() => {
     if (visible) bottomSheetRef.current?.present();
     else bottomSheetRef.current?.dismiss();
   }, [visible]);
 
-  function reset() {
-    setName('');
-    setType('strength');
-    setTarget(null);
-  }
-
   function handleClose() {
-    reset();
+    setFormKey((k) => k + 1);
     bottomSheetRef.current?.dismiss();
     onClose();
-  }
-
-  async function handleSubmit() {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      Alert.alert('Validation', 'Name is required.');
-      return;
-    }
-    try {
-      await createExercise.mutateAsync({ name: trimmed, type, target });
-      handleClose();
-    } catch (err) {
-      Alert.alert('Error', (err as Error).message ?? 'Failed to create exercise.');
-    }
   }
 
   const renderBackdrop = useCallback(
@@ -210,76 +168,11 @@ function AddExerciseModal({ visible, onClose }: AddExerciseModalProps) {
             <Text style={styles.modalCancel}>Cancel</Text>
           </TouchableOpacity>
         </View>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>Name *</Text>
-          <TextInput
-            style={styles.input}
-            value={name}
-            onChangeText={setName}
-            placeholder="e.g. Bench Press"
-            placeholderTextColor={T.muted}
-            autoFocus
-            returnKeyType="next"
-            selectionColor={T.primary}
-          />
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>Type *</Text>
-          <View style={styles.segmented}>
-            {(['strength', 'conditioning'] as const).map((t, i) => (
-              <TouchableOpacity
-                key={t}
-                style={[
-                  styles.segmentButton,
-                  i === 0 && styles.segmentButtonLeft,
-                  i === 1 && styles.segmentButtonRight,
-                  type === t && styles.segmentButtonActive,
-                ]}
-                onPress={() => setType(t)}
-              >
-                <Text style={[styles.segmentText, type === t && styles.segmentTextActive]}>
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.field}>
-          <Text style={styles.label}>Muscle group</Text>
-          <View style={styles.muscleWrap}>
-            {MUSCLE_OPTIONS.map((m) => {
-              const active = target === m;
-              return (
-                <TouchableOpacity
-                  key={m}
-                  style={[styles.musclePill, active && styles.musclePillActive]}
-                  onPress={() => setTarget(active ? null : m)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.musclePillText, active && styles.musclePillTextActive]}>
-                    {titleForTarget(m)}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.submitButton, createExercise.isPending && styles.submitButtonDisabled]}
-          onPress={handleSubmit}
-          disabled={createExercise.isPending}
-          activeOpacity={0.8}
-        >
-          {createExercise.isPending ? (
-            <ActivityIndicator color={T.onPrimary} />
-          ) : (
-            <Text style={styles.submitText}>Add Exercise</Text>
-          )}
-        </TouchableOpacity>
+        <ExerciseForm
+          key={formKey}
+          submitLabel="Add Exercise"
+          onCreated={() => handleClose()}
+        />
       </BottomSheetScrollView>
     </BottomSheetModal>
   );
@@ -586,7 +479,6 @@ function makeStyles(T: ThemeColors) {
     },
 
     // Modal
-    modalContainer: { flex: 1, backgroundColor: T.bg },
     modalContent: { padding: 24, paddingTop: 32, paddingBottom: 40 },
     modalHeader: {
       flexDirection: 'row',
@@ -596,72 +488,5 @@ function makeStyles(T: ThemeColors) {
     },
     modalTitle: { fontFamily: F.uiBold, fontSize: 20, color: T.text },
     modalCancel: { fontFamily: F.uiMed, fontSize: 16, color: T.textDim },
-    field: { marginBottom: 20 },
-    label: {
-      fontFamily: F.uiBold,
-      fontSize: 11,
-      color: T.textDim,
-      textTransform: 'uppercase',
-      letterSpacing: 0.8,
-      marginBottom: 8,
-    },
-    input: {
-      borderWidth: 1,
-      borderColor: T.border,
-      borderRadius: R.sm,
-      backgroundColor: T.surface,
-      paddingHorizontal: 12,
-      paddingVertical: 11,
-      fontFamily: F.uiMed,
-      fontSize: 15,
-      color: T.text,
-    },
-    muscleWrap: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 8,
-    },
-    musclePill: {
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 20,
-      borderWidth: 1,
-      borderColor: T.borderStrong,
-      backgroundColor: T.surface,
-    },
-    musclePillActive: {
-      backgroundColor: T.primary,
-      borderColor: T.primary,
-    },
-    musclePillText: { fontFamily: F.uiMed, fontSize: 13, color: T.text },
-    musclePillTextActive: { color: T.onPrimary },
-
-    segmented: {
-      flexDirection: 'row',
-      borderWidth: 1,
-      borderColor: T.border,
-      borderRadius: R.sm,
-      overflow: 'hidden',
-    },
-    segmentButton: {
-      flex: 1,
-      paddingVertical: 11,
-      alignItems: 'center',
-      backgroundColor: T.surface,
-    },
-    segmentButtonLeft: { borderRightWidth: 1, borderRightColor: T.border },
-    segmentButtonRight: {},
-    segmentButtonActive: { backgroundColor: T.primary },
-    segmentText: { fontFamily: F.uiMed, fontSize: 14, color: T.textDim },
-    segmentTextActive: { fontFamily: F.uiBold, color: T.onPrimary },
-    submitButton: {
-      marginTop: 8,
-      backgroundColor: T.primary,
-      borderRadius: R.card,
-      paddingVertical: 14,
-      alignItems: 'center',
-    },
-    submitButtonDisabled: { opacity: 0.55 },
-    submitText: { fontFamily: F.uiBold, fontSize: 16, color: T.onPrimary },
   });
 }
