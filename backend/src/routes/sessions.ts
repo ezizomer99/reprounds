@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, asc, desc, eq, inArray, max } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, max, or } from 'drizzle-orm';
 import { createDb } from '../db';
 import {
   disciplines,
@@ -606,6 +606,34 @@ sessionRoutes.patch('/:id/entries/:entryId', async (c) => {
   if ('notes' in body) updates.notes = body.notes ?? null;
   if ('supersetGroup' in body) updates.supersetGroup = body.supersetGroup ?? null;
 
+  if ('exerciseId' in body && body.exerciseId !== undefined) {
+    if (body.exerciseId === null) {
+      return c.json({ error: 'exerciseId cannot be null for exercise entries' }, 400);
+    }
+    // Re-fetch the entry kind — only exercise-kind entries may swap their exercise.
+    const [kindRow] = await db
+      .select({ kind: sessionEntries.kind })
+      .from(sessionEntries)
+      .where(eq(sessionEntries.id, entryId))
+      .limit(1);
+    if (kindRow?.kind !== 'exercise') {
+      return c.json({ error: 'exerciseId can only be updated on exercise entries' }, 400);
+    }
+    // Validate the exercise is visible to this user (global seed or user-owned).
+    const [exRow] = await db
+      .select({ id: exercises.id })
+      .from(exercises)
+      .where(
+        and(
+          eq(exercises.id, body.exerciseId),
+          or(isNull(exercises.userId), eq(exercises.userId, userId))!,
+        ),
+      )
+      .limit(1);
+    if (!exRow) return c.json({ error: 'Exercise not found' }, 404);
+    updates.exerciseId = body.exerciseId;
+  }
+
   if (Object.keys(updates).length > 0) {
     await db
       .update(sessionEntries)
@@ -615,6 +643,37 @@ sessionRoutes.patch('/:id/entries/:entryId', async (c) => {
 
   const entry = await fetchEntryWithSets(db, entryId);
   return c.json({ entry });
+});
+
+// DELETE /sessions/:id/entries/:entryId
+sessionRoutes.delete('/:id/entries/:entryId', async (c) => {
+  const userId = c.get('userId');
+  const sessionId = c.req.param('id');
+  const entryId = c.req.param('entryId');
+  const db = getDb(c.env);
+
+  const ownerCheck = await db
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId)))
+    .limit(1);
+
+  if (ownerCheck.length === 0) return c.json({ error: 'Not found' }, 404);
+
+  const entryCheck = await db
+    .select({ id: sessionEntries.id })
+    .from(sessionEntries)
+    .where(and(eq(sessionEntries.id, entryId), eq(sessionEntries.sessionId, sessionId)))
+    .limit(1);
+
+  if (entryCheck.length === 0) return c.json({ error: 'Entry not found' }, 404);
+
+  // Cascade-on-delete in the schema removes associated strength_sets automatically.
+  await db
+    .delete(sessionEntries)
+    .where(eq(sessionEntries.id, entryId));
+
+  return c.json({ success: true });
 });
 
 // POST /sessions/:id/entries/:entryId/sets
