@@ -15,7 +15,6 @@ import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import type { WeightLog } from '@app/shared';
 import {
   useCreateWeightLog,
   useDeleteWeightLog,
