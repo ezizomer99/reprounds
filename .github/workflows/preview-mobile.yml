@@ -1,7 +1,8 @@
 name: Preview mobile
 
-# Builds a preview APK on EAS and submits it to the Play Store internal testing
-# track whenever frontend or shared code is pushed to develop.
+# Builds a preview AAB on EAS and submits it to the Play Store internal testing
+# track whenever frontend or shared code is pushed to develop. (Play rejects
+# APKs on every track for apps enrolled in Play App Signing — must be an AAB.)
 # Use this to verify a feature end-to-end on a real device before merging to main.
 #
 # Prerequisites (GitHub secrets):
@@ -49,7 +50,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build preview APK on EAS
+      - name: Build preview AAB on EAS
         id: eas_build
         working-directory: frontend
         # Capture the build id so the submit step targets exactly this build —
