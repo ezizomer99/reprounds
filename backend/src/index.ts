@@ -25,6 +25,14 @@ type Env = {
 
 const app = new Hono<Env>();
 
+// Uniform 500 shape for anything a handler didn't catch (DB/Hyperdrive
+// failures included) — without this, workerd returns a platform-shaped
+// response that doesn't match the { error } contract the app parses.
+app.onError((err, c) => {
+  console.error(`unhandled error on ${c.req.method} ${c.req.path}:`, err);
+  return c.json({ error: 'Internal error' }, 500);
+});
+
 app.get('/', (c) => c.json({ status: 'ok', app: 'reprounds-api' }));
 
 app.route('/v1/auth', authRoutes);

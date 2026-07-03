@@ -198,6 +198,20 @@ exerciseRoutes.delete('/:id', async (c) => {
     return c.json({ error: 'Not found' }, 404);
   }
 
+  // session_entries.exercise_id is ON DELETE NO ACTION — without this check
+  // the delete would surface as a raw FK 500 once the exercise has been logged.
+  const [logged] = await db
+    .select({ id: sessionEntries.id })
+    .from(sessionEntries)
+    .where(eq(sessionEntries.exerciseId, id))
+    .limit(1);
+  if (logged) {
+    return c.json(
+      { error: 'This exercise has logged sessions and cannot be deleted' },
+      409,
+    );
+  }
+
   await db
     .delete(exercises)
     .where(and(eq(exercises.id, id), eq(exercises.userId, userId)));
