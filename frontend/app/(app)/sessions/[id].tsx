@@ -53,7 +53,7 @@ import { RoundLogger, BOXING_WEAPONS, MUAY_THAI_WEAPONS } from '../../../src/com
 import { PlateCalculator } from '../../../src/components/PlateCalculator';
 import { useUnit } from '../../../src/units/UnitContext';
 import { useRestTimerDefault } from '../../../src/restTimer/RestTimerContext';
-import { fmtWeight, kgToUnit, unitToKg } from '../../../src/units/units';
+import { fmtWeight, kgToUnit, unitToKg, fmtDuration, parseDuration } from '../../../src/units/units';
 import { cancelScheduled, scheduleInSeconds } from '../../../src/lib/notifications';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
@@ -83,25 +83,6 @@ const SET_TYPE_SHORT: Record<SetType, string> = {
   failure: 'FAIL',
   amrap:   'AMRAP',
 };
-
-function fmtDuration(secs: number): string {
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-function parseDuration(val: string): number | null {
-  const t = val.trim();
-  if (!t) return null;
-  if (t.includes(':')) {
-    const [mPart, sPart] = t.split(':');
-    const m = parseInt(mPart || '0', 10);
-    const s = parseInt(sPart || '0', 10);
-    if (isNaN(m) || isNaN(s)) return null;
-    return m * 60 + Math.min(s, 59);
-  }
-  const n = parseInt(t, 10);
-  return isNaN(n) ? null : n;
-}
 
 function formatElapsed(secs: number): string {
   const h = Math.floor(secs / 3600);

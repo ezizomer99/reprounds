@@ -116,6 +116,13 @@ calendarRoutes.get('/', async (c) => {
   if (from > to) {
     return c.json({ error: 'from must be on or before to' }, 400);
   }
+  // Cap the window: RRULE expansion is O(occurrences × routines) inside the
+  // Worker's CPU budget, so an unbounded range is a self-DoS vector.
+  const rangeDays =
+    (new Date(to + 'T00:00:00Z').getTime() - new Date(from + 'T00:00:00Z').getTime()) / 86_400_000;
+  if (rangeDays > 366) {
+    return c.json({ error: 'Date range cannot exceed 366 days' }, 400);
+  }
 
   const db = getDb(c.env);
 

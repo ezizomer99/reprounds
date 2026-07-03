@@ -71,7 +71,10 @@ exerciseRoutes.get('/', async (c) => {
     conditions.push(eq(exercises.type, typeFilter as 'strength' | 'conditioning' | 'martial_arts'));
   }
   if (search) {
-    conditions.push(ilike(exercises.name, `%${search}%`));
+    // % and _ are LIKE wildcards — escape them so a literal search can't
+    // degenerate into a match-everything scan.
+    const escaped = search.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+    conditions.push(ilike(exercises.name, `%${escaped}%`));
   }
   if (categoryFilter) {
     conditions.push(eq(exercises.category, categoryFilter));

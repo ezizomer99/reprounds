@@ -77,10 +77,40 @@ indexed lookup). **Fix later (X4):** refresh-token strategy — spec marks it TB
 dev` pools against the production Neon DB. **Fix:** separate
 `wrangler hyperdrive create` for prod; keep dev on `DATABASE_URL` fallback.
 
-### S9 — Full security audit addendum — *pending*
-The dedicated security-agent pass (JWT algorithm confusion, timing safety,
-injection, CORS, secrets sweep, frontend token handling) is re-running after a
-session-limit reset; its findings land in this section when complete.
+### S9 — Full security audit addendum *(completed 2026-07-03)*
+
+**S9a — IDOR: `POST /sessions` trusts client `routineId` — HIGH (fixed in Phase B)**
+`backend/src/routes/sessions.ts:340` — the create-session route linked and
+pre-filled from any `routineId` without checking `routines.userId`, exposing a
+victim's routine structure (exercises, targets, rest) to anyone holding the
+UUID. Fix: ownership check before the transaction, 404 on mismatch.
+
+**S9b — `/calendar` had no range cap — MEDIUM (fixed in Phase B)**
+Unbounded RRULE expansion (e.g. a 100-year window × 10 routines ≈ 36k dates)
+could exhaust the Worker CPU budget. Fix: 366-day maximum window.
+
+**S9c — Exercise search wildcards unescaped — LOW (fixed in Phase B)**
+`%`/`_` in the search string acted as LIKE wildcards (parameterized, so no
+injection — just degenerate scans). Fix: escape before interpolating.
+
+**S9d — Offline cache stores health data in plain AsyncStorage — decision needed**
+`frontend/app/_layout.tsx:68` — the React Query persister writes sessions,
+body-weight history, and fight records to unencrypted AsyncStorage (readable
+on rooted devices). The JWT itself is correctly in SecureStore. Options:
+encrypted persister (SQLCipher via op-sqlite), encrypt-at-rest wrapper, or
+accept the risk for offline UX. **Owner's call.**
+
+**S9e — Known accepted limits (documented, no action available/needed):**
+PBKDF2 capped at 100k iterations by workerd (below OWASP 2023 — revisit when
+Argon2 WASM is viable); guest identity = deviceId possession (rate-limited,
+single-user threat model); dev/prod Hyperdrive sharing (S8, needs account
+owner).
+
+**Clean bill:** JWT alg pinned to HS256 (no confusion path) + expiry enforced;
+Google JWKS verification checks alg/iss/aud/exp/email_verified with kid-retry;
+timing-safe password compare; nested sessions→entries→sets ownership verified
+at every level; global seed rows immutable to users; no committed secrets; no
+WebView; CORS correctly absent for a native-only API.
 
 ---
 
