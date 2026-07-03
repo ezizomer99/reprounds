@@ -20,7 +20,6 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type {
-  ActivityType,
   Discipline,
   EnumFieldDef,
   Exercise,
@@ -29,11 +28,11 @@ import type {
   SetType,
   StrengthSet,
 } from '@app/shared';
-import { isRoundsSession, totalVolume } from '@app/shared';
-import { useCreateExercise, useExercises } from '../../../src/hooks/useExercises';
+import { FREE_CUSTOM_EXERCISE_LIMIT, isRoundsSession, totalVolume } from '@app/shared';
+import { useExercises } from '../../../src/hooks/useExercises';
 import { useDisciplines } from '../../../src/hooks/useDisciplines';
-import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useProGate } from '../../../src/hooks/useProGate';
+import { ExerciseForm } from '../../../src/components/ExerciseForm';
 import {
   useSession,
   useCompleteSession,
@@ -92,20 +91,6 @@ function formatElapsed(secs: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-const FREE_CUSTOM_EXERCISE_LIMIT = 3;
-
-const MUSCLE_OPTIONS = [
-  'chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms',
-  'abs', 'glutes', 'quads', 'hamstrings', 'calves', 'full body', 'cardio',
-] as const;
-
-const EQUIPMENT_OPTIONS = [
-  'Barbell', 'Dumbbell', 'Kettlebell', 'Machine', 'Bodyweight', 'Resistance Band', 'Other',
-] as const;
-
-function titleCase(s: string) {
-  return s.replace(/\b\w/g, (c) => c.toUpperCase());
-}
 
 // ─── Exercise picker modal ────────────────────────────────────────────────────
 
@@ -250,54 +235,6 @@ function CreateExerciseInSessionModal({
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const [name, setName] = useState(initialName);
-  const [type, setType] = useState<Exclude<ActivityType, 'martial_arts'>>('strength');
-  const [muscleGroup, setMuscleGroup] = useState<string | null>(null);
-  const [equipment, setEquipment] = useState<string | null>(null);
-  const createExercise = useCreateExercise();
-  const { data: allExercises } = useExercises();
-  const { data: currentUser } = useCurrentUser();
-  const { isPro, showPaywall } = useProGate();
-
-  useEffect(() => {
-    if (visible) {
-      setName(initialName);
-      setType('strength');
-      setMuscleGroup(null);
-      setEquipment(null);
-    }
-  }, [visible, initialName]);
-
-  async function handleSubmit() {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      Alert.alert('Validation', 'Name is required.');
-      return;
-    }
-    const customCount = (allExercises ?? []).filter((e) => e.userId === currentUser?.id).length;
-    if (!isPro && customCount >= FREE_CUSTOM_EXERCISE_LIMIT) {
-      Alert.alert(
-        'Limit reached',
-        `Free accounts can create up to ${FREE_CUSTOM_EXERCISE_LIMIT} custom exercises. Upgrade to RepRounds Pro for unlimited exercises.`,
-        [
-          { text: 'Not now', style: 'cancel' },
-          { text: 'Upgrade', onPress: showPaywall },
-        ],
-      );
-      return;
-    }
-    try {
-      const newExercise = await createExercise.mutateAsync({
-        name: trimmed,
-        type,
-        muscleGroup,
-        equipment,
-      });
-      onCreated(newExercise);
-    } catch (err) {
-      Alert.alert('Error', (err as Error).message ?? 'Failed to create exercise.');
-    }
-  }
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -313,97 +250,12 @@ function CreateExerciseInSessionModal({
             <Text style={styles.modalCancel}>Cancel</Text>
           </TouchableOpacity>
         </View>
-
-        <View style={styles.createExField}>
-          <Text style={styles.createExLabel}>Name *</Text>
-          <TextInput
-            style={styles.createExInput}
-            value={name}
-            onChangeText={setName}
-            placeholder="e.g. Pistol Squat"
-            placeholderTextColor={T.muted}
-            autoFocus
-            returnKeyType="next"
-            selectionColor={T.primary}
-          />
-        </View>
-
-        <View style={styles.createExField}>
-          <Text style={styles.createExLabel}>Type *</Text>
-          <View style={styles.createExSegmented}>
-            {(['strength', 'conditioning'] as const).map((t, i) => (
-              <TouchableOpacity
-                key={t}
-                style={[
-                  styles.createExSegmentBtn,
-                  i === 0 && styles.createExSegmentLeft,
-                  i === 1 && styles.createExSegmentRight,
-                  type === t && styles.createExSegmentActive,
-                ]}
-                onPress={() => setType(t)}
-              >
-                <Text style={[styles.createExSegmentText, type === t && styles.createExSegmentTextActive]}>
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.createExField}>
-          <Text style={styles.createExLabel}>Muscle Group</Text>
-          <View style={styles.createExPillWrap}>
-            {MUSCLE_OPTIONS.map((m) => {
-              const active = muscleGroup === m;
-              return (
-                <TouchableOpacity
-                  key={m}
-                  style={[styles.createExPill, active && styles.createExPillActive]}
-                  onPress={() => setMuscleGroup(active ? null : m)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.createExPillText, active && styles.createExPillTextActive]}>
-                    {titleCase(m)}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
-        <View style={styles.createExField}>
-          <Text style={styles.createExLabel}>Equipment</Text>
-          <View style={styles.createExPillWrap}>
-            {EQUIPMENT_OPTIONS.map((eq) => {
-              const active = equipment === eq;
-              return (
-                <TouchableOpacity
-                  key={eq}
-                  style={[styles.createExPill, active && styles.createExPillActive]}
-                  onPress={() => setEquipment(active ? null : eq)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.createExPillText, active && styles.createExPillTextActive]}>
-                    {eq}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.createExSubmit, createExercise.isPending && styles.createExSubmitDisabled]}
-          onPress={handleSubmit}
-          disabled={createExercise.isPending}
-          activeOpacity={0.8}
-        >
-          {createExercise.isPending ? (
-            <ActivityIndicator color={T.onPrimary} />
-          ) : (
-            <Text style={styles.createExSubmitText}>Create & Add to Session</Text>
-          )}
-        </TouchableOpacity>
+        <ExerciseForm
+          key={visible ? (initialName || '_') : ''}
+          initialName={initialName}
+          submitLabel="Create & Add to Session"
+          onCreated={onCreated}
+        />
       </ScrollView>
     </Modal>
   );
@@ -717,23 +569,39 @@ function SetActionsMenu({ set, onSetType, onDuplicate, onDelete, onPlateMath, on
   );
 }
 
-// ─── Last time summary ────────────────────────────────────────────────────────
+// ─── Last time ghost rows ─────────────────────────────────────────────────────
 
 function LastTime({ exerciseId }: { exerciseId: string }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { unit } = useUnit();
   const { data } = useExerciseHistory(exerciseId);
-  const summary = useMemo(() => {
-    if (!data?.history.length) return null;
-    const sets = data.history[0].entry.sets.filter((s) => s.completed && s.reps !== null);
-    if (!sets.length) return null;
-    const s = sets[0];
-    const w = s.weight !== null ? `×${fmtWeight(s.weight, unit)}${unit}` : '';
-    return `Last: ${sets.length}×${s.reps}${w}`;
-  }, [data, unit]);
-  if (!summary) return null;
-  return <Text style={styles.lastTimeText}>Last: <Text style={styles.lastTimeVal}>{summary.replace('Last: ', '')}</Text></Text>;
+
+  const priorSets = useMemo(() => {
+    if (!data?.history.length) return [];
+    return data.history[0].entry.sets.filter(
+      (s) => s.completed && s.setType !== 'warmup' && s.reps !== null,
+    );
+  }, [data]);
+
+  if (!priorSets.length) return null;
+
+  return (
+    <View style={styles.ghostContainer}>
+      <Text style={styles.ghostHeader}>Last session</Text>
+      {priorSets.map((s, i) => {
+        const weightStr = s.weight !== null
+          ? `${fmtWeight(s.weight, unit)} ${unit}`
+          : 'bw';
+        return (
+          <View key={i} style={styles.ghostRow}>
+            <Text style={styles.ghostNum}>{i + 1}</Text>
+            <Text style={styles.ghostLabel}>{weightStr} × {s.reps}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
 }
 
 // ─── Strength entry card ──────────────────────────────────────────────────────
@@ -1840,8 +1708,30 @@ function makeStyles(T: ThemeColors) {
   },
   gymBadgeText: { fontFamily: F.uiSemi, fontSize: 10, color: T.primary, letterSpacing: 0.4 },
 
-  lastTimeText: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
-  lastTimeVal: { fontFamily: F.uiSemi, color: T.text },
+  ghostContainer: { gap: 2, marginBottom: 2 },
+  ghostHeader: {
+    fontFamily: F.uiBold,
+    fontSize: 10,
+    color: T.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 1,
+  },
+  ghostRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 20,
+    opacity: 0.5,
+  },
+  ghostNum: {
+    width: 14,
+    fontFamily: F.mono,
+    fontSize: 11,
+    color: T.textDim,
+    textAlign: 'right',
+  },
+  ghostLabel: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
 
   // Column headers
   colHeaders: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 2 },
