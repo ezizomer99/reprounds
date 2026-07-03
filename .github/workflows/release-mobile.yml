@@ -35,7 +35,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Decode Google Play service account key
-        run: echo "${{ secrets.GOOGLE_PLAY_KEY_BASE64 }}" | base64 -d > frontend/google-play-key.json
+        env:
+          GOOGLE_PLAY_KEY: ${{ secrets.GOOGLE_PLAY_KEY_BASE64 }}
+        # tr strips CR/LF/spaces the secret may carry (e.g. from Windows piping)
+        run: printf '%s' "$GOOGLE_PLAY_KEY" | tr -d '\r\n ' | base64 -d > frontend/google-play-key.json
 
       - name: Build production AAB on EAS
         working-directory: frontend

@@ -61,6 +61,7 @@ jobs:
             echo "GOOGLE_PLAY_KEY_BASE64 secret not set — skipping Play Store submission"
             exit 0
           fi
-          echo "$GOOGLE_PLAY_KEY" | base64 -d > google-play-key.json
+          # tr strips CR/LF/spaces the secret may carry (e.g. from Windows piping)
+          printf '%s' "$GOOGLE_PLAY_KEY" | tr -d '\r\n ' | base64 -d > google-play-key.json
           eas submit --profile preview --platform android --latest --non-interactive
           rm -f google-play-key.json
