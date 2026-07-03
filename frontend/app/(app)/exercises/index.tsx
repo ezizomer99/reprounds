@@ -1,7 +1,6 @@
 import {
   ActivityIndicator,
   Alert,
-  ScrollView,
   SectionList,
   StyleSheet,
   Text,
@@ -90,7 +89,7 @@ interface ExerciseRowProps {
   T: ThemeColors;
 }
 
-function ExerciseRow({ exercise, isOwned, onPress, onDelete, styles, T }: ExerciseRowProps) {
+function ExerciseRow({ exercise, isOwned, onPress, onDelete, styles }: ExerciseRowProps) {
   const swipeableRef = useRef<Swipeable>(null);
 
   function handleDelete() {

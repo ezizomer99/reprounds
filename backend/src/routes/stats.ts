@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import { and, desc, eq, gte, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, sql } from 'drizzle-orm';
 import { createDb } from '../db';
-import { exercises, sessionEntries, sessions, strengthSets } from '../db/schema';
+import { exercises, sessionEntries, sessions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { MuscleSummaryResponse, TopLiftsResponse } from '@app/shared';
 

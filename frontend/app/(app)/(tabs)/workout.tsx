@@ -16,6 +16,7 @@ import type { RoutineWithItems } from '@app/shared';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useSessions } from '../../../src/hooks/useSession';
 import { useRoutines } from '../../../src/hooks/useRoutines';
+import { mondayOf, weekKey, computeWeekStreak } from '../../../src/lib/statsHelpers';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -58,33 +59,6 @@ function getWeekDays(): WeekDay[] {
       isoDate: d.toISOString().slice(0, 10),
     };
   });
-}
-
-function mondayOf(d: Date): Date {
-  const m = new Date(d);
-  m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
-  m.setHours(0, 0, 0, 0);
-  return m;
-}
-
-function weekKey(isoDate: string): string {
-  return mondayOf(new Date(isoDate + 'T00:00:00')).toISOString().slice(0, 10);
-}
-
-/** Consecutive weeks (incl. current) with at least one completed session. The
- *  current week not yet trained does not break the streak (grace). */
-function computeWeekStreak(dates: string[]): number {
-  const activeWeeks = new Set(dates.map(weekKey));
-  const curMonday = mondayOf(new Date());
-  let streak = 0;
-  for (let w = 0; w < 520; w++) {
-    const wk = new Date(curMonday);
-    wk.setDate(curMonday.getDate() - w * 7);
-    if (activeWeeks.has(wk.toISOString().slice(0, 10))) streak++;
-    else if (w === 0) continue; // grace for the current week
-    else break;
-  }
-  return streak;
 }
 
 function isToday(d: Date): boolean {

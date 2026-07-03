@@ -5,6 +5,7 @@ import {
   disciplines,
   exercises,
   routineItems,
+  routines,
   sessionEntries,
   sessions,
   strengthSets,
@@ -312,6 +313,20 @@ sessionRoutes.post('/', async (c) => {
 
   if (!body.date) {
     return c.json({ error: 'date is required' }, 400);
+  }
+
+  // The routine the session is created from must belong to the caller —
+  // otherwise the prefill below would read (and echo back) another user's
+  // routine structure from a leaked UUID.
+  if (body.routineId) {
+    const [ownedRoutine] = await db
+      .select({ id: routines.id })
+      .from(routines)
+      .where(and(eq(routines.id, body.routineId), eq(routines.userId, userId)))
+      .limit(1);
+    if (!ownedRoutine) {
+      return c.json({ error: 'Not found' }, 404);
+    }
   }
 
   const [existing] = await db

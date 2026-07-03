@@ -37,7 +37,7 @@ import {
   useUpdateRoutineItem,
 } from '../../../src/hooks/useRoutines';
 import { useUnit } from '../../../src/units/UnitContext';
-import { fmtWeight, unitToKg, type WeightUnit } from '../../../src/units/units';
+import { fmtWeight, unitToKg, fmtDuration, parseDuration, type WeightUnit } from '../../../src/units/units';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -47,25 +47,6 @@ type ExerciseType = 'strength' | 'conditioning';
 interface PendingItem extends CreateRoutineItemRequest {
   _localId: string;
   _displayName: string;
-}
-
-function fmtDuration(secs: number): string {
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-function parseDuration(val: string): number | null {
-  const t = val.trim();
-  if (!t) return null;
-  if (t.includes(':')) {
-    const [mPart, sPart] = t.split(':');
-    const m = parseInt(mPart || '0', 10);
-    const s = parseInt(sPart || '0', 10);
-    if (isNaN(m) || isNaN(s)) return null;
-    return m * 60 + Math.min(s, 59);
-  }
-  const n = parseInt(t, 10);
-  return isNaN(n) ? null : n;
 }
 
 function asTarget(raw: Record<string, unknown> | null | undefined): RoutineItemTarget | null {
