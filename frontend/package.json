@@ -20,7 +20,7 @@
     "@expo-google-fonts/space-grotesk": "^0.4.1",
     "@expo/vector-icons": "^14.1.0",
     "@gorhom/bottom-sheet": "^5.2.14",
-    "@react-native-async-storage/async-storage": "2.1.2",
+    "@react-native-async-storage/async-storage": "3.1.1",
     "@react-native-community/netinfo": "11.4.1",
     "@react-native-google-signin/google-signin": "^13.1.0",
     "@shopify/flash-list": "^2.3.2",
