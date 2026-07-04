@@ -1,6 +1,10 @@
 name: Deploy backend
 
-# Deploys the Cloudflare Worker to the production environment on merge to main.
+# Deploys the Cloudflare Worker to the production environment on pushes to
+# main AND develop. The preview app builds (selfhosted-preview-mobile.yml, also
+# develop-triggered) point at the production API, so deploying from develop too
+# guarantees the backend is live before a tester installs a new app build —
+# backend deploys take ~2 minutes, app builds ~20.
 # Preserves the migrate-before-deploy invariant (see CLAUDE.md): additive
 # migrations are applied to the prod Neon DB *before* the new Worker ships.
 #
@@ -11,7 +15,7 @@ name: Deploy backend
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
     paths:
       - 'backend/**'
       - 'shared/**'

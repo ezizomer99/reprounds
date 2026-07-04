@@ -72,11 +72,15 @@ pnpm --filter backend db:seed       # seed global defaults
 
 ## Deploy
 
+**CI deploys the backend automatically**: `.github/workflows/deploy-backend.yml` runs `deploy:production` (migrate, then publish `reprounds-api-prod`) on every push to `main` or `develop` that touches `backend/` or `shared/`. Preview app builds (also develop-triggered) point at the production API, so the backend is always live before a new app build reaches a tester.
+
+Manual deploy still works the same way:
+
 ```bash
-pnpm --filter backend deploy   # runs db:migrate against Neon, THEN wrangler deploy
+pnpm --filter backend deploy:production   # runs db:migrate against Neon, THEN wrangler deploy --env production
 ```
 
-The Worker is deployed manually — there is no CI deploy. `deploy` **always applies pending Drizzle migrations to production before publishing the Worker**, so schema-dependent code never ships ahead of the database. (Skipping this is how a missing `notes` column once broke `GET /sessions/:id` in prod while the session list kept working.)
+The deploy scripts **always apply pending Drizzle migrations to production before publishing the Worker**, so schema-dependent code never ships ahead of the database. (Skipping this is how a missing `notes` column once broke `GET /sessions/:id` in prod while the session list kept working.)
 
 - The migrate step reads `DATABASE_URL` from the root `.env` via `drizzle.config.ts` — same as `db:migrate`.
 - Migrate-before-deploy is correct for **additive** migrations (new column/table). For a **destructive** change (drop/rename a column the live code still reads), deploy the new code first, then migrate — use `pnpm --filter backend deploy:no-migrate` followed by `pnpm --filter backend db:migrate`.
