@@ -65,6 +65,10 @@ import { withAlpha } from '../../../src/lib/color';
 const SNAP_92: string[] = ['92%'];
 const SNAP_60: string[] = ['60%'];
 
+// The set-row weight/reps/RPE cells are fixed-size boxes; past this scale the
+// numbers grow wider than the cell and Android clips them at the edges.
+const CELL_MAX_FONT_SCALE = 1.1;
+
 const SET_TYPE_CYCLE: SetType[] = ['warmup', 'normal', 'drop', 'failure', 'amrap'];
 const SET_TYPE_LABEL: Record<SetType, string> = {
   warmup: 'Warmup',
@@ -443,8 +447,9 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
             returnKeyType="done"
             editable={!isDone && !isOptimistic}
             textAlign="center"
+            maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}
           />
-          <Text style={styles.cellUnit}>min</Text>
+          <Text style={styles.cellUnit} maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}>min</Text>
         </View>
       ) : (
         <>
@@ -460,8 +465,9 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
               returnKeyType="done"
               editable={!isDone && !isOptimistic}
               textAlign="center"
+              maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}
             />
-            <Text style={styles.cellUnit}>{unit}</Text>
+            <Text style={styles.cellUnit} maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}>{unit}</Text>
           </View>
 
           <View style={[styles.cell, isDone && styles.cellDone]}>
@@ -476,8 +482,9 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
               returnKeyType="done"
               editable={!isDone && !isOptimistic}
               textAlign="center"
+              maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}
             />
-            <Text style={styles.cellUnit}>reps</Text>
+            <Text style={styles.cellUnit} maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}>reps</Text>
           </View>
 
           {!isWarm && (
@@ -493,8 +500,9 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
                 returnKeyType="done"
                 editable={!isDone && !isOptimistic}
                 textAlign="center"
+                maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}
               />
-              <Text style={styles.cellUnit}>RPE</Text>
+              <Text style={styles.cellUnit} maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}>RPE</Text>
             </View>
           )}
         </>
@@ -790,6 +798,9 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseTyp
   }
 
   const entryMutationPending = updateEntry.isPending || deleteEntry.isPending;
+  // Optimistically added entry: the server id isn't known yet, so hold off
+  // set mutations until the refetch swaps in the real entry.
+  const isOptimisticEntry = entry.id.startsWith('optimistic-');
 
   return (
     <View style={styles.entryCard}>
@@ -819,7 +830,7 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseTyp
       {entry.exerciseId && <LastTime exerciseId={entry.exerciseId} />}
 
       {/* Warm-up */}
-      <TouchableOpacity style={styles.addSubRow} onPress={handleAddWarmup} disabled={addSet.isPending}>
+      <TouchableOpacity style={styles.addSubRow} onPress={handleAddWarmup} disabled={addSet.isPending || isOptimisticEntry}>
         <Ionicons name="add" size={15} color={T.gold} />
         <Text style={[styles.addSubText, { color: T.gold }]}>Warm-up</Text>
       </TouchableOpacity>
@@ -846,7 +857,7 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseTyp
           <>
             <Text style={styles.colHeader}>Weight</Text>
             <Text style={styles.colHeader}>Reps</Text>
-            <Text style={[styles.colHeader, { width: 52 }]}>RPE</Text>
+            <Text style={[styles.colHeader, { width: 56 }]}>RPE</Text>
           </>
         )}
         <View style={{ width: 32 }} />
@@ -870,7 +881,7 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseTyp
         />
       ))}
 
-      <TouchableOpacity style={styles.addSetBtn} onPress={handleAddSet} disabled={addSet.isPending}>
+      <TouchableOpacity style={styles.addSetBtn} onPress={handleAddSet} disabled={addSet.isPending || isOptimisticEntry}>
         {addSet.isPending ? (
           <ActivityIndicator size="small" color={T.textDim} />
         ) : (
@@ -1081,7 +1092,7 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
       <TouchableOpacity
         style={[styles.maSaveBtn, (updateEntry.isPending || justSaved) && { opacity: 0.6 }]}
         onPress={handleSave}
-        disabled={updateEntry.isPending}
+        disabled={updateEntry.isPending || entry.id.startsWith('optimistic-')}
       >
         {updateEntry.isPending
           ? <ActivityIndicator size="small" color={T.onPrimary} />
@@ -1762,12 +1773,24 @@ export default function SessionScreen() {
       <PickExerciseModal
         visible={showExercisePicker}
         onClose={() => setShowExercisePicker(false)}
-        onPick={(e) => { if (id) addEntry.mutate({ sessionId: id, kind: 'exercise', exerciseId: e.id }); }}
+        onPick={(e) => {
+          if (!id) return;
+          addEntry.mutate(
+            { sessionId: id, kind: 'exercise', exerciseId: e.id, exerciseName: e.name },
+            { onError: (err) => Alert.alert('Error', err.message || 'Failed to add exercise.') },
+          );
+        }}
       />
       <PickDisciplineModal
         visible={showDisciplinePicker}
         onClose={() => setShowDisciplinePicker(false)}
-        onPick={(d) => { if (id) addEntry.mutate({ sessionId: id, kind: 'martial_arts', disciplineId: d.id }); }}
+        onPick={(d) => {
+          if (!id) return;
+          addEntry.mutate(
+            { sessionId: id, kind: 'martial_arts', disciplineId: d.id, disciplineName: d.name },
+            { onError: (err) => Alert.alert('Error', err.message || 'Failed to add discipline.') },
+          );
+        }}
       />
 
       {showSettings && session && (
@@ -1948,7 +1971,7 @@ function makeStyles(T: ThemeColors) {
   },
   cellDone: { backgroundColor: 'transparent', borderColor: 'transparent' },
   cellRpe: {
-    width: 52,
+    width: 56,
     height: D.rowH - 12,
     backgroundColor: T.surface2,
     borderWidth: 1,
@@ -1965,6 +1988,10 @@ function makeStyles(T: ThemeColors) {
     color: T.text,
     flex: 1,
     textAlign: 'center',
+    // Android TextInputs carry intrinsic padding and font padding that offset
+    // the digits inside the cell and eat into its already-tight width.
+    padding: 0,
+    includeFontPadding: false,
   },
   cellUnit: { fontFamily: F.uiMed, fontSize: 10, color: T.muted, marginBottom: 6, alignSelf: 'flex-end' },
   checkBtn: {
