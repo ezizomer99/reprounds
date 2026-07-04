@@ -15,6 +15,15 @@ R2_PUBLIC_BASE_URL = "https://pub-37f8c20e70eb48089923fa13413cc2c5.r2.dev"
 binding = "HYPERDRIVE"
 id = "f9e92cd1b44d4b95ad25237042c5fd32"
 
+# Brute-force guard for /auth/login, /auth/register and /auth/guest.
+# Workers Rate Limiting API (per-isolate, best-effort). The code skips
+# limiting when this binding is absent, so local dev/tests are unaffected.
+[[unsafe.bindings]]
+name = "AUTH_RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 10, period = 60 }
+
 [[r2_buckets]]
 binding = "EXERCISES_BUCKET"
 bucket_name = "ma-fitness-exercises"
@@ -34,9 +43,20 @@ R2_PUBLIC_BASE_URL = "https://pub-37f8c20e70eb48089923fa13413cc2c5.r2.dev"
 
 # Dedicated PROD Hyperdrive config pointing at the production Neon database.
 # Create it (`wrangler hyperdrive create ...`) and paste its id below.
+# ⚠️ This id currently matches the top-level (dev) Hyperdrive config, which
+# means `wrangler dev` pools against the SAME database as production. Run
+# `wrangler hyperdrive create reprounds-dev --connection-string=<dev Neon URL>`
+# and point the top-level binding at that id (or rely on the DATABASE_URL
+# fallback locally) so dev traffic can never reach the prod database.
 [[env.production.hyperdrive]]
 binding = "HYPERDRIVE"
 id = "f9e92cd1b44d4b95ad25237042c5fd32"
+
+[[env.production.unsafe.bindings]]
+name = "AUTH_RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1002"
+simple = { limit = 10, period = 60 }
 
 [[env.production.r2_buckets]]
 binding = "EXERCISES_BUCKET"

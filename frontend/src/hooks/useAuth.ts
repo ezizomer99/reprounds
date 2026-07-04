@@ -1,10 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import type { User } from '@app/shared';
 import { apiGet, apiPost, apiDelete } from '../lib/api';
 import {
   clearSessionToken,
   setSessionToken,
+  getDeviceId,
   getOrCreateDeviceId,
   getGuestUserId,
   setGuestUserId,
@@ -45,6 +46,18 @@ export type SignInError =
   | { kind: 'play_services' }
   | { kind: 'network'; message: string };
 
+// The server migrates guest data only on proof of possession: it wants the
+// guest session's JWT, not a bare user id. Re-mint a fresh guest token from
+// the stored deviceId so an expired guest session can't strand the data.
+async function getGuestToken(): Promise<string | null> {
+  const guestUserId = await getGuestUserId();
+  if (!guestUserId) return null;
+  const deviceId = await getDeviceId();
+  if (!deviceId) return null;
+  const data = await apiPost<AuthResponse>('/auth/guest', { deviceId });
+  return data.sessionToken;
+}
+
 export function useSignIn() {
   const queryClient = useQueryClient();
 
@@ -54,8 +67,8 @@ export function useSignIn() {
     const { idToken } = await GoogleSignin.getTokens();
     if (!idToken) throw new Error('No ID token returned from Google');
 
-    const guestUserId = await getGuestUserId();
-    const data = await apiPost<AuthResponse>('/auth/google', { idToken, guestUserId });
+    const guestToken = await getGuestToken();
+    const data = await apiPost<AuthResponse>('/auth/google', { idToken, guestToken });
     await setSessionToken(data.sessionToken);
     await clearGuestData();
     queryClient.setQueryData<User>(['auth', 'me'], data.user);
@@ -69,7 +82,28 @@ export function useSignIn() {
     queryClient.setQueryData<User>(['auth', 'me'], data.user);
   }
 
-  return { signInWithGoogle, signInAsGuest };
+  async function registerWithEmail(email: string, password: string, name?: string): Promise<void> {
+    const guestToken = await getGuestToken();
+    const data = await apiPost<AuthResponse>('/auth/register', {
+      email,
+      password,
+      name: name && name.trim() ? name.trim() : null,
+      guestToken,
+    });
+    await setSessionToken(data.sessionToken);
+    await clearGuestData();
+    queryClient.setQueryData<User>(['auth', 'me'], data.user);
+  }
+
+  async function signInWithEmail(email: string, password: string): Promise<void> {
+    const guestToken = await getGuestToken();
+    const data = await apiPost<AuthResponse>('/auth/login', { email, password, guestToken });
+    await setSessionToken(data.sessionToken);
+    await clearGuestData();
+    queryClient.setQueryData<User>(['auth', 'me'], data.user);
+  }
+
+  return { signInWithGoogle, signInAsGuest, registerWithEmail, signInWithEmail };
 }
 
 export function useSignOut() {

@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import { createDb } from '../db';
-import { disciplines, sessionEntries, sessions } from '../db/schema';
+import { disciplines, fights, rankPromotions, sessionEntries, sessions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type {
   CreateDisciplineRequest,
@@ -155,6 +155,11 @@ disciplineRoutes.get('/:id/history', async (c) => {
   const disciplineId = c.req.param('id');
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
+  // Bounded like the exercise-history counterpart — this previously returned
+  // every entry ever logged (~450 rows/year for a 3×-week practitioner).
+  const limitParam = Number(c.req.query('limit'));
+  const limit = Number.isInteger(limitParam) && limitParam > 0 ? Math.min(limitParam, 200) : 50;
+
   const entryRows = await db
     .select({
       entryId: sessionEntries.id,
@@ -181,7 +186,8 @@ disciplineRoutes.get('/:id/history', async (c) => {
         eq(sessions.status, 'completed'),
       ),
     )
-    .orderBy(desc(sessions.date));
+    .orderBy(desc(sessions.date))
+    .limit(limit);
 
   const history: ExerciseHistoryEntry[] = entryRows.map((row) => {
     const entry: SessionEntryWithSets = {
@@ -220,6 +226,38 @@ disciplineRoutes.delete('/:id', async (c) => {
 
   if (existing.length === 0) {
     return c.json({ error: 'Not found' }, 404);
+  }
+
+  // Logged sessions (NO ACTION), fights and promotions (RESTRICT) all block
+  // this delete at the FK level — check first and answer with a clear 409
+  // instead of a raw constraint 500.
+  const [logged] = await db
+    .select({ id: sessionEntries.id })
+    .from(sessionEntries)
+    .where(eq(sessionEntries.disciplineId, id))
+    .limit(1);
+  if (logged) {
+    return c.json(
+      { error: 'This discipline has logged sessions and cannot be deleted' },
+      409,
+    );
+  }
+
+  const [fight] = await db
+    .select({ id: fights.id })
+    .from(fights)
+    .where(eq(fights.disciplineId, id))
+    .limit(1);
+  const [promotion] = await db
+    .select({ id: rankPromotions.id })
+    .from(rankPromotions)
+    .where(eq(rankPromotions.disciplineId, id))
+    .limit(1);
+  if (fight || promotion) {
+    return c.json(
+      { error: 'This discipline has fight or promotion records — delete those first' },
+      409,
+    );
   }
 
   await db

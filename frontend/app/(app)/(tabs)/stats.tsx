@@ -12,9 +12,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { BarChart } from 'react-native-gifted-charts';
 import Body from 'react-native-body-highlighter';
-import type { Session } from '@app/shared';
 import { useSessions } from '../../../src/hooks/useSession';
 import { useProGate } from '../../../src/hooks/useProGate';
+import { mondayOf, sessionsThisWeek, avgPerWeek, getWeeklyBarData } from '../../../src/lib/statsHelpers';
 import { useMuscleSummary, useTopLifts } from '../../../src/hooks/useStats';
 import { aggregateMuscles } from '../../../src/lib/muscleSlugMap';
 import { useUnit } from '../../../src/units/UnitContext';
@@ -23,42 +23,6 @@ import { Skeleton } from '../../../src/components/Skeleton';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
-
-function mondayOf(d: Date): Date {
-  const m = new Date(d);
-  m.setDate(m.getDate() - ((m.getDay() + 6) % 7));
-  m.setHours(0, 0, 0, 0);
-  return m;
-}
-
-function sessionsThisWeek(sessions: Session[]): number {
-  const monday = mondayOf(new Date());
-  return sessions.filter((s) => new Date(s.date + 'T00:00:00') >= monday).length;
-}
-
-function avgPerWeek(sessions: Session[], weeks = 4): number {
-  if (!sessions.length) return 0;
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - weeks * 7);
-  const recent = sessions.filter((s) => new Date(s.date + 'T00:00:00') >= cutoff);
-  return Math.round((recent.length / weeks) * 10) / 10;
-}
-
-function getWeeklyBarData(sessions: Session[], weeks = 8) {
-  const now = new Date();
-  return Array.from({ length: weeks }, (_, i) => {
-    const weekStart = mondayOf(new Date(now));
-    weekStart.setDate(weekStart.getDate() - (weeks - 1 - i) * 7);
-    const weekEnd = new Date(weekStart);
-    weekEnd.setDate(weekStart.getDate() + 7);
-    const count = sessions.filter((s) => {
-      const d = new Date(s.date + 'T00:00:00');
-      return d >= weekStart && d < weekEnd;
-    }).length;
-    const label = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    return { value: count, label: i === weeks - 1 ? 'This\nweek' : label };
-  });
-}
 
 export default function StatsTab() {
   const router = useRouter();

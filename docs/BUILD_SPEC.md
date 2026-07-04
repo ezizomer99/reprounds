@@ -4,7 +4,10 @@
 
 A mobile app for tracking **gym workouts** (strength + conditioning) and **martial arts** training (BJJ first, other arts later) in one place, with a unified calendar and recurring weekly schedule.
 
-This document is the source of truth for the initial build. Hand it to Claude Code and work through the phases in order. Visual/UI polish is handled separately in Claude Design later — for now, build functional screens.
+This document was the source of truth for the initial build (phases 0–7 have
+all shipped — see [PROGRESS.md](PROGRESS.md) for current status). It remains
+the reference for the domain model and architecture decisions; amendments are
+marked *[amended]* where the shipped product deliberately went beyond it.
 
 ---
 
@@ -15,7 +18,10 @@ This document is the source of truth for the initial build. Hand it to Claude Co
 - One calendar showing both training types, driven by a recurring weekly schedule with per-instance exceptions (Google Calendar–style editing).
 - Built to add new martial arts later with **zero code changes** (data-driven discipline forms).
 - Single user to start, but multi-user-ready (every row keyed by `user_id`).
-- Google sign-in only — **no passwords stored anywhere**.
+- Google sign-in as the primary method. *[amended: the shipped product also
+  supports email/password accounts (PBKDF2-hashed, credential-only partial
+  unique index on lower(email)) and device-scoped guest accounts that migrate
+  into a real account on sign-in — see CLAUDE.md "Auth rules".]*
 
 ---
 
@@ -235,7 +241,9 @@ The recurrence fields (`rrule`, `start_date`, `end_date`, `time_of_day`) live di
 - Session history
 - Computed estimated 1RM + PRs per exercise
 
-**Deferred to v2+**
+**Deferred to v2+** *[amended: everything below except the social feed has
+since shipped — supersets, muscle heat map + volume-by-muscle analytics
+(Pro), bodyweight log, and the plate calculator]*
 - Supersets UI (schema already supports `superset_group`)
 - Muscle heat map (requires tagging exercises with muscles — add a `muscle` column/table later)
 - Volume-by-muscle analytics, bodyweight/measurements, social feed, plate calculator
@@ -308,14 +316,15 @@ Boundaries (the point of the layout):
 ## 9. Build phases (do in order)
 
 0. ✅ **Scaffold** — monorepo, Drizzle schema + first migration against Neon, Hyperdrive binding, Worker "hello", Expo app boots as an EAS **dev build** on device.
-1. ✅ **Auth** — Google sign-in → `/auth/google` verify → session JWT → `/auth/me`; secure-store wiring.
+1. ✅ **Auth** — Google sign-in → `/auth/google` verify → session JWT → `/auth/me`; secure-store wiring. *[amended: plus email/password and guest auth]*
 2. ✅ **Libraries** — exercises + disciplines CRUD; seed global defaults (common lifts, jump rope, heavy bag, BJJ discipline with its `field_config`).
 3. ✅ **Routines** (renamed from Templates) — create/edit routines with mixed gym + martial-arts items; items management, reorder, skip-occurrence.
-4. 🔄 **Logging** — sessions/entries/sets API complete; frontend screens exist; "last time" display, rest timer, and RPE/RIR UI may be partially complete.
-5. 🔄 **Calendar + recurrence** — `/calendar` endpoint and calendar screen exist; skip (single occurrence) implemented; "this & following" and "all" edit modes partially implemented.
-6. ⬜ **History + stats** — `/exercises/:id/history` and `/exercises/:id/prs` backend complete; history screen exists; computed 1RM + PR logic may be partial.
-
-Then move to **Claude Design** for visual/UX polish of the core screens (logger, calendar, discipline log, library), and feed that back into the RN components.
+4. ✅ **Logging** — sessions/entries/sets API; session logger with "last time", rest timer, RPE/RIR, set types, supersets, plate calculator, martial-arts round logger.
+5. ✅ **Calendar + recurrence** — `/calendar` endpoint with server-side RRULE projection; skip/materialize; the three edit modes.
+6. ✅ **History + stats** — history + PRs endpoints and screens; computed est. 1RM; premium analytics (muscle map, top lifts).
+7. ✅ **Subscriptions** *[amended: added post-spec]* — RevenueCat + Pro gating.
+8. 🔄 **Differentiation & polish** — tracked on the GitHub project board and in
+   [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md).
 
 ---
 
