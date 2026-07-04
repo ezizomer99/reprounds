@@ -119,16 +119,51 @@ export function useAddSessionEntry() {
   const queryClient = useQueryClient();
 
   return useMutation<
-    SessionWithEntries,
+    SessionEntryWithSets,
     Error,
-    { sessionId: string } & CreateSessionEntryRequest
+    // exerciseName/disciplineName aren't sent to the API — they label the
+    // optimistic entry so it renders correctly before the refetch lands.
+    { sessionId: string; exerciseName?: string; disciplineName?: string } & CreateSessionEntryRequest,
+    SessionCtx
   >({
-    mutationFn: ({ sessionId, ...body }) =>
-      apiPost<{ session: SessionWithEntries }>(`/sessions/${sessionId}/entries`, body).then(
-        (r) => r.session,
+    mutationFn: ({ sessionId, exerciseName: _x, disciplineName: _d, ...body }) =>
+      apiPost<{ entry: SessionEntryWithSets }>(`/sessions/${sessionId}/entries`, body).then(
+        (r) => r.entry,
       ),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['session', variables.sessionId] });
+    onMutate: async ({ sessionId, exerciseName, disciplineName, ...body }) => {
+      const key = sessionKey(sessionId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<SessionWithEntries>(key);
+      if (previous) {
+        const tempEntry: SessionEntryWithSets = {
+          id: `optimistic-${Date.now()}`,
+          sessionId,
+          kind: body.kind,
+          exerciseId: body.exerciseId ?? null,
+          disciplineId: body.disciplineId ?? null,
+          gi: body.gi ?? null,
+          orderIndex: previous.entries.length,
+          supersetGroup: null,
+          restSeconds: body.restSeconds ?? null,
+          details: body.details ?? null,
+          notes: body.notes ?? null,
+          sets: [],
+          exerciseName: exerciseName ?? null,
+          disciplineName: disciplineName ?? null,
+        };
+        queryClient.setQueryData<SessionWithEntries>(key, {
+          ...previous,
+          entries: [...previous.entries, tempEntry],
+        });
+      }
+      return { previous };
+    },
+    onError: (_e, { sessionId }, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(sessionKey(sessionId), ctx.previous);
+    },
+    // Refetch to swap the temp id for the server-assigned entry id.
+    onSettled: (_d, _e, { sessionId }) => {
+      queryClient.invalidateQueries({ queryKey: sessionKey(sessionId) });
     },
   });
 }
