@@ -1,25 +1,19 @@
 name: Preview mobile
 
 # Builds a preview AAB on EAS and submits it to the Play Store internal testing
-# track whenever frontend or shared code is pushed to develop. (Play rejects
-# APKs on every track for apps enrolled in Play App Signing — must be an AAB.)
-# Use this to verify a feature end-to-end on a real device before merging to main.
+# track. (Play rejects APKs on every track for apps enrolled in Play App
+# Signing — must be an AAB.)
+#
+# Manual-dispatch only: pushes to develop are built by the self-hosted Gradle
+# workflow (selfhosted-preview-mobile.yml) instead, which doesn't consume EAS
+# build quota. Keep this as a fallback when the self-hosted path is broken.
 #
 # Prerequisites (GitHub secrets):
 #   EXPO_TOKEN            — personal access token from expo.dev/settings/access-tokens
 #   GOOGLE_PLAY_KEY_BASE64 — Google Play service account JSON key, base64-encoded
 #                            (raw JSON is also accepted)
-#
-# The build is only triggered when frontend or shared code changes; backend-only
-# changes on develop do not waste an EAS build quota slot.
 
 on:
-  push:
-    branches: [develop]
-    paths:
-      - 'frontend/**'
-      - 'shared/**'
-      - '.github/workflows/preview-mobile.yml'
   workflow_dispatch:
 
 concurrency:

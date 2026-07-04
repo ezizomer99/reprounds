@@ -16,3 +16,8 @@ backend/scripts/convert-hevy.ts
 # Google Play service account key (decoded transiently in CI; never commit)
 google-play-key.json
 **/google-play-key.json
+
+# Android upload keystore + EAS credentials export (never commit)
+*.jks
+*.keystore
+credentials.json
