@@ -13,26 +13,30 @@ export interface GuestAuthRequest {
   deviceId: string;
 }
 
+// guestToken is the guest account's own session JWT — proof the caller holds
+// that guest session. The server verifies it and migrates the guest's data
+// into the signed-in account. (A bare guest user id is NOT accepted: anyone
+// who learned the UUID could steal the guest's history.)
 export interface GoogleAuthRequest {
   idToken: string;
-  guestUserId?: string | null;
+  guestToken?: string | null;
 }
 
 // Email/password (credential) account registration. Like the Google flow, an
-// optional guestUserId migrates an existing guest account's data into the new
+// optional guestToken migrates an existing guest account's data into the new
 // credential account.
 export interface RegisterRequest {
   email: string;
   password: string;
   name?: string | null;
-  guestUserId?: string | null;
+  guestToken?: string | null;
 }
 
-// Email/password login. guestUserId migrates guest data on first sign-in.
+// Email/password login. guestToken migrates guest data on first sign-in.
 export interface LoginRequest {
   email: string;
   password: string;
-  guestUserId?: string | null;
+  guestToken?: string | null;
 }
 
 export interface AuthResponse {
@@ -402,6 +406,8 @@ export interface UpdateSessionEntryRequest {
   details?: Record<string, unknown> | null;
   notes?: string | null;
   supersetGroup?: number | null;
+  /** Swap the exercise on an exercise-kind entry. Cannot be null (use a real UUID). */
+  exerciseId?: string | null;
 }
 
 export interface CreateStrengthSetRequest {

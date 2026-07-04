@@ -1,14 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Capture the delete().where() chain without a real database.
-const { deleteFn, deleteWhere } = vi.hoisted(() => {
+// Capture the delete().where() chain without a real database. findFirst backs
+// the auth middleware's user-existence check.
+const { deleteFn, deleteWhere, findFirst } = vi.hoisted(() => {
   const deleteWhere = vi.fn();
   const deleteFn = vi.fn(() => ({ where: deleteWhere }));
-  return { deleteFn, deleteWhere };
+  const findFirst = vi.fn(async () => ({ id: 'user-to-delete' }));
+  return { deleteFn, deleteWhere, findFirst };
 });
 
 vi.mock('../db', () => ({
-  createDb: () => ({ delete: deleteFn }),
+  createDb: () => ({ delete: deleteFn, query: { users: { findFirst } } }),
 }));
 
 import { Hono } from 'hono';

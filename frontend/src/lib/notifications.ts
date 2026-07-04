@@ -7,7 +7,6 @@ import type * as NotificationsModule from 'expo-notifications';
 // notification features simply no-op until the native build is in place.
 let Notifications: typeof NotificationsModule | null = null;
 try {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   Notifications = require('expo-notifications');
   // Show a banner + play sound even when foregrounded (rest-timer "ding").
   Notifications?.setNotificationHandler({

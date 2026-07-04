@@ -19,8 +19,9 @@ If you have questions, contact us at **[CONTACT EMAIL]**.
 
 ## Summary
 
-- We collect your Google account basics (to sign you in) and the training data you
-  enter (workouts, sessions, body weight, martial-arts logs, etc.).
+- We collect basic account information (via Google Sign-In or an email/password
+  account) and the training data you enter (workouts, sessions, body weight,
+  martial-arts logs, etc.).
 - We do **not** use advertising, and we do **not** use third-party usage-analytics or
   tracking SDKs.
 - Your data is stored on our backend and is used only to operate the app for you.
@@ -31,6 +32,10 @@ If you have questions, contact us at **[CONTACT EMAIL]**.
 **Account information (via Google Sign-In).** When you sign in with Google, we receive
 your email address, name, profile picture, and your Google account identifier. We use
 this to create and identify your account and to keep you signed in.
+
+**Account information (email/password).** If you register with an email and password
+instead, we store your email address and a salted cryptographic hash of your password.
+We never store or have access to your password in plain text.
 
 **Guest usage.** If you use the app without signing in, we generate an anonymous device
 identifier so your data persists on your device until you choose to create an account.
@@ -81,7 +86,7 @@ service to us:
 We retain your data for as long as your account exists. You can delete your account and
 all associated training data at any time by:
 
-- [using the in-app "Delete account" option — ADD THIS IN THE APP], or
+- using the in-app **Delete account** option (Profile tab → Settings → Delete account), or
 - emailing **[CONTACT EMAIL]** with your account's email address and requesting deletion.
 
 We will delete your account and associated personal data within [30] days of a verified

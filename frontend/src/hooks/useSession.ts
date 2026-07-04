@@ -245,6 +245,33 @@ export function useUpdateStrengthSet() {
   });
 }
 
+export function useDeleteSessionEntry() {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, { sessionId: string; entryId: string }, SessionCtx>({
+    mutationFn: ({ sessionId, entryId }) =>
+      apiDelete(`/sessions/${sessionId}/entries/${entryId}`),
+    onMutate: async ({ sessionId, entryId }) => {
+      const key = sessionKey(sessionId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<SessionWithEntries>(key);
+      if (previous) {
+        queryClient.setQueryData<SessionWithEntries>(key, {
+          ...previous,
+          entries: previous.entries.filter((e) => e.id !== entryId),
+        });
+      }
+      return { previous };
+    },
+    onError: (_e, { sessionId }, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(sessionKey(sessionId), ctx.previous);
+    },
+    onSettled: (_d, _e, { sessionId }) => {
+      queryClient.invalidateQueries({ queryKey: sessionKey(sessionId) });
+    },
+  });
+}
+
 export function useDeleteStrengthSet() {
   const queryClient = useQueryClient();
 

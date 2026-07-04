@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { useColorScheme } from 'react-native';
-import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ThemeColors, darkTheme, lightTheme } from './colors';
 
 export type ThemeMode = 'dark' | 'light' | 'system';
@@ -27,7 +27,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   // Load persisted preference once on mount
   useEffect(() => {
-    SecureStore.getItemAsync(STORE_KEY).then((saved) => {
+    AsyncStorage.getItem(STORE_KEY).then((saved) => {
       if (saved === 'dark' || saved === 'light' || saved === 'system') {
         setModeState(saved);
       }
@@ -36,7 +36,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   function setMode(m: ThemeMode) {
     setModeState(m);
-    SecureStore.setItemAsync(STORE_KEY, m);
+    void AsyncStorage.setItem(STORE_KEY, m);
   }
 
   const resolvedDark =

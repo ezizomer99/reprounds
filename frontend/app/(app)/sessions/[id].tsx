@@ -20,7 +20,6 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type {
-  ActivityType,
   Discipline,
   EnumFieldDef,
   Exercise,
@@ -29,11 +28,11 @@ import type {
   SetType,
   StrengthSet,
 } from '@app/shared';
-import { isRoundsSession, totalVolume } from '@app/shared';
-import { useCreateExercise, useExercises } from '../../../src/hooks/useExercises';
+import { FREE_CUSTOM_EXERCISE_LIMIT, isRoundsSession, totalVolume } from '@app/shared';
+import { useExercises } from '../../../src/hooks/useExercises';
 import { useDisciplines } from '../../../src/hooks/useDisciplines';
-import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useProGate } from '../../../src/hooks/useProGate';
+import { ExerciseForm } from '../../../src/components/ExerciseForm';
 import {
   useSession,
   useCompleteSession,
@@ -41,6 +40,7 @@ import {
   useDeleteSession,
   useAddSessionEntry,
   useUpdateSessionEntry,
+  useDeleteSessionEntry,
   useAddStrengthSet,
   useUpdateStrengthSet,
   useDeleteStrengthSet,
@@ -53,7 +53,7 @@ import { RoundLogger, BOXING_WEAPONS, MUAY_THAI_WEAPONS } from '../../../src/com
 import { PlateCalculator } from '../../../src/components/PlateCalculator';
 import { useUnit } from '../../../src/units/UnitContext';
 import { useRestTimerDefault } from '../../../src/restTimer/RestTimerContext';
-import { fmtWeight, kgToUnit, unitToKg } from '../../../src/units/units';
+import { fmtWeight, kgToUnit, unitToKg, fmtDuration, parseDuration } from '../../../src/units/units';
 import { cancelScheduled, scheduleInSeconds } from '../../../src/lib/notifications';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
@@ -84,25 +84,6 @@ const SET_TYPE_SHORT: Record<SetType, string> = {
   amrap:   'AMRAP',
 };
 
-function fmtDuration(secs: number): string {
-  const m = Math.floor(secs / 60);
-  const s = secs % 60;
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-function parseDuration(val: string): number | null {
-  const t = val.trim();
-  if (!t) return null;
-  if (t.includes(':')) {
-    const [mPart, sPart] = t.split(':');
-    const m = parseInt(mPart || '0', 10);
-    const s = parseInt(sPart || '0', 10);
-    if (isNaN(m) || isNaN(s)) return null;
-    return m * 60 + Math.min(s, 59);
-  }
-  const n = parseInt(t, 10);
-  return isNaN(n) ? null : n;
-}
-
 function formatElapsed(secs: number): string {
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
@@ -111,27 +92,14 @@ function formatElapsed(secs: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-const FREE_CUSTOM_EXERCISE_LIMIT = 3;
-
-const MUSCLE_OPTIONS = [
-  'chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms',
-  'abs', 'glutes', 'quads', 'hamstrings', 'calves', 'full body', 'cardio',
-] as const;
-
-const EQUIPMENT_OPTIONS = [
-  'Barbell', 'Dumbbell', 'Kettlebell', 'Machine', 'Bodyweight', 'Resistance Band', 'Other',
-] as const;
-
-function titleCase(s: string) {
-  return s.replace(/\b\w/g, (c) => c.toUpperCase());
-}
 
 // ─── Exercise picker modal ────────────────────────────────────────────────────
 
-function PickExerciseModal({ visible, onClose, onPick }: {
+function PickExerciseModal({ visible, onClose, onPick, title = 'Add Exercise' }: {
   visible: boolean;
   onClose: () => void;
   onPick: (e: Exercise) => void;
+  title?: string;
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
@@ -194,7 +162,7 @@ function PickExerciseModal({ visible, onClose, onPick }: {
         handleIndicatorStyle={{ backgroundColor: T.textDim }}
       >
         <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Add Exercise</Text>
+          <Text style={styles.modalTitle}>{title}</Text>
           <TouchableOpacity onPress={handleClose}>
             <Text style={styles.modalCancel}>Cancel</Text>
           </TouchableOpacity>
@@ -269,54 +237,6 @@ function CreateExerciseInSessionModal({
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const [name, setName] = useState(initialName);
-  const [type, setType] = useState<Exclude<ActivityType, 'martial_arts'>>('strength');
-  const [muscleGroup, setMuscleGroup] = useState<string | null>(null);
-  const [equipment, setEquipment] = useState<string | null>(null);
-  const createExercise = useCreateExercise();
-  const { data: allExercises } = useExercises();
-  const { data: currentUser } = useCurrentUser();
-  const { isPro, showPaywall } = useProGate();
-
-  useEffect(() => {
-    if (visible) {
-      setName(initialName);
-      setType('strength');
-      setMuscleGroup(null);
-      setEquipment(null);
-    }
-  }, [visible, initialName]);
-
-  async function handleSubmit() {
-    const trimmed = name.trim();
-    if (!trimmed) {
-      Alert.alert('Validation', 'Name is required.');
-      return;
-    }
-    const customCount = (allExercises ?? []).filter((e) => e.userId === currentUser?.id).length;
-    if (!isPro && customCount >= FREE_CUSTOM_EXERCISE_LIMIT) {
-      Alert.alert(
-        'Limit reached',
-        `Free accounts can create up to ${FREE_CUSTOM_EXERCISE_LIMIT} custom exercises. Upgrade to RepRounds Pro for unlimited exercises.`,
-        [
-          { text: 'Not now', style: 'cancel' },
-          { text: 'Upgrade', onPress: showPaywall },
-        ],
-      );
-      return;
-    }
-    try {
-      const newExercise = await createExercise.mutateAsync({
-        name: trimmed,
-        type,
-        muscleGroup,
-        equipment,
-      });
-      onCreated(newExercise);
-    } catch (err) {
-      Alert.alert('Error', (err as Error).message ?? 'Failed to create exercise.');
-    }
-  }
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -332,97 +252,12 @@ function CreateExerciseInSessionModal({
             <Text style={styles.modalCancel}>Cancel</Text>
           </TouchableOpacity>
         </View>
-
-        <View style={styles.createExField}>
-          <Text style={styles.createExLabel}>Name *</Text>
-          <TextInput
-            style={styles.createExInput}
-            value={name}
-            onChangeText={setName}
-            placeholder="e.g. Pistol Squat"
-            placeholderTextColor={T.muted}
-            autoFocus
-            returnKeyType="next"
-            selectionColor={T.primary}
-          />
-        </View>
-
-        <View style={styles.createExField}>
-          <Text style={styles.createExLabel}>Type *</Text>
-          <View style={styles.createExSegmented}>
-            {(['strength', 'conditioning'] as const).map((t, i) => (
-              <TouchableOpacity
-                key={t}
-                style={[
-                  styles.createExSegmentBtn,
-                  i === 0 && styles.createExSegmentLeft,
-                  i === 1 && styles.createExSegmentRight,
-                  type === t && styles.createExSegmentActive,
-                ]}
-                onPress={() => setType(t)}
-              >
-                <Text style={[styles.createExSegmentText, type === t && styles.createExSegmentTextActive]}>
-                  {t.charAt(0).toUpperCase() + t.slice(1)}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={styles.createExField}>
-          <Text style={styles.createExLabel}>Muscle Group</Text>
-          <View style={styles.createExPillWrap}>
-            {MUSCLE_OPTIONS.map((m) => {
-              const active = muscleGroup === m;
-              return (
-                <TouchableOpacity
-                  key={m}
-                  style={[styles.createExPill, active && styles.createExPillActive]}
-                  onPress={() => setMuscleGroup(active ? null : m)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.createExPillText, active && styles.createExPillTextActive]}>
-                    {titleCase(m)}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
-        <View style={styles.createExField}>
-          <Text style={styles.createExLabel}>Equipment</Text>
-          <View style={styles.createExPillWrap}>
-            {EQUIPMENT_OPTIONS.map((eq) => {
-              const active = equipment === eq;
-              return (
-                <TouchableOpacity
-                  key={eq}
-                  style={[styles.createExPill, active && styles.createExPillActive]}
-                  onPress={() => setEquipment(active ? null : eq)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.createExPillText, active && styles.createExPillTextActive]}>
-                    {eq}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.createExSubmit, createExercise.isPending && styles.createExSubmitDisabled]}
-          onPress={handleSubmit}
-          disabled={createExercise.isPending}
-          activeOpacity={0.8}
-        >
-          {createExercise.isPending ? (
-            <ActivityIndicator color={T.onPrimary} />
-          ) : (
-            <Text style={styles.createExSubmitText}>Create & Add to Session</Text>
-          )}
-        </TouchableOpacity>
+        <ExerciseForm
+          key={visible ? (initialName || '_') : ''}
+          initialName={initialName}
+          submitLabel="Create & Add to Session"
+          onCreated={onCreated}
+        />
       </ScrollView>
     </Modal>
   );
@@ -505,6 +340,10 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   const SET_TYPE_COLOR = useMemo(() => setTypeColors(T), [T]);
   const isTime = exerciseType === 'conditioning';
   const isWarm = set.setType === 'warmup';
+  // A just-added set carries a temporary client id until the list refetches;
+  // any PATCH/DELETE against that id would 404, and the id swap remounts the
+  // row anyway — so hold off all interaction until the real id lands.
+  const isOptimistic = set.id.startsWith('optimistic-');
   const updateSet = useUpdateStrengthSet();
   const { unit } = useUnit();
   const [reps, setReps] = useState(set.reps !== null ? String(set.reps) : '');
@@ -515,27 +354,32 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   const [showNote, setShowNote] = useState(false);
 
   function handleBlurNotes() {
+    if (isOptimistic) return;
     updateSet.mutate({ sessionId, entryId, setId: set.id, notes: notes.trim() || null });
   }
 
   function handleBlurReps() {
+    if (isOptimistic) return;
     const parsed = reps.trim() === '' ? null : Number(reps);
     updateSet.mutate({ sessionId, entryId, setId: set.id, reps: isNaN(parsed as number) ? null : parsed });
   }
 
   function handleBlurWeight() {
+    if (isOptimistic) return;
     const parsed = weight.trim() === '' ? null : Number(weight);
     const kg = parsed === null || isNaN(parsed) ? null : unitToKg(parsed, unit);
     updateSet.mutate({ sessionId, entryId, setId: set.id, weight: kg });
   }
 
   function handleBlurDuration() {
+    if (isOptimistic) return;
     const secs = parseDuration(duration);
     if (secs !== null) setDuration(fmtDuration(secs));
     updateSet.mutate({ sessionId, entryId, setId: set.id, reps: secs });
   }
 
   function handleBlurRpe() {
+    if (isOptimistic) return;
     const parsed = rpe.trim() === '' ? null : Number(rpe);
     updateSet.mutate({ sessionId, entryId, setId: set.id, rpe: isNaN(parsed as number) ? null : parsed });
   }
@@ -544,6 +388,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   const hasNote = (set.notes ?? '').trim().length > 0;
 
   function toggleComplete() {
+    if (isOptimistic) return;
     const next = !isDone;
     const wKg = isTime || weight.trim() === '' ? null
       : (() => { const v = unitToKg(Number(weight), unit); return isNaN(v) ? null : v; })();
@@ -566,7 +411,9 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
             isDone && styles.setCircleDone,
           ]}
           onPress={toggleComplete}
-          disabled={updateSet.isPending}
+          disabled={updateSet.isPending || isOptimistic}
+          accessibilityRole="button"
+          accessibilityLabel={`Set ${displayNumber ?? 'warm-up'} — ${isDone ? 'completed, tap to un-complete' : 'tap to complete'}`}
         >
           {isDone ? (
             <Ionicons name="checkmark" size={16} color={T.onPrimary} />
@@ -594,7 +441,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
             placeholderTextColor={T.muted}
             keyboardType="default"
             returnKeyType="done"
-            editable={!isDone}
+            editable={!isDone && !isOptimistic}
             textAlign="center"
           />
           <Text style={styles.cellUnit}>min</Text>
@@ -611,7 +458,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
               placeholderTextColor={T.muted}
               keyboardType="decimal-pad"
               returnKeyType="done"
-              editable={!isDone}
+              editable={!isDone && !isOptimistic}
               textAlign="center"
             />
             <Text style={styles.cellUnit}>{unit}</Text>
@@ -627,7 +474,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
               placeholderTextColor={T.muted}
               keyboardType="number-pad"
               returnKeyType="done"
-              editable={!isDone}
+              editable={!isDone && !isOptimistic}
               textAlign="center"
             />
             <Text style={styles.cellUnit}>reps</Text>
@@ -644,7 +491,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
                 placeholderTextColor={T.muted}
                 keyboardType="decimal-pad"
                 returnKeyType="done"
-                editable={!isDone}
+                editable={!isDone && !isOptimistic}
                 textAlign="center"
               />
               <Text style={styles.cellUnit}>RPE</Text>
@@ -661,7 +508,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
         />
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.menuBtn} onPress={onOpenMenu}>
+      <TouchableOpacity style={styles.menuBtn} onPress={onOpenMenu} disabled={isOptimistic}>
         <Ionicons name="ellipsis-vertical" size={16} color={T.muted} />
       </TouchableOpacity>
     </View>
@@ -726,23 +573,118 @@ function SetActionsMenu({ set, onSetType, onDuplicate, onDelete, onPlateMath, on
   );
 }
 
-// ─── Last time summary ────────────────────────────────────────────────────────
+// ─── Rest timer preset sheet ──────────────────────────────────────────────────
+
+const REST_PRESETS: Array<{ label: string; value: number | null }> = [
+  { label: 'Default', value: null },
+  { label: 'Off', value: 0 },
+  { label: '0:30', value: 30 },
+  { label: '1:00', value: 60 },
+  { label: '1:30', value: 90 },
+  { label: '2:00', value: 120 },
+  { label: '3:00', value: 180 },
+  { label: '5:00', value: 300 },
+];
+
+function RestTimerSheet({ current, onSelect, onClose }: {
+  current: number | null;
+  onSelect: (v: number | null) => void;
+  onClose: () => void;
+}) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={styles.menuBackdrop} activeOpacity={1} onPress={onClose}>
+        <View style={styles.menuSheet}>
+          <Text style={styles.menuHeader}>Rest Timer</Text>
+          {REST_PRESETS.map((p) => (
+            <TouchableOpacity
+              key={String(p.value)}
+              style={styles.menuItem}
+              onPress={() => { onSelect(p.value); onClose(); }}
+            >
+              <Text style={styles.menuItemText}>{p.label}</Text>
+              {current === p.value && <Ionicons name="checkmark" size={16} color={T.primary} />}
+            </TouchableOpacity>
+          ))}
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
+// ─── Entry context menu (swap / remove) ───────────────────────────────────────
+
+function EntryContextMenu({ onSwap, onRemove, onClose }: {
+  onSwap: () => void;
+  onRemove: () => void;
+  onClose: () => void;
+}) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={styles.menuBackdrop} activeOpacity={1} onPress={onClose}>
+        <View style={styles.menuSheet}>
+          <Text style={styles.menuHeader}>Exercise</Text>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => { onSwap(); onClose(); }}
+            accessibilityRole="button"
+            accessibilityLabel="Swap exercise"
+          >
+            <Ionicons name="swap-horizontal-outline" size={16} color={T.textDim} />
+            <Text style={styles.menuItemText}>Swap exercise</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => { onRemove(); onClose(); }}
+            accessibilityRole="button"
+            accessibilityLabel="Remove exercise from session"
+          >
+            <Ionicons name="trash-outline" size={16} color={T.danger} />
+            <Text style={[styles.menuItemText, { color: T.danger }]}>Remove exercise</Text>
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
+// ─── Last time ghost rows ─────────────────────────────────────────────────────
 
 function LastTime({ exerciseId }: { exerciseId: string }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { unit } = useUnit();
   const { data } = useExerciseHistory(exerciseId);
-  const summary = useMemo(() => {
-    if (!data?.history.length) return null;
-    const sets = data.history[0].entry.sets.filter((s) => s.completed && s.reps !== null);
-    if (!sets.length) return null;
-    const s = sets[0];
-    const w = s.weight !== null ? `×${fmtWeight(s.weight, unit)}${unit}` : '';
-    return `Last: ${sets.length}×${s.reps}${w}`;
-  }, [data, unit]);
-  if (!summary) return null;
-  return <Text style={styles.lastTimeText}>Last: <Text style={styles.lastTimeVal}>{summary.replace('Last: ', '')}</Text></Text>;
+
+  const priorSets = useMemo(() => {
+    if (!data?.history.length) return [];
+    return data.history[0].entry.sets.filter(
+      (s) => s.completed && s.setType !== 'warmup' && s.reps !== null,
+    );
+  }, [data]);
+
+  if (!priorSets.length) return null;
+
+  return (
+    <View style={styles.ghostContainer}>
+      <Text style={styles.ghostHeader}>Last session</Text>
+      {priorSets.map((s, i) => {
+        const weightStr = s.weight !== null
+          ? `${fmtWeight(s.weight, unit)} ${unit}`
+          : 'bw';
+        return (
+          <View key={i} style={styles.ghostRow}>
+            <Text style={styles.ghostNum}>{i + 1}</Text>
+            <Text style={styles.ghostLabel}>{weightStr} × {s.reps}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
 }
 
 // ─── Strength entry card ──────────────────────────────────────────────────────
@@ -761,10 +703,20 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseTyp
   const addSet = useAddStrengthSet();
   const updateSet = useUpdateStrengthSet();
   const deleteSet = useDeleteStrengthSet();
+  const updateEntry = useUpdateSessionEntry();
+  const deleteEntry = useDeleteSessionEntry();
   const { data: history } = useExerciseHistory(entry.exerciseId);
   const restSeconds = entry.restSeconds ?? restTimerFallback ?? 120;
+  const restChipLabel = entry.restSeconds === null
+    ? 'Default'
+    : entry.restSeconds === 0
+      ? 'Off'
+      : fmtDuration(entry.restSeconds);
   const [menuSet, setMenuSet] = useState<StrengthSet | null>(null);
   const [plateWeight, setPlateWeight] = useState<number | null>(null);
+  const [showEntryMenu, setShowEntryMenu] = useState(false);
+  const [showRestSheet, setShowRestSheet] = useState(false);
+  const [showSwapPicker, setShowSwapPicker] = useState(false);
 
   const warmups = entry.sets.filter((s) => s.setType === 'warmup');
   const working = entry.sets.filter((s) => s.setType !== 'warmup');
@@ -819,11 +771,50 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseTyp
     ]);
   }
 
+  function handleRemoveEntry() {
+    Alert.alert(
+      'Remove Exercise',
+      'Remove this exercise from the session? All its sets will also be deleted.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            deleteEntry.mutate({ sessionId, entryId: entry.id });
+          },
+        },
+      ],
+    );
+  }
+
+  const entryMutationPending = updateEntry.isPending || deleteEntry.isPending;
+
   return (
     <View style={styles.entryCard}>
       <View style={styles.entryHead}>
-        <Text style={styles.entryName}>{entry.exerciseName ?? 'Exercise'}</Text>
-        <View style={styles.gymBadge}><Text style={styles.gymBadgeText}>Gym</Text></View>
+        <TouchableOpacity
+          style={styles.entryNameBtn}
+          onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowEntryMenu(true); }}
+          disabled={entryMutationPending}
+          accessibilityRole="button"
+          accessibilityLabel="Exercise options"
+        >
+          <Text style={styles.entryName} numberOfLines={1}>{entry.exerciseName ?? 'Exercise'}</Text>
+          <Ionicons name="chevron-down" size={12} color={T.textDim} />
+        </TouchableOpacity>
+        <View style={styles.entryHeadRight}>
+          <TouchableOpacity
+            onPress={() => setShowRestSheet(true)}
+            style={styles.restChip}
+            accessibilityRole="button"
+            accessibilityLabel={`Rest timer, ${restChipLabel}, tap to change`}
+          >
+            <Text style={styles.restChipText}>Rest: {restChipLabel}</Text>
+          </TouchableOpacity>
+          <View style={styles.gymBadge}><Text style={styles.gymBadgeText}>Gym</Text></View>
+        </View>
       </View>
       {entry.exerciseId && <LastTime exerciseId={entry.exerciseId} />}
 
@@ -904,6 +895,32 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseTyp
       {plateWeight !== null && (
         <PlateCalculator weightKg={plateWeight} onClose={() => setPlateWeight(null)} />
       )}
+
+      {showEntryMenu && (
+        <EntryContextMenu
+          onSwap={() => setShowSwapPicker(true)}
+          onRemove={handleRemoveEntry}
+          onClose={() => setShowEntryMenu(false)}
+        />
+      )}
+
+      {showRestSheet && (
+        <RestTimerSheet
+          current={entry.restSeconds}
+          onSelect={(v) => updateEntry.mutate({ sessionId, entryId: entry.id, restSeconds: v })}
+          onClose={() => setShowRestSheet(false)}
+        />
+      )}
+
+      <PickExerciseModal
+        visible={showSwapPicker}
+        title="Swap Exercise"
+        onClose={() => setShowSwapPicker(false)}
+        onPick={(e) => {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          updateEntry.mutate({ sessionId, entryId: entry.id, exerciseId: e.id });
+        }}
+      />
     </View>
   );
 }
@@ -1613,6 +1630,8 @@ export default function SessionScreen() {
               ]}
               onPress={() => setShowSettings(true)}
               disabled={!canFinish || completeSession.isPending}
+              accessibilityRole="button"
+              accessibilityLabel="Finish workout"
             >
               {completeSession.isPending
                 ? <ActivityIndicator size="small" color={T.onPrimary} />
@@ -1843,14 +1862,43 @@ function makeStyles(T: ThemeColors) {
   },
   entryHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   entryName: { fontFamily: F.uiSemi, fontSize: 17, color: T.text, letterSpacing: -0.2, flex: 1 },
+  entryNameBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 8 },
+  entryHeadRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  restChip: {
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: R.chip,
+    backgroundColor: T.surface2, borderWidth: 1, borderColor: T.borderStrong,
+  },
+  restChipText: { fontFamily: F.uiSemi, fontSize: 10, color: T.textDim, letterSpacing: 0.4 },
   gymBadge: {
     paddingHorizontal: 8, paddingVertical: 2, borderRadius: R.chip,
     backgroundColor: withAlpha(T.primary, 0.13), borderWidth: 1, borderColor: withAlpha(T.primary, 0.28),
   },
   gymBadgeText: { fontFamily: F.uiSemi, fontSize: 10, color: T.primary, letterSpacing: 0.4 },
 
-  lastTimeText: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
-  lastTimeVal: { fontFamily: F.uiSemi, color: T.text },
+  ghostContainer: { gap: 2, marginBottom: 2 },
+  ghostHeader: {
+    fontFamily: F.uiBold,
+    fontSize: 10,
+    color: T.muted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 1,
+  },
+  ghostRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 20,
+    opacity: 0.5,
+  },
+  ghostNum: {
+    width: 14,
+    fontFamily: F.mono,
+    fontSize: 11,
+    color: T.textDim,
+    textAlign: 'right',
+  },
+  ghostLabel: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
 
   // Column headers
   colHeaders: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 2 },

@@ -37,8 +37,23 @@ jobs:
       - name: Decode Google Play service account key
         env:
           GOOGLE_PLAY_KEY: ${{ secrets.GOOGLE_PLAY_KEY_BASE64 }}
-        # tr strips CR/LF/spaces the secret may carry (e.g. from Windows piping)
-        run: printf '%s' "$GOOGLE_PLAY_KEY" | tr -d '\r\n ' | base64 -d > frontend/google-play-key.json
+        run: |
+          # The secret may be raw JSON or base64 (possibly line-wrapped from the encoder).
+          trimmed=$(printf '%s' "$GOOGLE_PLAY_KEY" | tr -d '[:space:]')
+          case "$trimmed" in
+            {*) printf '%s' "$GOOGLE_PLAY_KEY" > frontend/google-play-key.json ;;
+            *)
+              if ! printf '%s' "$trimmed" | base64 -d > frontend/google-play-key.json 2>/dev/null; then
+                echo "::error::GOOGLE_PLAY_KEY_BASE64 is neither raw JSON nor valid base64"
+                exit 1
+              fi
+              ;;
+          esac
+          if ! node -e "JSON.parse(require('fs').readFileSync('frontend/google-play-key.json', 'utf8'))" 2>/dev/null; then
+            echo "::error::GOOGLE_PLAY_KEY_BASE64 decoded, but the result is not valid JSON"
+            rm -f frontend/google-play-key.json
+            exit 1
+          fi
 
       - name: Build production AAB on EAS
         working-directory: frontend
