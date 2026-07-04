@@ -1,7 +1,8 @@
-name: Self-hosted preview mobile
+name: Preview mobile (Gradle)
 
-# Builds the preview AAB with Gradle directly on the GitHub runner — no EAS
-# build quota — and submits it to the Play Store internal testing track.
+# Builds the preview AAB with Gradle directly on a GitHub-hosted runner — no
+# EAS build quota, and no self-hosted runner needed — and submits it to the
+# Play Store internal testing track.
 # This is the default preview path for pushes to develop; the EAS-based
 # preview-mobile.yml remains available via manual dispatch as a fallback.
 #
