@@ -29,6 +29,10 @@ export async function getOrCreateDeviceId(): Promise<string> {
   return newId;
 }
 
+export async function getDeviceId(): Promise<string | null> {
+  return SecureStore.getItemAsync(DEVICE_ID_KEY);
+}
+
 export async function getGuestUserId(): Promise<string | null> {
   return SecureStore.getItemAsync(GUEST_USER_ID_KEY);
 }

@@ -271,7 +271,6 @@ function ActionRow({
   label,
   onPress,
   loading,
-  last,
   styles,
   T,
 }: {

@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX "disciplines_global_name_idx" ON "disciplines" USING btree ("name") WHERE "disciplines"."user_id" IS NULL;--> statement-breakpoint
+CREATE INDEX "sessions_user_id_status_idx" ON "sessions" USING btree ("user_id","status");

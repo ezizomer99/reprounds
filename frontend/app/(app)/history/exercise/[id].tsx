@@ -1,4 +1,4 @@
-import { ActivityIndicator, FlatList, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -92,6 +92,13 @@ export default function ExerciseHistoryScreen() {
   const headerTitle = name ?? history[0]?.entry.exerciseName ?? 'Exercise';
   const isLoading = prsLoading || histLoading;
 
+  // Must run before any early return — hooks after a conditional return
+  // change hook order when isPro flips and crash the renderer.
+  const bodyData = useMemo(
+    () => buildBodyData(exerciseDetail?.muscleGroup ?? null, exerciseDetail?.secondaryMuscles ?? null),
+    [exerciseDetail],
+  );
+
   if (!isPro) {
     return (
       <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -119,11 +126,6 @@ export default function ExerciseHistoryScreen() {
       </View>
     );
   }
-
-  const bodyData = useMemo(
-    () => buildBodyData(exerciseDetail?.muscleGroup ?? null, exerciseDetail?.secondaryMuscles ?? null),
-    [exerciseDetail],
-  );
 
   const topWeights = history
     .map((e) => topWeight(e.entry.sets))
