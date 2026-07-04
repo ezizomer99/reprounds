@@ -30,8 +30,12 @@ Package manager: **pnpm workspaces**. Always `pnpm install` from root. Each pack
 
 ## Auth rules
 
-- Google sign-in only — no passwords, no Firebase.
+- Three sign-in methods: **Google** (primary), **email/password** (credential accounts), and **guest** (device-scoped). No Firebase.
 - The Worker verifies the Google ID token against Google JWKS (signature + `iss` + `aud` + `exp`). Never trust the device's claim.
+- Email/password: passwords are hashed with **PBKDF2-HMAC-SHA-256 via WebCrypto** (native, Workers-compatible — do NOT hand-roll crypto). Hashes are stored in a self-describing `algo$iterations$salt$hash` format so params can be rotated. workerd caps PBKDF2 at 100,000 iterations, which is the value used.
+- Email uniqueness is enforced by a **partial unique index on `lower(email)` WHERE `password_hash IS NOT NULL`** (credential accounts only — Google accounts may share an email). Registering an email already tied to a Google account is rejected; use Google for it.
+- Login failures return a uniform "Invalid email or password" — never leak which field was wrong.
+- No password-reset flow yet (no transactional email infra) — see the note in `backend/src/routes/auth.ts`.
 - Session JWT stored in `expo-secure-store` only — **never** AsyncStorage.
 - EAS dev builds required for device testing — Expo Go does not support `@react-native-google-signin`.
 

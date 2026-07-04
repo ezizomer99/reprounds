@@ -16,7 +16,6 @@
     "db:normalize": "tsx --env-file=../.env src/db/normalize-disciplines.ts",
     "db:studio": "drizzle-kit studio",
     "r2:upload": "tsx --env-file=../.env scripts/upload-exercise-images.ts",
-    "convert:hevy": "tsx --env-file=../.env scripts/convert-hevy.ts",
     "clear:exercises": "tsx --env-file=../.env scripts/clear-exercises.ts",
     "r2:list-small": "tsx scripts/list-small-images.ts",
     "r2:apply-upscaled": "tsx scripts/apply-upscaled-images.ts"
@@ -29,9 +28,8 @@
     "rrule": "^2.8.1"
   },
   "devDependencies": {
-    "@aws-sdk/client-s3": "^3.1078.0",
+    "@aws-sdk/client-s3": "^3.1079.0",
     "@cloudflare/workers-types": "^4.20260621.1",
-    "csv-parse": "^7.0.0",
     "dotenv": "^16.4.0",
     "drizzle-kit": "^0.31.10",
     "tsx": "^4.22.4",

@@ -1,4 +1,21 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// The middleware verifies the JWT and then confirms the user row still exists
+// (deleted accounts must not keep authenticating on a still-valid token).
+const mock = vi.hoisted(() => ({
+  findFirst: vi.fn(),
+}));
+
+vi.mock('../db', () => ({
+  createDb: () => ({
+    query: {
+      users: {
+        findFirst: mock.findFirst,
+      },
+    },
+  }),
+}));
+
 import { Hono } from 'hono';
 import { authMiddleware } from './auth';
 import { signJwt } from '../lib/jwt';
@@ -13,7 +30,13 @@ function makeApp() {
 }
 
 // Bindings passed to app.request as the env for the Worker handler.
-const env = { JWT_SECRET: SECRET };
+const env = { JWT_SECRET: SECRET, DATABASE_URL: 'postgres://test' };
+
+beforeEach(() => {
+  mock.findFirst.mockReset();
+  // Default: the user exists.
+  mock.findFirst.mockResolvedValue({ id: 'user-xyz' });
+});
 
 describe('authMiddleware', () => {
   it('returns 401 when no Authorization header is present', async () => {
@@ -37,6 +60,19 @@ describe('authMiddleware', () => {
       env,
     );
     expect(res.status).toBe(401);
+    expect(mock.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 for a valid token whose user no longer exists', async () => {
+    mock.findFirst.mockResolvedValue(undefined);
+    const token = await signJwt({ sub: 'user-deleted' }, SECRET, 3600);
+    const res = await makeApp().request(
+      '/protected',
+      { headers: { Authorization: `Bearer ${token}` } },
+      env,
+    );
+    expect(res.status).toBe(401);
+    expect(mock.findFirst).toHaveBeenCalledTimes(1);
   });
 
   it('passes through and exposes userId for a valid token', async () => {

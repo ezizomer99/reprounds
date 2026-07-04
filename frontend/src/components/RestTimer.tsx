@@ -36,6 +36,8 @@ export function RestTimer({ seconds, total, onSkip, onAdd, style }: RestTimerPro
           style={styles.addBtn}
           onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onAdd(); }}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Add 15 seconds to rest"
         >
           <Text style={styles.addBtnText}>+15s</Text>
         </TouchableOpacity>
@@ -43,6 +45,8 @@ export function RestTimer({ seconds, total, onSkip, onAdd, style }: RestTimerPro
           style={styles.skipBtn}
           onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onSkip(); }}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Skip rest timer"
         >
           <Text style={styles.skipBtnText}>Skip</Text>
         </TouchableOpacity>

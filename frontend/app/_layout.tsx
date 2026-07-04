@@ -7,6 +7,7 @@ import { Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import {
   SpaceGrotesk_400Regular,
@@ -123,22 +124,24 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <BottomSheetModalProvider>
-        {asyncPersister ? (
-          <PersistQueryClientProvider
-            client={queryClient}
-            persistOptions={{ persister: asyncPersister, maxAge: 24 * 60 * 60_000 }}
-            onSuccess={() => {
-              // Replay any mutations that were paused while offline.
-              void queryClient.resumePausedMutations();
-            }}
-          >
-            {tree}
-          </PersistQueryClientProvider>
-        ) : (
-          <QueryClientProvider client={queryClient}>{tree}</QueryClientProvider>
-        )}
-      </BottomSheetModalProvider>
+      <SafeAreaProvider>
+        <BottomSheetModalProvider>
+          {asyncPersister ? (
+            <PersistQueryClientProvider
+              client={queryClient}
+              persistOptions={{ persister: asyncPersister, maxAge: 24 * 60 * 60_000 }}
+              onSuccess={() => {
+                // Replay any mutations that were paused while offline.
+                void queryClient.resumePausedMutations();
+              }}
+            >
+              {tree}
+            </PersistQueryClientProvider>
+          ) : (
+            <QueryClientProvider client={queryClient}>{tree}</QueryClientProvider>
+          )}
+        </BottomSheetModalProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
