@@ -28,7 +28,7 @@
     "rrule": "^2.8.1"
   },
   "devDependencies": {
-    "@aws-sdk/client-s3": "^3.0.0",
+    "@aws-sdk/client-s3": "^3.1079.0",
     "@cloudflare/workers-types": "^4.20260621.1",
     "dotenv": "^16.4.0",
     "drizzle-kit": "^0.31.10",
