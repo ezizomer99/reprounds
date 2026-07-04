@@ -99,6 +99,34 @@
       "when": 1782066006821,
       "tag": "0013_new_jean_grey",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1782066100000,
+      "tag": "0014_cardio_conditioning_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1783013075879,
+      "tag": "0015_demonic_skin",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1783057512988,
+      "tag": "0016_faithful_gorgon",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1783075505368,
+      "tag": "0017_needy_goliath",
+      "breakpoints": true
     }
   ]
 }

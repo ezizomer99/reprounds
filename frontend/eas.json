@@ -19,9 +19,9 @@
     },
     "preview": {
       "extends": "base",
-      "distribution": "internal",
+      "autoIncrement": true,
       "android": {
-        "buildType": "apk"
+        "buildType": "app-bundle"
       },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://reprounds-api-prod.oemerdigital.workers.dev",

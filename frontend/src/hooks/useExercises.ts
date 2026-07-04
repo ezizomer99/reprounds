@@ -73,8 +73,9 @@ export function useUpdateExercise() {
   >({
     mutationFn: ({ id, ...body }) =>
       apiPatch<Exercise>(`/exercises/${id}`, body),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['exercises'] });
+      queryClient.invalidateQueries({ queryKey: ['exercise', variables.id] });
     },
   });
 }
@@ -84,8 +85,9 @@ export function useDeleteExercise() {
 
   return useMutation<void, Error, string>({
     mutationFn: (id) => apiDelete(`/exercises/${id}`),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ['exercises'] });
+      queryClient.invalidateQueries({ queryKey: ['exercise', id] });
     },
   });
 }

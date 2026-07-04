@@ -1,4 +1,14 @@
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useRouter } from 'expo-router';
 import { statusCodes } from '@react-native-google-signin/google-signin';
 import { useState, useMemo } from 'react';
@@ -8,17 +18,31 @@ import { useSignIn } from '../../src/hooks/useAuth';
 import { F, R, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 
+type EmailMode = 'signIn' | 'register';
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 8;
+
 export default function SignInScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { T, isDark } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const { signInWithGoogle, signInAsGuest } = useSignIn();
+  const { signInWithGoogle, signInAsGuest, registerWithEmail, signInWithEmail } = useSignIn();
   const [googleLoading, setGoogleLoading] = useState(false);
   const [guestLoading, setGuestLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isLoading = googleLoading || guestLoading;
+  // Email/password form state
+  const [showEmailForm, setShowEmailForm] = useState(false);
+  const [emailMode, setEmailMode] = useState<EmailMode>('signIn');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [name, setName] = useState('');
+  const [fieldError, setFieldError] = useState<string | null>(null);
+
+  const isLoading = googleLoading || guestLoading || emailLoading;
 
   async function handleGoogle() {
     setGoogleLoading(true);
@@ -57,54 +81,191 @@ export default function SignInScreen() {
     }
   }
 
+  function validateEmailForm(): string | null {
+    if (!EMAIL_RE.test(email.trim())) return 'Enter a valid email address';
+    if (password.length < MIN_PASSWORD_LENGTH) {
+      return `Password must be at least ${MIN_PASSWORD_LENGTH} characters`;
+    }
+    return null;
+  }
+
+  async function handleEmailSubmit() {
+    setError(null);
+    const validation = validateEmailForm();
+    if (validation) {
+      setFieldError(validation);
+      return;
+    }
+    setFieldError(null);
+    setEmailLoading(true);
+    try {
+      const cleanEmail = email.trim().toLowerCase();
+      if (emailMode === 'register') {
+        await registerWithEmail(cleanEmail, password, name);
+      } else {
+        await signInWithEmail(cleanEmail, password);
+      }
+      router.replace('/(app)');
+    } catch (err: unknown) {
+      const e = err as { message?: string; status?: number };
+      setFieldError(e.message ?? 'Something went wrong. Please try again.');
+    } finally {
+      setEmailLoading(false);
+    }
+  }
+
+  function toggleEmailMode() {
+    setEmailMode((m) => (m === 'signIn' ? 'register' : 'signIn'));
+    setFieldError(null);
+  }
+
+  const submitLabel = emailMode === 'signIn' ? 'Sign in' : 'Create account';
+
   return (
-    <View style={[styles.container, { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 }]}>
-      <View style={styles.lockup}>
-        <RepRoundsLockup size="lg" onDark={isDark} />
-        <Text style={styles.tagline}>Strength · Rounds · One Log</Text>
-      </View>
+    <KeyboardAvoidingView
+      style={styles.flex}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <ScrollView
+        contentContainerStyle={[
+          styles.container,
+          { paddingTop: insets.top + 24, paddingBottom: insets.bottom + 24 },
+        ]}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.lockup}>
+          <RepRoundsLockup size="lg" onDark={isDark} />
+          <Text style={styles.tagline}>Strength · Rounds · One Log</Text>
+        </View>
 
-      <View style={styles.bottom}>
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <View style={styles.bottom}>
+          {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        <TouchableOpacity
-          style={[styles.googleBtn, isLoading && styles.btnDisabled]}
-          onPress={handleGoogle}
-          disabled={isLoading}
-          activeOpacity={0.75}
-        >
-          {googleLoading ? (
-            <ActivityIndicator color={T.text} />
+          <TouchableOpacity
+            style={[styles.googleBtn, isLoading && styles.btnDisabled]}
+            onPress={handleGoogle}
+            disabled={isLoading}
+            activeOpacity={0.75}
+          >
+            {googleLoading ? (
+              <ActivityIndicator color={T.text} />
+            ) : (
+              <Text style={styles.googleBtnText}>Continue with Google</Text>
+            )}
+          </TouchableOpacity>
+
+          {showEmailForm ? (
+            <View style={styles.emailForm}>
+              {emailMode === 'register' ? (
+                <TextInput
+                  style={styles.input}
+                  placeholder="Name (optional)"
+                  placeholderTextColor={T.muted}
+                  value={name}
+                  onChangeText={setName}
+                  autoCapitalize="words"
+                  editable={!isLoading}
+                  returnKeyType="next"
+                />
+              ) : null}
+
+              <TextInput
+                style={styles.input}
+                placeholder="Email"
+                placeholderTextColor={T.muted}
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                autoComplete="email"
+                keyboardType="email-address"
+                textContentType="emailAddress"
+                editable={!isLoading}
+                returnKeyType="next"
+              />
+
+              <TextInput
+                style={styles.input}
+                placeholder="Password"
+                placeholderTextColor={T.muted}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                autoCapitalize="none"
+                autoComplete={emailMode === 'register' ? 'new-password' : 'current-password'}
+                textContentType={emailMode === 'register' ? 'newPassword' : 'password'}
+                editable={!isLoading}
+                returnKeyType="go"
+                onSubmitEditing={handleEmailSubmit}
+              />
+
+              {fieldError ? <Text style={styles.error}>{fieldError}</Text> : null}
+
+              <TouchableOpacity
+                style={[styles.emailSubmitBtn, isLoading && styles.btnDisabled]}
+                onPress={handleEmailSubmit}
+                disabled={isLoading}
+                activeOpacity={0.85}
+              >
+                {emailLoading ? (
+                  <ActivityIndicator color={T.onPrimary} />
+                ) : (
+                  <Text style={styles.emailSubmitText}>{submitLabel}</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity onPress={toggleEmailMode} disabled={isLoading} activeOpacity={0.7}>
+                <Text style={styles.toggleText}>
+                  {emailMode === 'signIn'
+                    ? "Don't have an account? Create one"
+                    : 'Already have an account? Sign in'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           ) : (
-            <Text style={styles.googleBtnText}>Continue with Google</Text>
+            <TouchableOpacity
+              style={[styles.emailToggleBtn, isLoading && styles.btnDisabled]}
+              onPress={() => {
+                setShowEmailForm(true);
+                setError(null);
+              }}
+              disabled={isLoading}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.emailToggleText}>Continue with email</Text>
+            </TouchableOpacity>
           )}
-        </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.guestBtn, isLoading && styles.btnDisabled]}
-          onPress={handleGuest}
-          disabled={isLoading}
-          activeOpacity={0.75}
-        >
-          {guestLoading ? (
-            <ActivityIndicator color={T.textDim} />
-          ) : (
-            <Text style={styles.guestBtnText}>Continue as Guest</Text>
-          )}
-        </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.guestBtn, isLoading && styles.btnDisabled]}
+            onPress={handleGuest}
+            disabled={isLoading}
+            activeOpacity={0.75}
+          >
+            {guestLoading ? (
+              <ActivityIndicator color={T.textDim} />
+            ) : (
+              <Text style={styles.guestBtnText}>Continue as Guest</Text>
+            )}
+          </TouchableOpacity>
 
-        <Text style={styles.guestDisclaimer}>
-          Guest data is saved to this device only. Sign in with Google to protect your history across devices.
-        </Text>
-      </View>
-    </View>
+          <Text style={styles.guestDisclaimer}>
+            Guest data is saved to this device only. Sign in with Google to protect your history across devices.
+          </Text>
+        </View>
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
-    container: {
+    flex: {
       flex: 1,
+      backgroundColor: T.bg,
+    },
+    container: {
+      flexGrow: 1,
       backgroundColor: T.bg,
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -115,6 +276,7 @@ function makeStyles(T: ThemeColors) {
       alignItems: 'center',
       justifyContent: 'center',
       gap: 20,
+      minHeight: 220,
     },
     tagline: {
       fontFamily: F.mono,
@@ -148,6 +310,55 @@ function makeStyles(T: ThemeColors) {
       fontSize: 16,
       color: T.text,
       letterSpacing: -0.2,
+    },
+    emailToggleBtn: {
+      height: 46,
+      borderRadius: R.sm,
+      borderWidth: 1,
+      borderColor: T.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    emailToggleText: {
+      fontFamily: F.uiMed,
+      fontSize: 15,
+      color: T.textDim,
+    },
+    emailForm: {
+      width: '100%',
+      gap: 10,
+      paddingTop: 2,
+    },
+    input: {
+      height: 50,
+      backgroundColor: T.surface,
+      borderWidth: 1,
+      borderColor: T.border,
+      borderRadius: R.sm,
+      paddingHorizontal: 14,
+      fontFamily: F.ui,
+      fontSize: 15,
+      color: T.text,
+    },
+    emailSubmitBtn: {
+      height: 50,
+      backgroundColor: T.primary,
+      borderRadius: R.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    emailSubmitText: {
+      fontFamily: F.uiSemi,
+      fontSize: 16,
+      color: T.onPrimary,
+      letterSpacing: -0.2,
+    },
+    toggleText: {
+      fontFamily: F.uiMed,
+      fontSize: 13,
+      color: T.textDim,
+      textAlign: 'center',
+      paddingVertical: 4,
     },
     guestBtn: {
       height: 46,

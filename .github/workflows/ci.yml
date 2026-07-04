@@ -3,6 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [main, develop]
+  push:
+    branches: [develop]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -26,6 +28,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
 
       - name: Typecheck
         run: pnpm -r --if-present typecheck
