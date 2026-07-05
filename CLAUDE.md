@@ -25,6 +25,7 @@ Package manager: **pnpm workspaces**. Always `pnpm install` from root. Each pack
 - `shared` is pure TypeScript only — no platform-specific code, no runtime deps beyond what both sides can use.
 - RRULE recurrence is computed **server-side only** (in the `/calendar` endpoint). Never project dates in the app.
 - Hyperdrive binding is required in production — never call Neon directly from a Worker.
+- **Never use `@gorhom/bottom-sheet` `BottomSheetModal`** — its `present()` silently no-ops in release builds on RN 0.79 + New Architecture (two fix attempts failed on device, including `enableDynamicSizing={false}`). Use plain RN `Modal` with `presentationStyle="pageSheet"` like every existing dialog. The `BottomSheetModalProvider` in the root layout is vestigial.
 
 ---
 
@@ -84,6 +85,21 @@ The deploy scripts **always apply pending Drizzle migrations to production befor
 
 - The migrate step reads `DATABASE_URL` from the root `.env` via `drizzle.config.ts` — same as `db:migrate`.
 - Migrate-before-deploy is correct for **additive** migrations (new column/table). For a **destructive** change (drop/rename a column the live code still reads), deploy the new code first, then migrate — use `pnpm --filter backend deploy:no-migrate` followed by `pnpm --filter backend db:migrate`.
+
+---
+
+## App builds & Play Store delivery
+
+The **entire tester loop is automatic**: push to `develop` → backend deploys (~2 min) → `.github/workflows/selfhosted-preview-mobile.yml` ("Preview mobile (Gradle)") builds a signed AAB on a GitHub-hosted runner (~20 min) and submits it to the Play **closed testing (alpha)** track → testers get an Update in the Play Store. To ship after merging to `main`, fast-forward develop (`git push origin origin/main:refs/heads/develop`) — the repo convention is that develop mirrors main.
+
+Facts that save debugging time:
+
+- **EAS Build is NOT used for previews** — the free-plan quota ran out (resets monthly). The Gradle workflow costs no EAS quota: `expo prebuild` → `frontend/scripts/apply-android-signing.js` (patches in upload-key signing from env) → `gradlew :app:bundleRelease`. The EAS workflows (`preview-mobile.yml`, `release-mobile.yml`) remain as manual/tag-triggered fallbacks but burn quota.
+- **Submit to the `alpha` (closed) track, never `internal`** — the real testers (including the owner's phone) are enrolled on closed testing; internal-track builds are invisible to them. The two tracks have separate tester lists and separate opt-in links.
+- **versionCode = 100 + workflow run number**, injected via `ANDROID_VERSION_CODE` (see `app.config.ts`). EAS builds ignore it (`appVersionSource: remote`).
+- Required GitHub secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` (upload keystore exported from EAS), `GOOGLE_PLAY_KEY_BASE64`, plus `CLOUDFLARE_API_TOKEN` / `DATABASE_URL` for the backend deploy. All are configured.
+- Production release = Play Console → Closed testing → **Promote release → Production** (no rebuild), or tag `v*` (EAS path, quota permitting).
+- A **Draft** release sitting on a Play track blocks/confuses API submissions — discard drafts created in the console.
 
 ---
 
