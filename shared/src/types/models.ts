@@ -319,6 +319,22 @@ export interface RoutineListResponse {
   routines: RoutineWithItems[];
 }
 
+export interface CreateFromTemplateRequest {
+  templateId: string;
+}
+
+/** An item a template couldn't resolve to a global exercise/discipline. */
+export interface SkippedTemplateItem {
+  routineName: string;
+  itemName: string;
+  reason: string;
+}
+
+export interface CreateFromTemplateResponse {
+  routines: RoutineWithItems[];
+  skipped: SkippedTemplateItem[];
+}
+
 export interface CreateRoutineItemRequest {
   kind: EntryKind;
   exerciseId?: string | null;

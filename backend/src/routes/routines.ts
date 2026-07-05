@@ -1,15 +1,20 @@
 import { Hono } from 'hono';
-import { and, asc, desc, eq, inArray, max } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, max } from 'drizzle-orm';
 import { createDb } from '../db';
 import { disciplines, exercises, routineItems, routines, sessions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import { findRoutineTemplate } from '@app/shared';
+import { matchDiscipline, matchExercise } from '../lib/routineTemplates';
 import type {
   AddRoutineItemRequest,
+  CreateFromTemplateRequest,
+  CreateFromTemplateResponse,
   CreateRoutineRequest,
   ReorderRoutineItemsRequest,
   RoutineItemWithDetails,
   RoutineListResponse,
   RoutineWithItems,
+  SkippedTemplateItem,
   SkipOccurrenceRequest,
   UpdateRoutineItemRequest,
   UpdateRoutineRequest,
@@ -117,6 +122,34 @@ async function fetchRoutineWithItems(
     ...routineMeta(routine),
     items: items.map(mapItem),
   };
+}
+
+/**
+ * Build a routine_items.target (`{ sets: PlannedSet[] }`) from a template's
+ * set count + reps string. "AMRAP" → amrap set; "30s" → duration; a plain
+ * number → planned reps. Returns null when there's no set target.
+ */
+function plannedSetsFromTemplate(
+  count: number | undefined,
+  reps: string | undefined,
+): { sets: Array<{ setType: string; reps: number | null; durationSeconds: number | null }> } | null {
+  if (!count || count < 1) return null;
+  const r = (reps ?? '').trim().toLowerCase();
+
+  let setType = 'normal';
+  let plannedReps: number | null = null;
+  let durationSeconds: number | null = null;
+
+  if (r === 'amrap') {
+    setType = 'amrap';
+  } else if (/^\d+\s*s$/.test(r)) {
+    durationSeconds = parseInt(r, 10);
+  } else if (/^\d+$/.test(r)) {
+    plannedReps = parseInt(r, 10);
+  }
+
+  const one = { setType, reps: plannedReps, durationSeconds };
+  return { sets: Array.from({ length: Math.min(count, 30) }, () => ({ ...one })) };
 }
 
 function validateItemKind(item: { kind: string; exerciseId?: string | null; disciplineId?: string | null }): string | null {
@@ -228,6 +261,91 @@ routineRoutes.post('/', async (c) => {
 
   const routine = await fetchRoutineWithItems(db, result.id, userId);
   return c.json({ routine }, 201);
+});
+
+// POST /routines/from-template — clone a starter template into the user's
+// routines, resolving exercise/discipline names to global seed rows. Items
+// that can't be resolved are reported in `skipped` rather than failing.
+routineRoutes.post('/from-template', async (c) => {
+  const userId = c.get('userId');
+  const db = getDb(c.env);
+
+  let body: CreateFromTemplateRequest;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid request body' }, 400);
+  }
+
+  const template = findRoutineTemplate(body.templateId);
+  if (!template) return c.json({ error: 'Unknown template' }, 404);
+
+  // Resolve names against the global seed catalog (user_id IS NULL).
+  const globalExercises = await db
+    .select({ id: exercises.id, name: exercises.name })
+    .from(exercises)
+    .where(isNull(exercises.userId));
+  const globalDisciplines = await db
+    .select({ id: disciplines.id, name: disciplines.name })
+    .from(disciplines)
+    .where(isNull(disciplines.userId));
+
+  const skipped: SkippedTemplateItem[] = [];
+
+  const createdIds = await db.transaction(async (tx) => {
+    const ids: string[] = [];
+    for (const day of template.routines) {
+      const [routine] = await tx
+        .insert(routines)
+        .values({ userId, name: day.name, dayLabel: day.dayLabel ?? null })
+        .returning();
+      ids.push(routine.id);
+
+      const itemValues: (typeof routineItems.$inferInsert)[] = [];
+      for (const item of day.items) {
+        if (item.kind === 'exercise') {
+          const exerciseId = matchExercise(item.name, globalExercises);
+          if (!exerciseId) {
+            skipped.push({ routineName: day.name, itemName: item.name, reason: 'exercise not found' });
+            continue;
+          }
+          itemValues.push({
+            routineId: routine.id,
+            kind: 'exercise',
+            exerciseId,
+            orderIndex: itemValues.length,
+            target: plannedSetsFromTemplate(item.sets, item.reps),
+          });
+        } else {
+          const disciplineId = matchDiscipline(item.disciplineName, globalDisciplines);
+          if (!disciplineId) {
+            skipped.push({ routineName: day.name, itemName: item.disciplineName, reason: 'discipline not found' });
+            continue;
+          }
+          itemValues.push({
+            routineId: routine.id,
+            kind: 'martial_arts',
+            disciplineId,
+            orderIndex: itemValues.length,
+          });
+        }
+      }
+
+      if (itemValues.length > 0) {
+        await tx.insert(routineItems).values(itemValues);
+      }
+    }
+    return ids;
+  });
+
+  const created = await Promise.all(
+    createdIds.map((id) => fetchRoutineWithItems(db, id, userId)),
+  );
+  const result: CreateFromTemplateResponse = {
+    routines: created.filter((r): r is RoutineWithItems => r !== null),
+    skipped,
+  };
+  return c.json(result, 201);
 });
 
 routineRoutes.patch('/:id', async (c) => {
