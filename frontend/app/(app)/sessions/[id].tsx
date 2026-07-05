@@ -35,6 +35,7 @@ import { useExercises } from '../../../src/hooks/useExercises';
 import { useDisciplines } from '../../../src/hooks/useDisciplines';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { ExerciseForm } from '../../../src/components/ExerciseForm';
+import { ExerciseFilterChips, filterByChips, EMPTY_FILTER, type ExerciseChipFilter } from '../../../src/components/ExerciseFilterChips';
 import {
   useSession,
   useCompleteSession,
@@ -57,6 +58,8 @@ import { PlateCalculator } from '../../../src/components/PlateCalculator';
 import { useUnit } from '../../../src/units/UnitContext';
 import { useRestTimerDefault } from '../../../src/restTimer/RestTimerContext';
 import { fmtWeight, kgToUnit, unitToKg, fmtDuration, parseDuration } from '../../../src/units/units';
+import { suggestOverload } from '../../../src/lib/overload';
+import { generateWarmupRamp } from '../../../src/lib/warmup';
 import { cancelScheduled, scheduleInSeconds } from '../../../src/lib/notifications';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
@@ -105,13 +108,20 @@ function PickExerciseModal({ visible, onClose, onPick, title = 'Add Exercise' }:
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<ExerciseChipFilter>(EMPTY_FILTER);
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState('');
   const { data: exercises, isLoading } = useExercises({ search: search.trim() || undefined });
   const { isPro, showPaywall } = useProGate();
 
+  const filteredExercises = useMemo(
+    () => filterByChips(exercises ?? [], filter),
+    [exercises, filter],
+  );
+
   function handleClose() {
     setSearch('');
+    setFilter(EMPTY_FILTER);
     setShowCreate(false);
     onClose();
   }
@@ -154,11 +164,16 @@ function PickExerciseModal({ visible, onClose, onPick, title = 'Add Exercise' }:
             placeholderTextColor={T.muted}
             clearButtonMode="while-editing"
           />
+          {!isLoading && (exercises?.length ?? 0) > 0 && (
+            <View style={styles.pickerFilterRow}>
+              <ExerciseFilterChips exercises={exercises ?? []} filter={filter} onChange={setFilter} />
+            </View>
+          )}
           {isLoading ? (
             <View style={styles.centered}><ActivityIndicator color={T.primary} /></View>
           ) : (
             <FlatList
-              data={exercises ?? []}
+              data={filteredExercises}
               keyExtractor={(i) => i.id}
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => (
@@ -657,8 +672,10 @@ function RestTimerSheet({ current, onSelect, onClose }: {
 
 // ─── Entry context menu (swap / remove) ───────────────────────────────────────
 
-function EntryContextMenu({ onSwap, onRemove, onClose }: {
+function EntryContextMenu({ onSwap, onGenerateWarmups, warmupsDisabled, onRemove, onClose }: {
   onSwap: () => void;
+  onGenerateWarmups: () => void;
+  warmupsDisabled: boolean;
   onRemove: () => void;
   onClose: () => void;
 }) {
@@ -677,6 +694,16 @@ function EntryContextMenu({ onSwap, onRemove, onClose }: {
           >
             <Ionicons name="swap-horizontal-outline" size={16} color={T.textDim} />
             <Text style={styles.menuItemText}>Swap exercise</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.menuItem, warmupsDisabled && { opacity: 0.4 }]}
+            onPress={() => { if (!warmupsDisabled) { onGenerateWarmups(); onClose(); } }}
+            disabled={warmupsDisabled}
+            accessibilityRole="button"
+            accessibilityLabel="Generate warm-up sets"
+          >
+            <Ionicons name="flame-outline" size={16} color={T.gold} />
+            <Text style={styles.menuItemText}>Generate warm-ups</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.menuItem}
@@ -730,16 +757,19 @@ function LastTime({ exerciseId }: { exerciseId: string }) {
 
 // ─── Strength entry card ──────────────────────────────────────────────────────
 
-function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseType, restTimerFallback }: {
+function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseType, exerciseMeta, sessionActive, restTimerFallback }: {
   entry: SessionEntryWithSets;
   sessionId: string;
   onSetCompleted: (restSecs: number) => void;
   onPR?: (exerciseName: string) => void;
   exerciseType?: 'strength' | 'conditioning';
+  exerciseMeta?: { equipment: string | null; bodyPart: string | null };
+  sessionActive?: boolean;
   restTimerFallback?: number;
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+  const { unit } = useUnit();
   const isTime = exerciseType === 'conditioning';
   const addSet = useAddStrengthSet();
   const updateSet = useUpdateStrengthSet();
@@ -768,6 +798,16 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseTyp
     [history],
   );
 
+  // Progressive-overload chip: suggest a bump when last session earned it.
+  const [overloadDismissed, setOverloadDismissed] = useState(false);
+  // Bumped after Apply so SetRows remount and re-init their local input text
+  // from the updated weights (the inputs don't sync from props by design).
+  const [applyNonce, setApplyNonce] = useState(0);
+  const overload = useMemo(
+    () => (isTime ? null : suggestOverload(lastSessionWorking, exerciseMeta, unit)),
+    [isTime, lastSessionWorking, exerciseMeta, unit],
+  );
+
   // Max weight ever logged for this exercise (across all history).
   const maxHistoryWeight = useMemo(() => {
     if (!history?.history?.length) return null;
@@ -785,6 +825,57 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseTyp
   function handleAddWarmup() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     addSet.mutate({ sessionId, entryId: entry.id, setNumber: entry.sets.length + 1, setType: 'warmup', completed: false });
+  }
+
+  // Warm-up generation seeds from the first working set's weight, falling back
+  // to last session's working weight so it's useful before any set is entered.
+  const warmupSeedKg = working.find((s) => s.weight != null)?.weight
+    ?? lastSessionWorking.find((s) => s.weight != null)?.weight
+    ?? null;
+  const canGenerateWarmups = !isTime && warmups.length === 0 && warmupSeedKg != null;
+
+  async function handleGenerateWarmups() {
+    const ramp = generateWarmupRamp(warmupSeedKg, unit, exerciseMeta?.equipment);
+    if (ramp.length === 0) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      // Sequential so setNumber ordering is stable within the warm-up section.
+      for (let i = 0; i < ramp.length; i++) {
+        await addSet.mutateAsync({
+          sessionId, entryId: entry.id, setNumber: entry.sets.length + 1 + i,
+          setType: 'warmup', reps: ramp[i].reps, weight: ramp[i].weightKg, completed: false,
+        });
+      }
+    } catch (err) {
+      Alert.alert('Error', (err as Error).message ?? 'Failed to add warm-ups.');
+    }
+  }
+
+  async function handleApplyOverload() {
+    if (!overload) return;
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      const incomplete = working.filter((s) => !s.completed && !s.id.startsWith('optimistic-'));
+      if (incomplete.length > 0) {
+        await Promise.all(
+          incomplete.map((s) =>
+            updateSet.mutateAsync({ sessionId, entryId: entry.id, setId: s.id, weight: overload.weightKg }),
+          ),
+        );
+      } else if (working.length === 0) {
+        const count = Math.min(Math.max(lastSessionWorking.length, 1), 5);
+        for (let i = 0; i < count; i++) {
+          await addSet.mutateAsync({
+            sessionId, entryId: entry.id, setNumber: entry.sets.length + 1 + i, setType: 'normal',
+            reps: lastSessionWorking[i]?.reps ?? null, weight: overload.weightKg, completed: false,
+          });
+        }
+      }
+      setApplyNonce((n) => n + 1);
+      setOverloadDismissed(true);
+    } catch (err) {
+      Alert.alert('Error', (err as Error).message ?? 'Failed to apply suggestion.');
+    }
   }
 
   function handleAddSet() {
@@ -862,6 +953,35 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseTyp
       </View>
       {entry.exerciseId && <LastTime exerciseId={entry.exerciseId} />}
 
+      {sessionActive && overload && !overloadDismissed && (
+        <View style={styles.overloadChip}>
+          <Ionicons name="trending-up" size={15} color={T.conditioning} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.overloadText}>
+              Try {fmtWeight(overload.weightKg, unit)} {unit} · +{overload.incrementDisplay}
+            </Text>
+            <Text style={styles.overloadReason} numberOfLines={1}>{overload.reason}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.overloadApply}
+            onPress={handleApplyOverload}
+            disabled={updateSet.isPending || addSet.isPending}
+            accessibilityRole="button"
+            accessibilityLabel="Apply suggested weight"
+          >
+            <Text style={styles.overloadApplyText}>Apply</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setOverloadDismissed(true)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss suggestion"
+          >
+            <Ionicons name="close" size={16} color={T.muted} />
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Warm-up */}
       <TouchableOpacity style={styles.addSubRow} onPress={handleAddWarmup} disabled={addSet.isPending || isOptimisticEntry}>
         <Ionicons name="add" size={15} color={T.gold} />
@@ -898,7 +1018,7 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseTyp
 
       {working.map((set, i) => (
         <SetRow
-          key={set.id}
+          key={`${set.id}-${applyNonce}`}
           set={set}
           sessionId={sessionId}
           entryId={entry.id}
@@ -943,6 +1063,8 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseTyp
       {showEntryMenu && (
         <EntryContextMenu
           onSwap={() => setShowSwapPicker(true)}
+          onGenerateWarmups={handleGenerateWarmups}
+          warmupsDisabled={!canGenerateWarmups}
           onRemove={handleRemoveEntry}
           onClose={() => setShowEntryMenu(false)}
         />
@@ -1433,6 +1555,12 @@ export default function SessionScreen() {
     return m;
   }, [allExercises]);
 
+  const exerciseMetaMap = useMemo(() => {
+    const m = new Map<string, { equipment: string | null; bodyPart: string | null }>();
+    allExercises?.forEach((e) => m.set(e.id, { equipment: e.equipment, bodyPart: e.bodyPart }));
+    return m;
+  }, [allExercises]);
+
   const routineName = useMemo(() => {
     if (!session?.routineId) return null;
     return routines?.find((r) => r.id === session.routineId)?.name ?? null;
@@ -1761,6 +1889,8 @@ export default function SessionScreen() {
                     onSetCompleted={handleSetCompleted}
                     onPR={handlePR}
                     exerciseType={entry.exerciseId ? exerciseTypeMap.get(entry.exerciseId) : undefined}
+                    exerciseMeta={entry.exerciseId ? exerciseMetaMap.get(entry.exerciseId) : undefined}
+                    sessionActive={isActive}
                     restTimerFallback={restTimerDefault}
                   />
                 ) : (
@@ -1949,6 +2079,20 @@ function makeStyles(T: ThemeColors) {
     backgroundColor: withAlpha(T.primary, 0.13), borderWidth: 1, borderColor: withAlpha(T.primary, 0.28),
   },
   gymBadgeText: { fontFamily: F.uiSemi, fontSize: 10, color: T.primary, letterSpacing: 0.4 },
+
+  overloadChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginTop: 8, paddingHorizontal: 10, paddingVertical: 8, borderRadius: R.sm,
+    backgroundColor: withAlpha(T.conditioning, 0.1),
+    borderWidth: 1, borderColor: withAlpha(T.conditioning, 0.28),
+  },
+  overloadText: { fontFamily: F.uiSemi, fontSize: 13, color: T.text },
+  overloadReason: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim, marginTop: 1 },
+  overloadApply: {
+    paddingHorizontal: 12, paddingVertical: 5, borderRadius: R.chip,
+    backgroundColor: T.conditioning,
+  },
+  overloadApplyText: { fontFamily: F.uiBold, fontSize: 12, color: T.onPrimary },
 
   ghostContainer: { gap: 2, marginBottom: 2 },
   ghostHeader: {
@@ -2162,6 +2306,7 @@ function makeStyles(T: ThemeColors) {
     borderRadius: R.sm, paddingHorizontal: 14, paddingVertical: 10,
     fontFamily: F.uiMed, fontSize: 15, color: T.text, marginHorizontal: 16, marginBottom: 12,
   },
+  pickerFilterRow: { paddingHorizontal: 16, paddingBottom: 10 },
   pickRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 12 },
   pickThumb: { width: 44, height: 44, borderRadius: 8 },
   pickThumbPlaceholder: { backgroundColor: T.surface2 },

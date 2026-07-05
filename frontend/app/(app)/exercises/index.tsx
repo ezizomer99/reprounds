@@ -22,6 +22,7 @@ import {
   useExercises,
 } from '../../../src/hooks/useExercises';
 import { ExerciseForm } from '../../../src/components/ExerciseForm';
+import { ExerciseFilterChips, filterByChips, EMPTY_FILTER, type ExerciseChipFilter } from '../../../src/components/ExerciseFilterChips';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
@@ -162,6 +163,7 @@ export default function ExercisesScreen() {
   const { isPro, showPaywall } = useProGate();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
+  const [filter, setFilter] = useState<ExerciseChipFilter>(EMPTY_FILTER);
   const [showAdd, setShowAdd] = useState(false);
 
   const { data: exercises, isLoading, isError, error, refetch, isRefetching } = useExercises({
@@ -170,13 +172,19 @@ export default function ExercisesScreen() {
 
   const deleteExercise = useDeleteExercise();
 
-  const isSearching = search.trim().length > 0;
+  const filterActive = filter.equipment !== null || filter.muscle !== null;
+  const isSearching = search.trim().length > 0 || filterActive;
+
+  const filtered = useMemo(
+    () => (exercises ? filterByChips(exercises, filter) : []),
+    [exercises, filter],
+  );
 
   const sections = useMemo<ExerciseSection[]>(() => {
     if (!exercises) return [];
 
     const groups = new Map<string, { title: string; items: Exercise[] }>();
-    for (const ex of exercises) {
+    for (const ex of filtered) {
       const groupKey = (ex.target ?? ex.muscleGroup ?? ex.bodyPart)?.toLowerCase() ?? null;
       const key = groupKey ?? OTHER_KEY;
       const title = groupKey ? titleForTarget(groupKey) : 'Other';
@@ -202,7 +210,7 @@ export default function ExercisesScreen() {
     });
 
     return built;
-  }, [exercises, expanded, isSearching]);
+  }, [exercises, filtered, expanded, isSearching]);
 
   function toggleSection(key: string) {
     setExpanded((prev) => {
@@ -263,6 +271,12 @@ export default function ExercisesScreen() {
           <Ionicons name="add" size={22} color={T.onPrimary} />
         </TouchableOpacity>
       </View>
+
+      {!isLoading && !isError && exercises && exercises.length > 0 && (
+        <View style={styles.filterRow}>
+          <ExerciseFilterChips exercises={exercises} filter={filter} onChange={setFilter} />
+        </View>
+      )}
 
       {isLoading && (
         <View style={{ paddingTop: 8 }}>
@@ -392,6 +406,8 @@ function makeStyles(T: ThemeColors) {
       alignItems: 'center',
       justifyContent: 'center',
     },
+
+    filterRow: { paddingHorizontal: D.pad, paddingTop: 10 },
 
     sectionHeader: {
       flexDirection: 'row',
