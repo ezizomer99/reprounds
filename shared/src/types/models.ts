@@ -1,5 +1,6 @@
 import type { ActivityType, DisciplineCat, EntryKind, FightMethod, FightResult, GiType, SessionStatus, SetType } from './enums';
 import type { FieldConfig } from './fieldConfig';
+import type { StrikeCounts, StrikingRoundType } from './rounds';
 
 export interface User {
   id: string;
@@ -482,6 +483,79 @@ export interface TopLift {
 
 export interface TopLiftsResponse {
   lifts: TopLift[];
+}
+
+// ---- Mat (martial arts) stats ----
+
+export interface MatWeekBucket {
+  /** ISO date of the bucket's Monday, YYYY-MM-DD. */
+  weekStart: string;
+  rounds: number;
+  /** Whole minutes of mat time attributed to this week. */
+  minutes: number;
+  /** Distinct completed sessions containing a martial-arts entry. */
+  sessions: number;
+}
+
+export interface MatStatsResponse {
+  /** Oldest → newest, one bucket per requested week. */
+  weeks: MatWeekBucket[];
+  totals: {
+    sessions: number;
+    rounds: number;
+    minutes: number;
+  };
+  /** Round counts by intensity; rounds without an intensity land in `unspecified`. */
+  intensity: {
+    light: number;
+    medium: number;
+    hard: number;
+    unspecified: number;
+  };
+  // Mixed (MMA) rounds fold their counters into these blocks but only
+  // category-pure rounds contribute to each block's `rounds` count.
+  grappling: {
+    rounds: number;
+    submissionsFor: number;
+    submissionsAgainst: number;
+    sweeps: number;
+    takedowns: number;
+  };
+  striking: {
+    rounds: number;
+    roundsByType: Partial<Record<StrikingRoundType, number>>;
+    strikes: StrikeCounts;
+    totalStrikes: number;
+  };
+}
+
+// ---- Notes timeline ----
+
+export type NoteSource =
+  | { type: 'session' }
+  | { type: 'entry'; entryId: string }
+  | { type: 'technique'; entryId: string }
+  | { type: 'round'; entryId: string; roundNumber: number };
+
+export interface NoteItem {
+  source: NoteSource;
+  /** Display label computed server-side, e.g. "Session notes", "BJJ — Round 3". */
+  label: string;
+  text: string;
+}
+
+export interface NotesSessionGroup {
+  sessionId: string;
+  date: string;
+  sessionName: string | null;
+  kinds: EntryKind[];
+  notes: NoteItem[];
+}
+
+export interface NotesTimelineResponse {
+  groups: NotesSessionGroup[];
+  /** Opaque keyset cursor ("<date>_<sessionId>"); null when exhausted. */
+  nextCursor: string | null;
 }
 
 // ---- Phase 5: Calendar + Recurrence ----

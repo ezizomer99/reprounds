@@ -1,0 +1,160 @@
+import {
+  ActivityIndicator,
+  FlatList,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { useMemo } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import type { NotesSessionGroup } from '@app/shared';
+import { useNotesTimeline } from '../../../src/hooks/useNotes';
+import { Skeleton } from '../../../src/components/Skeleton';
+import { F, R, D, ThemeColors } from '../../../src/theme/colors';
+import { useTheme } from '../../../src/theme/ThemeContext';
+import { withAlpha } from '../../../src/lib/color';
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
+}
+
+export default function NotesScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+
+  const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = useNotesTimeline();
+  const groups = useMemo(() => data?.pages.flatMap((p) => p.groups) ?? [], [data]);
+
+  const renderGroup = ({ item }: { item: NotesSessionGroup }) => {
+    const isMat = item.kinds.includes('martial_arts');
+    const isGym = item.kinds.includes('exercise');
+    return (
+      <TouchableOpacity
+        style={styles.groupCard}
+        onPress={() =>
+          router.push({ pathname: '/sessions/[id]', params: { id: item.sessionId } } as never)
+        }
+        activeOpacity={0.75}
+      >
+        <View style={styles.groupHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.groupDate}>{formatDate(item.date)}</Text>
+            <Text style={styles.groupName} numberOfLines={1}>
+              {item.sessionName ?? 'Workout'}
+            </Text>
+          </View>
+          <View style={styles.badgeRow}>
+            {isMat && (
+              <View style={[styles.badge, { backgroundColor: withAlpha(T.grappling, 0.15) }]}>
+                <Text style={[styles.badgeText, { color: T.grappling }]}>Mat</Text>
+              </View>
+            )}
+            {isGym && (
+              <View style={[styles.badge, { backgroundColor: withAlpha(T.primary, 0.15) }]}>
+                <Text style={[styles.badgeText, { color: T.primary }]}>Gym</Text>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {item.notes.map((note, i) => (
+          <View key={i} style={[styles.noteItem, i === 0 && { marginTop: 8 }]}>
+            <Text style={styles.noteLabel}>{note.label}</Text>
+            <Text style={styles.noteText} numberOfLines={4}>
+              {note.text}
+            </Text>
+          </View>
+        ))}
+      </TouchableOpacity>
+    );
+  };
+
+  return (
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <Ionicons name="chevron-back" size={22} color={T.text} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Notes</Text>
+      </View>
+
+      {isLoading ? (
+        <View style={{ padding: D.pad, gap: D.stack }}>
+          <Skeleton width="100%" height={110} radius={R.card} />
+          <Skeleton width="100%" height={110} radius={R.card} />
+          <Skeleton width="100%" height={110} radius={R.card} />
+        </View>
+      ) : groups.length === 0 ? (
+        <View style={styles.empty}>
+          <Ionicons name="document-text-outline" size={36} color={T.muted} />
+          <Text style={styles.emptyTitle}>No notes yet</Text>
+          <Text style={styles.emptyText}>
+            Notes you add to sessions, techniques, and rounds will collect here for looking back.
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={groups}
+          keyExtractor={(g) => g.sessionId}
+          renderItem={renderGroup}
+          contentContainerStyle={{ padding: D.pad, gap: D.stack, paddingBottom: insets.bottom + 32 }}
+          showsVerticalScrollIndicator={false}
+          onEndReached={() => {
+            if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+          }}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={
+            isFetchingNextPage ? (
+              <ActivityIndicator color={T.muted} style={{ paddingVertical: 16 }} />
+            ) : null
+          }
+        />
+      )}
+    </View>
+  );
+}
+
+function makeStyles(T: ThemeColors) {
+  return StyleSheet.create({
+    screen: { flex: 1, backgroundColor: T.bg },
+    header: {
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      paddingHorizontal: 12, paddingVertical: 10,
+      borderBottomWidth: 1, borderBottomColor: T.border,
+    },
+    backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+    headerTitle: { flex: 1, fontFamily: F.uiBold, fontSize: 19, color: T.text, letterSpacing: -0.2 },
+
+    groupCard: {
+      backgroundColor: T.surface,
+      borderWidth: 1,
+      borderColor: T.border,
+      borderRadius: R.card,
+      padding: D.cardPad,
+    },
+    groupHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    groupDate: { fontFamily: F.monoBold, fontSize: 11, color: T.muted },
+    groupName: { fontFamily: F.uiSemi, fontSize: 15, color: T.text, marginTop: 2 },
+    badgeRow: { flexDirection: 'row', gap: 6 },
+    badge: { borderRadius: R.chip, paddingHorizontal: 10, paddingVertical: 3 },
+    badgeText: { fontFamily: F.uiSemi, fontSize: 11 },
+
+    noteItem: { marginTop: 10 },
+    noteLabel: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim },
+    noteText: { fontFamily: F.uiMed, fontSize: 13, color: T.text, marginTop: 2, lineHeight: 19 },
+
+    empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 10, padding: 32 },
+    emptyTitle: { fontFamily: F.uiBold, fontSize: 17, color: T.text },
+    emptyText: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, textAlign: 'center', lineHeight: 19 },
+  });
+}

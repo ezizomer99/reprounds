@@ -4,6 +4,7 @@ import {
   sessionsThisWeek,
   avgPerWeek,
   getWeeklyBarData,
+  weeksAgoMonday,
 } from './statsHelpers';
 import type { Session } from '@app/shared';
 
@@ -107,6 +108,26 @@ describe('avgPerWeek', () => {
     // One session 10 weeks ago should not appear in a 4-week window
     const old = makeSession(mondayNWeeksAgo(10));
     expect(avgPerWeek([old], 4)).toBe(0);
+  });
+});
+
+// ─── weeksAgoMonday ───────────────────────────────────────────────────────────
+
+describe('weeksAgoMonday', () => {
+  it('returns the current Monday for weeks = 1', () => {
+    const mon = mondayOf(new Date());
+    const y = mon.getFullYear();
+    const m = String(mon.getMonth() + 1).padStart(2, '0');
+    const d = String(mon.getDate()).padStart(2, '0');
+    expect(weeksAgoMonday(1)).toBe(`${y}-${m}-${d}`);
+  });
+
+  it('returns a Monday 7 weeks back for the default 8-week window', () => {
+    const result = weeksAgoMonday();
+    const parsed = new Date(result + 'T00:00:00');
+    expect(parsed.getDay()).toBe(1); // Monday
+    const diffDays = Math.round((mondayOf(new Date()).getTime() - parsed.getTime()) / 86_400_000);
+    expect(diffDays).toBe(49);
   });
 });
 

@@ -111,6 +111,9 @@ export function useCompleteSession() {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['session', variables.id] });
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      // A newly completed session changes stats aggregates and may carry notes.
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
     },
   });
 }

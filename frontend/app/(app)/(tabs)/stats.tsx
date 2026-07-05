@@ -20,6 +20,8 @@ import { aggregateMuscles } from '../../../src/lib/muscleSlugMap';
 import { useUnit } from '../../../src/units/UnitContext';
 import { fmtWeight } from '../../../src/units/units';
 import { Skeleton } from '../../../src/components/Skeleton';
+import { MatStatsView } from '../../../src/components/stats/MatStatsView';
+import { RecentNotesCard } from '../../../src/components/stats/RecentNotesCard';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -32,6 +34,7 @@ export default function StatsTab() {
   const { isPro, showPaywall } = useProGate();
   const { unit } = useUnit();
   const [muscleView, setMuscleView] = useState<'front' | 'back'>('front');
+  const [statsView, setStatsView] = useState<'gym' | 'mat'>('gym');
 
   const { data: sessions, isLoading } = useSessions('completed');
 
@@ -62,6 +65,38 @@ export default function StatsTab() {
         contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
       >
+        {/* ── Gym / Martial Arts view toggle ── */}
+        <View style={styles.segmentRow}>
+          {(
+            [
+              { key: 'gym', label: 'Gym', icon: 'barbell-outline' },
+              { key: 'mat', label: 'Martial Arts', icon: 'body-outline' },
+            ] as const
+          ).map((seg) => (
+            <TouchableOpacity
+              key={seg.key}
+              style={[styles.segmentBtn, statsView === seg.key && styles.segmentBtnActive]}
+              onPress={() => setStatsView(seg.key)}
+              activeOpacity={0.8}
+            >
+              <Ionicons
+                name={seg.icon}
+                size={15}
+                color={statsView === seg.key ? T.onPrimary : T.textDim}
+              />
+              <Text
+                style={[styles.segmentText, statsView === seg.key && styles.segmentTextActive]}
+              >
+                {seg.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {statsView === 'mat' ? (
+          <MatStatsView />
+        ) : (
+          <>
         {/* ── Highlights ── */}
         <View style={styles.card}>
           <View style={styles.highlightsLabel}>
@@ -274,6 +309,11 @@ export default function StatsTab() {
             </TouchableOpacity>
           )}
         </View>
+          </>
+        )}
+
+        {/* ── Recent Notes (both views) ── */}
+        <RecentNotesCard />
 
         {/* ── Body weight ── */}
         <TouchableOpacity
@@ -314,6 +354,27 @@ function makeStyles(T: ThemeColors) {
 
     scroll: { flex: 1 },
     body: { padding: D.pad, gap: D.stack },
+
+    // Gym / Mat segmented control
+    segmentRow: {
+      flexDirection: 'row',
+      backgroundColor: T.surface2,
+      borderRadius: R.chip,
+      padding: 3,
+      gap: 3,
+    },
+    segmentBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 8,
+      borderRadius: R.chip,
+    },
+    segmentBtnActive: { backgroundColor: T.primary },
+    segmentText: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim },
+    segmentTextActive: { color: T.onPrimary, fontFamily: F.uiSemi },
 
     card: {
       backgroundColor: T.surface,

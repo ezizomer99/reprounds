@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
-import { and, eq, gte, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import { createDb } from '../db';
 import { exercises, sessionEntries, sessions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import { aggregateMatStats } from '../lib/matStats';
 import type { MuscleSummaryResponse, TopLiftsResponse } from '@app/shared';
 
 type Env = {
@@ -123,6 +124,71 @@ statsRoutes.get('/top-lifts', async (c) => {
     })),
   };
   return c.json(result);
+});
+
+// GET /stats/mat?since=YYYY-MM-DD&weeks=8
+// Weekly rounds/mat-time buckets plus intensity and sparring aggregates over
+// the window. `since` should be the Monday of the oldest bucket, computed
+// client-side so week boundaries follow the device's timezone.
+statsRoutes.get('/mat', async (c) => {
+  const userId = c.get('userId');
+  const db = getDb(c.env);
+
+  const weeksParam = Number(c.req.query('weeks'));
+  const weeks = Number.isInteger(weeksParam) ? Math.min(Math.max(weeksParam, 1), 26) : 8;
+
+  const sinceParam = c.req.query('since');
+  let since: string;
+  if (sinceParam && /^\d{4}-\d{2}-\d{2}$/.test(sinceParam)) {
+    since = sinceParam;
+  } else {
+    // Default: UTC Monday of the week (weeks - 1) weeks back.
+    const now = new Date();
+    const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7) - (weeks - 1) * 7);
+    since = monday.toISOString().slice(0, 10);
+  }
+
+  // The rounds payload is a discriminated jsonb union with a legacy variant,
+  // so aggregation happens in TS (reusing the shared isRoundsSession guard)
+  // rather than triple-implementing the schema in SQL. Volume is bounded by
+  // the window: tens of entries, not thousands.
+  const entryRows = await db
+    .select({
+      sessionId: sessionEntries.sessionId,
+      sessionDate: sessions.date,
+      sessionDurationMinutes: sessions.durationMinutes,
+      details: sessionEntries.details,
+    })
+    .from(sessionEntries)
+    .innerJoin(sessions, eq(sessionEntries.sessionId, sessions.id))
+    .where(
+      and(
+        eq(sessions.userId, userId),
+        eq(sessions.status, 'completed'),
+        eq(sessionEntries.kind, 'martial_arts'),
+        gte(sessions.date, since),
+      ),
+    );
+
+  // Sessions that also contain gym entries must not attribute their whole
+  // duration to mat time when rounds carry no durations of their own.
+  const sessionIds = [...new Set(entryRows.map((r) => r.sessionId))];
+  const mixedSessionIds = new Set<string>();
+  if (sessionIds.length > 0) {
+    const mixedRows = await db
+      .selectDistinct({ sessionId: sessionEntries.sessionId })
+      .from(sessionEntries)
+      .where(
+        and(
+          inArray(sessionEntries.sessionId, sessionIds),
+          eq(sessionEntries.kind, 'exercise'),
+        ),
+      );
+    for (const r of mixedRows) mixedSessionIds.add(r.sessionId);
+  }
+
+  return c.json(aggregateMatStats(entryRows, mixedSessionIds, since, weeks));
 });
 
 export { statsRoutes };
