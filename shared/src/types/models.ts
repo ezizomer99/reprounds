@@ -8,6 +8,12 @@ export interface User {
   name: string | null;
   avatarUrl: string | null;
   isGuest: boolean;
+  /** ISO timestamp when first-run onboarding was completed; null if not yet. */
+  onboardedAt: string | null;
+}
+
+export interface UpdateMeRequest {
+  onboarded?: boolean;
 }
 
 export interface GuestAuthRequest {

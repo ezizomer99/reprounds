@@ -127,6 +127,13 @@
       "when": 1783075505368,
       "tag": "0017_needy_goliath",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1783278180227,
+      "tag": "0018_giant_zemo",
+      "breakpoints": true
     }
   ]
 }

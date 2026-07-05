@@ -6,7 +6,7 @@ import { verifyGoogleIdToken } from '../lib/googleAuth';
 import { signJwt, verifyJwt } from '../lib/jwt';
 import { hashPassword, verifyPassword } from '../lib/password';
 import { authMiddleware } from '../middleware/auth';
-import type { User } from '@app/shared';
+import type { UpdateMeRequest, User } from '@app/shared';
 
 type Env = {
   Bindings: {
@@ -39,13 +39,14 @@ async function rateLimited(
   return c.json({ error: 'Too many attempts — try again in a minute' }, 429);
 }
 
-function toUserShape(dbUser: { id: string; email: string | null; name: string | null; avatarUrl: string | null; isGuest: boolean }): User {
+function toUserShape(dbUser: { id: string; email: string | null; name: string | null; avatarUrl: string | null; isGuest: boolean; onboardedAt?: Date | null }): User {
   return {
     id: dbUser.id,
     email: dbUser.email,
     name: dbUser.name ?? null,
     avatarUrl: dbUser.avatarUrl ?? null,
     isGuest: dbUser.isGuest,
+    onboardedAt: dbUser.onboardedAt ? dbUser.onboardedAt.toISOString() : null,
   };
 }
 
@@ -376,6 +377,42 @@ authRoutes.get('/me', authMiddleware, async (c) => {
     return c.json({ user: toUserShape(dbUser) });
   } catch (e) {
     console.error('[auth/me GET]', e);
+    return c.json({ error: 'Internal error' }, 500);
+  }
+});
+
+// ── Update current user (onboarding completion) ────────────────────────────
+authRoutes.patch('/me', authMiddleware, async (c) => {
+  const userId = c.get('userId');
+  try {
+    let body: UpdateMeRequest;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'Invalid request body' }, 400);
+    }
+
+    const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+
+    const updates: Partial<typeof users.$inferInsert> = {};
+    // Onboarding is a one-way latch — set the timestamp once, never clear it.
+    if (body.onboarded === true) updates.onboardedAt = new Date();
+
+    if (Object.keys(updates).length === 0) {
+      return c.json({ error: 'No supported fields to update' }, 400);
+    }
+
+    const [dbUser] = await db
+      .update(users)
+      .set(updates)
+      .where(eq(users.id, userId))
+      .returning();
+
+    if (!dbUser) return c.json({ error: 'User not found' }, 404);
+
+    return c.json({ user: toUserShape(dbUser) });
+  } catch (e) {
+    console.error('[auth/me PATCH]', e);
     return c.json({ error: 'Internal error' }, 500);
   }
 });
