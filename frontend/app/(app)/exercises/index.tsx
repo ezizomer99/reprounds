@@ -1,5 +1,7 @@
 import {
   Alert,
+  Modal,
+  ScrollView,
   SectionList,
   StyleSheet,
   Text,
@@ -8,10 +10,8 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'react-native';
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { Swipeable, RectButton } from 'react-native-gesture-handler';
-import { BottomSheetModal, BottomSheetScrollView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
-import type { BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,9 +27,6 @@ import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { Skeleton } from '../../../src/components/Skeleton';
-
-// Stable snap-point array (see note in sessions/[id].tsx).
-const SNAP_90: string[] = ['90%'];
 
 const OTHER_KEY = '__other__';
 
@@ -125,39 +122,17 @@ interface AddExerciseModalProps {
 function AddExerciseModal({ visible, onClose }: AddExerciseModalProps) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const bottomSheetRef = useRef<BottomSheetModal>(null);
   const [formKey, setFormKey] = useState(0);
-
-  useEffect(() => {
-    if (visible) bottomSheetRef.current?.present();
-    else bottomSheetRef.current?.dismiss();
-  }, [visible]);
 
   function handleClose() {
     setFormKey((k) => k + 1);
-    bottomSheetRef.current?.dismiss();
     onClose();
   }
 
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
-    ),
-    [],
-  );
-
   return (
-    <BottomSheetModal
-      ref={bottomSheetRef}
-      snapPoints={SNAP_90}
-      enableDynamicSizing={false}
-      enablePanDownToClose
-      onDismiss={onClose}
-      backdropComponent={renderBackdrop}
-      backgroundStyle={{ backgroundColor: T.bg }}
-      handleIndicatorStyle={{ backgroundColor: T.textDim }}
-    >
-      <BottomSheetScrollView
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
+      <ScrollView
+        style={{ flex: 1, backgroundColor: T.bg }}
         contentContainerStyle={styles.modalContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -173,8 +148,8 @@ function AddExerciseModal({ visible, onClose }: AddExerciseModalProps) {
           submitLabel="Add Exercise"
           onCreated={() => handleClose()}
         />
-      </BottomSheetScrollView>
-    </BottomSheetModal>
+      </ScrollView>
+    </Modal>
   );
 }
 
