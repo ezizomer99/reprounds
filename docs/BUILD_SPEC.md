@@ -291,6 +291,7 @@ PATCH  /sessions/:id/entries/:entryId
 POST   /sessions/:id/entries/:entryId/sets
 PATCH  /sessions/:id/entries/:entryId/sets/:setId
 DELETE /sessions/:id/entries/:entryId/sets/:setId
+PUT    /sessions/:id/entries/order                 reorder entries (entry IDs, first = top)
 
 GET    /stats/muscles                              ?since=YYYY-MM-DD — muscle groups trained (gym)
 GET    /stats/top-lifts                            ?since= — top 10 exercises by est. 1RM (gym)

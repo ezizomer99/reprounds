@@ -16,6 +16,9 @@ import LottieView from 'lottie-react-native';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
+import type { RenderItemParams } from 'react-native-draggable-flatlist';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type {
@@ -40,6 +43,7 @@ import {
   useAddSessionEntry,
   useUpdateSessionEntry,
   useDeleteSessionEntry,
+  useReorderSessionEntries,
   useAddStrengthSet,
   useUpdateStrengthSet,
   useDeleteStrengthSet,
@@ -277,6 +281,82 @@ function PickDisciplineModal({ visible, onClose, onPick }: {
           />
         )}
       </View>
+    </Modal>
+  );
+}
+
+// ─── Reorder entries modal ────────────────────────────────────────────────────
+
+function ReorderEntriesModal({ visible, onClose, session }: {
+  visible: boolean;
+  onClose: () => void;
+  session: SessionWithEntries;
+}) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const reorderEntries = useReorderSessionEntries();
+  // Local order so a drag settles instantly; the mutation's optimistic update
+  // keeps the screen behind the modal in sync.
+  const [ordered, setOrdered] = useState<SessionEntryWithSets[]>(session.entries);
+
+  useEffect(() => {
+    if (visible) setOrdered(session.entries);
+    // Re-sync only when opening — mid-drag server refetches must not yank rows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      {/* Modals open a new native window on Android, so the drag gestures need
+          their own GestureHandlerRootView — the app root's doesn't reach here. */}
+      <GestureHandlerRootView style={styles.modal}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Reorder</Text>
+          <TouchableOpacity onPress={onClose}>
+            <Text style={styles.modalDone}>Done</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.reorderHint}>Hold and drag to change the order.</Text>
+        <DraggableFlatList
+          data={ordered}
+          keyExtractor={(e) => e.id}
+          containerStyle={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 32 }}
+          onDragEnd={({ data }) => {
+            setOrdered(data);
+            reorderEntries.mutate(
+              { sessionId: session.id, order: data.map((e) => e.id) },
+              { onError: (err) => Alert.alert('Error', err.message || 'Failed to reorder.') },
+            );
+          }}
+          renderItem={({ item, drag, isActive }: RenderItemParams<SessionEntryWithSets>) => (
+            <ScaleDecorator>
+              <TouchableOpacity
+                style={[styles.reorderRow, isActive && styles.reorderRowActive]}
+                onLongPress={drag}
+                delayLongPress={150}
+                activeOpacity={0.9}
+              >
+                <Ionicons
+                  name="reorder-three-outline"
+                  size={20}
+                  color={isActive ? T.primary : T.muted}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.reorderName} numberOfLines={1}>
+                    {item.exerciseName ?? item.disciplineName ?? 'Entry'}
+                  </Text>
+                  <Text style={styles.reorderMeta}>
+                    {item.kind === 'exercise'
+                      ? `${item.sets.length} ${item.sets.length === 1 ? 'set' : 'sets'}`
+                      : 'Martial arts'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </ScaleDecorator>
+          )}
+        />
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -1361,6 +1441,7 @@ export default function SessionScreen() {
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [showDisciplinePicker, setShowDisciplinePicker] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showReorder, setShowReorder] = useState(false);
   const [restSeconds, setRestSeconds] = useState<number | null>(null);
   const [restTotal, setRestTotal] = useState(restTimerDefault);
   const [elapsed, setElapsed] = useState(0);
@@ -1583,6 +1664,16 @@ export default function SessionScreen() {
         {/* Right: settings + finish (or done badge) */}
         {isActive ? (
           <View style={styles.headerActions}>
+            {session.entries.length > 1 && (
+              <TouchableOpacity
+                style={styles.headerIconBtn}
+                onPress={() => setShowReorder(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Reorder exercises"
+              >
+                <Ionicons name="swap-vertical-outline" size={20} color={T.textDim} />
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={styles.headerIconBtn} onPress={() => setShowSettings(true)}>
               <Ionicons name="settings-outline" size={20} color={T.textDim} />
             </TouchableOpacity>
@@ -1745,6 +1836,14 @@ export default function SessionScreen() {
           );
         }}
       />
+
+      {session && (
+        <ReorderEntriesModal
+          visible={showReorder}
+          onClose={() => setShowReorder(false)}
+          session={session}
+        />
+      )}
 
       {showSettings && session && (
         <SessionSettingsSheet
@@ -2039,6 +2138,25 @@ function makeStyles(T: ThemeColors) {
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, marginBottom: 16 },
   modalTitle: { fontFamily: F.uiSemi, fontSize: 20, color: T.text },
   modalCancel: { fontFamily: F.uiMed, fontSize: 16, color: T.textDim },
+  modalDone: { fontFamily: F.uiSemi, fontSize: 16, color: T.primary },
+
+  // Reorder entries modal
+  reorderHint: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, paddingHorizontal: 24, marginBottom: 12 },
+  reorderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: T.surface,
+    borderWidth: 1,
+    borderColor: T.border,
+    borderRadius: R.sm,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 8,
+  },
+  reorderRowActive: { borderColor: T.primary, backgroundColor: T.surface2 },
+  reorderName: { fontFamily: F.uiSemi, fontSize: 15, color: T.text },
+  reorderMeta: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 1 },
   modalSearch: {
     backgroundColor: T.surface, borderWidth: 1, borderColor: T.border,
     borderRadius: R.sm, paddingHorizontal: 14, paddingVertical: 10,

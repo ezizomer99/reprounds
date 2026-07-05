@@ -411,6 +411,11 @@ export interface UpdateSessionEntryRequest {
   exerciseId?: string | null;
 }
 
+/** Full new ordering of a session's entries (entry IDs, first = top). */
+export interface ReorderSessionEntriesRequest {
+  order: string[];
+}
+
 export interface CreateStrengthSetRequest {
   setNumber: number;
   setType?: SetType;
