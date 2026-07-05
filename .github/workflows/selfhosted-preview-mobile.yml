@@ -143,14 +143,17 @@ jobs:
           fi
           echo "has_key=true" >> "$GITHUB_OUTPUT"
 
-      - name: Submit to Play internal testing track
+      # "alpha" is Play's default closed-testing track — the one this app's
+      # testers are actually enrolled in (the internal track's tester list is
+      # separate, which is how builds ended up invisible to the dev's phone).
+      - name: Submit to Play closed testing track (alpha)
         if: steps.playkey.outputs.has_key == 'true'
         uses: r0adkll/upload-google-play@v1
         with:
           serviceAccountJson: frontend/google-play-key.json
           packageName: com.reprounds.app
           releaseFiles: frontend/android/app/build/outputs/bundle/release/app-release.aab
-          track: internal
+          track: alpha
           status: completed
 
       - name: Clean up decoded key
