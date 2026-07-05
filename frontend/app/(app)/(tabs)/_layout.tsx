@@ -1,11 +1,37 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Dimensions, Easing, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
+import type { BottomTabNavigationOptions } from '@react-navigation/bottom-tabs';
 import { useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { F, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { useActiveSession } from '../../../src/hooks/useSession';
 import { BrandedHeader } from '../../../src/components/BrandedHeader';
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+
+// Direction-aware slide between tabs: a scene's progress is -1 when it sits
+// left of the focused tab, 0 when focused, +1 when right, so the outgoing and
+// incoming scenes slide in opposite directions matching the tab order.
+const slideTransition = {
+  animation: 'shift',
+  transitionSpec: {
+    animation: 'timing',
+    config: { duration: 250, easing: Easing.out(Easing.cubic) },
+  },
+  sceneStyleInterpolator: ({ current }) => ({
+    sceneStyle: {
+      transform: [
+        {
+          translateX: current.progress.interpolate({
+            inputRange: [-1, 0, 1],
+            outputRange: [-SCREEN_WIDTH, 0, SCREEN_WIDTH],
+          }),
+        },
+      ],
+    },
+  }),
+} satisfies BottomTabNavigationOptions;
 
 export default function TabLayout() {
   const router = useRouter();
@@ -19,6 +45,8 @@ export default function TabLayout() {
         screenOptions={{
           headerShown: true,
           header: () => <BrandedHeader />,
+          ...slideTransition,
+          sceneStyle: { backgroundColor: T.bg },
           tabBarStyle: {
             backgroundColor: T.surface,
             borderTopColor: T.border,
