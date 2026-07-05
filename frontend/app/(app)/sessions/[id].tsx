@@ -1,6 +1,7 @@
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Modal,
   ScrollView,
   StyleSheet,
@@ -13,8 +14,6 @@ import {
 import { Image } from 'react-native';
 import LottieView from 'lottie-react-native';
 import * as Haptics from 'expo-haptics';
-import { BottomSheetModal, BottomSheetFlatList, BottomSheetTextInput, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
-import type { BottomSheetBackdropProps } from '@gorhom/bottom-sheet';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -59,12 +58,6 @@ import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
 
-// Stable snap-point arrays. Passing a fresh array literal on every render makes
-// @gorhom/bottom-sheet re-run its snap-point memoization; hoisting keeps the
-// reference identity stable across renders.
-const SNAP_92: string[] = ['92%'];
-const SNAP_60: string[] = ['60%'];
-
 // The set-row weight/reps/RPE cells are fixed-size boxes; past this scale the
 // numbers grow wider than the cell and Android clips them at the edges.
 const CELL_MAX_FONT_SCALE = 1.1;
@@ -107,22 +100,15 @@ function PickExerciseModal({ visible, onClose, onPick, title = 'Add Exercise' }:
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const bottomSheetRef = useRef<BottomSheetModal>(null);
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState('');
   const { data: exercises, isLoading } = useExercises({ search: search.trim() || undefined });
   const { isPro, showPaywall } = useProGate();
 
-  useEffect(() => {
-    if (visible) bottomSheetRef.current?.present();
-    else bottomSheetRef.current?.dismiss();
-  }, [visible]);
-
   function handleClose() {
     setSearch('');
     setShowCreate(false);
-    bottomSheetRef.current?.dismiss();
     onClose();
   }
 
@@ -146,72 +132,59 @@ function PickExerciseModal({ visible, onClose, onPick, title = 'Add Exercise' }:
 
   const trimmed = search.trim();
 
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
-    ),
-    [],
-  );
-
   return (
     <>
-      <BottomSheetModal
-        ref={bottomSheetRef}
-        snapPoints={SNAP_92}
-        enableDynamicSizing={false}
-        enablePanDownToClose
-        onDismiss={onClose}
-        backdropComponent={renderBackdrop}
-        backgroundStyle={{ backgroundColor: T.bg }}
-        handleIndicatorStyle={{ backgroundColor: T.textDim }}
-      >
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>{title}</Text>
-          <TouchableOpacity onPress={handleClose}>
-            <Text style={styles.modalCancel}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-        <BottomSheetTextInput
-          style={[styles.modalSearch, { color: T.text }]}
-          value={search}
-          onChangeText={setSearch}
-          placeholder="Search exercises..."
-          placeholderTextColor={T.muted}
-          clearButtonMode="while-editing"
-        />
-        {isLoading ? (
-          <View style={styles.centered}><ActivityIndicator color={T.primary} /></View>
-        ) : (
-          <BottomSheetFlatList
-            data={exercises ?? []}
-            keyExtractor={(i) => i.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity style={styles.pickRow} onPress={() => { onPick(item); handleClose(); }}>
-                {item.imageUrl ? (
-                  <Image source={{ uri: item.imageUrl }} style={styles.pickThumb} resizeMode="cover" />
-                ) : (
-                  <View style={[styles.pickThumb, styles.pickThumbPlaceholder]} />
-                )}
-                <View style={styles.pickInfo}>
-                  <Text style={styles.pickName}>{item.name}</Text>
-                  <Text style={styles.pickMeta}>{item.equipment ?? item.muscleGroup ?? item.type}</Text>
-                </View>
-              </TouchableOpacity>
-            )}
-            ItemSeparatorComponent={() => <View style={styles.separator} />}
-            ListEmptyComponent={
-              trimmed ? (
-                <TouchableOpacity style={styles.createExRow} onPress={handleCreatePress} activeOpacity={0.7}>
-                  <Ionicons name="add-circle-outline" size={20} color={T.primary} />
-                  <Text style={styles.createExText}>Create exercise "{trimmed}"</Text>
-                </TouchableOpacity>
-              ) : (
-                <View style={styles.centered}><Text style={styles.emptyText}>No exercises found.</Text></View>
-              )
-            }
+      <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
+        <View style={styles.modal}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>{title}</Text>
+            <TouchableOpacity onPress={handleClose}>
+              <Text style={styles.modalCancel}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+          <TextInput
+            style={styles.modalSearch}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search exercises..."
+            placeholderTextColor={T.muted}
+            clearButtonMode="while-editing"
           />
-        )}
-      </BottomSheetModal>
+          {isLoading ? (
+            <View style={styles.centered}><ActivityIndicator color={T.primary} /></View>
+          ) : (
+            <FlatList
+              data={exercises ?? []}
+              keyExtractor={(i) => i.id}
+              keyboardShouldPersistTaps="handled"
+              renderItem={({ item }) => (
+                <TouchableOpacity style={styles.pickRow} onPress={() => { onPick(item); handleClose(); }}>
+                  {item.imageUrl ? (
+                    <Image source={{ uri: item.imageUrl }} style={styles.pickThumb} resizeMode="cover" />
+                  ) : (
+                    <View style={[styles.pickThumb, styles.pickThumbPlaceholder]} />
+                  )}
+                  <View style={styles.pickInfo}>
+                    <Text style={styles.pickName}>{item.name}</Text>
+                    <Text style={styles.pickMeta}>{item.equipment ?? item.muscleGroup ?? item.type}</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
+              ItemSeparatorComponent={() => <View style={styles.separator} />}
+              ListEmptyComponent={
+                trimmed ? (
+                  <TouchableOpacity style={styles.createExRow} onPress={handleCreatePress} activeOpacity={0.7}>
+                    <Ionicons name="add-circle-outline" size={20} color={T.primary} />
+                    <Text style={styles.createExText}>Create exercise "{trimmed}"</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.centered}><Text style={styles.emptyText}>No exercises found.</Text></View>
+                )
+              }
+            />
+          )}
+        </View>
+      </Modal>
       <CreateExerciseInSessionModal
         visible={showCreate}
         initialName={createName}
@@ -276,55 +249,35 @@ function PickDisciplineModal({ visible, onClose, onPick }: {
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const bottomSheetRef = useRef<BottomSheetModal>(null);
   const { data: disciplines, isLoading } = useDisciplines();
 
-  useEffect(() => {
-    if (visible) bottomSheetRef.current?.present();
-    else bottomSheetRef.current?.dismiss();
-  }, [visible]);
-
-  const renderBackdrop = useCallback(
-    (props: BottomSheetBackdropProps) => (
-      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
-    ),
-    [],
-  );
-
   return (
-    <BottomSheetModal
-      ref={bottomSheetRef}
-      snapPoints={SNAP_60}
-      enableDynamicSizing={false}
-      enablePanDownToClose
-      onDismiss={onClose}
-      backdropComponent={renderBackdrop}
-      backgroundStyle={{ backgroundColor: T.bg }}
-      handleIndicatorStyle={{ backgroundColor: T.textDim }}
-    >
-      <View style={styles.modalHeader}>
-        <Text style={styles.modalTitle}>Add Discipline</Text>
-        <TouchableOpacity onPress={() => { bottomSheetRef.current?.dismiss(); onClose(); }}>
-          <Text style={styles.modalCancel}>Cancel</Text>
-        </TouchableOpacity>
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
+      <View style={styles.modal}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Add Discipline</Text>
+          <TouchableOpacity onPress={onClose}>
+            <Text style={styles.modalCancel}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+        {isLoading ? (
+          <View style={styles.centered}><ActivityIndicator color={T.primary} /></View>
+        ) : (
+          <FlatList
+            data={disciplines ?? []}
+            keyExtractor={(i) => i.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity style={styles.pickRow} onPress={() => { onPick(item); onClose(); }}>
+                <Text style={styles.pickName}>{item.name}</Text>
+                <Text style={styles.pickMeta}>{item.category}</Text>
+              </TouchableOpacity>
+            )}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
+            ListEmptyComponent={<View style={styles.centered}><Text style={styles.emptyText}>No disciplines found.</Text></View>}
+          />
+        )}
       </View>
-      {isLoading ? (
-        <View style={styles.centered}><ActivityIndicator color={T.primary} /></View>
-      ) : (
-        <BottomSheetFlatList
-          data={disciplines ?? []}
-          keyExtractor={(i) => i.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity style={styles.pickRow} onPress={() => { onPick(item); bottomSheetRef.current?.dismiss(); onClose(); }}>
-              <Text style={styles.pickName}>{item.name}</Text>
-              <Text style={styles.pickMeta}>{item.category}</Text>
-            </TouchableOpacity>
-          )}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          ListEmptyComponent={<View style={styles.centered}><Text style={styles.emptyText}>No disciplines found.</Text></View>}
-        />
-      )}
-    </BottomSheetModal>
+    </Modal>
   );
 }
 
