@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { asc, eq, inArray, sql } from 'drizzle-orm';
 import { createDb } from '../db';
 import { disciplines, exercises, sessionEntries } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
