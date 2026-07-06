@@ -1,7 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   AddRoutineItemRequest,
-  CreateFromTemplateResponse,
   CreateRoutineRequest,
   ReorderRoutineItemsRequest,
   RoutineItemWithDetails,
@@ -27,18 +26,6 @@ export function useCreateRoutine() {
 
   return useMutation<RoutineWithItems, Error, CreateRoutineRequest>({
     mutationFn: (body) => apiPost<RoutineWithItems>('/routines', body),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['routines'] });
-      queryClient.invalidateQueries({ queryKey: ['calendar'] });
-    },
-  });
-}
-
-export function useCreateFromTemplate() {
-  const queryClient = useQueryClient();
-
-  return useMutation<CreateFromTemplateResponse, Error, { templateId: string }>({
-    mutationFn: (body) => apiPost<CreateFromTemplateResponse>('/routines/from-template', body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['routines'] });
       queryClient.invalidateQueries({ queryKey: ['calendar'] });

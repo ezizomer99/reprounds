@@ -7,12 +7,11 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { RoutineWithItems } from '@app/shared';
 import { useDeleteRoutine, useRoutines } from '../../../src/hooks/useRoutines';
-import { TemplateBrowseModal } from '../../../src/components/TemplateBrowseModal';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
@@ -66,7 +65,6 @@ export default function RoutinesScreen() {
   const { isPro, showPaywall } = useProGate();
   const { data: routines, isLoading, isError, error } = useRoutines();
   const deleteRoutine = useDeleteRoutine();
-  const [showTemplates, setShowTemplates] = useState(false);
 
   function handleDelete(id: string, name: string) {
     Alert.alert(
@@ -148,20 +146,6 @@ export default function RoutinesScreen() {
         <FlatList
           data={list}
           keyExtractor={(item) => item.id}
-          ListHeaderComponent={
-            <TouchableOpacity
-              style={styles.templateBtn}
-              onPress={() => setShowTemplates(true)}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="sparkles-outline" size={17} color={T.primary} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.templateBtnText}>Start from a template</Text>
-                <Text style={styles.templateBtnSub}>PPL, 5×5, full body, BJJ + lifts…</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={T.muted} />
-            </TouchableOpacity>
-          }
           renderItem={({ item }) => (
             <RoutineRow
               routine={item}
@@ -173,15 +157,13 @@ export default function RoutinesScreen() {
           ListEmptyComponent={
             <View style={styles.emptyBlock}>
               <Text style={styles.emptyText}>No routines yet.</Text>
-              <Text style={styles.emptySub}>Tap + to create one, or start from a template above.</Text>
+              <Text style={styles.emptySub}>Tap + to create one.</Text>
             </View>
           }
           contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
           showsVerticalScrollIndicator={false}
         />
       )}
-
-      <TemplateBrowseModal visible={showTemplates} onClose={() => setShowTemplates(false)} />
     </View>
   );
 }
@@ -219,15 +201,6 @@ function makeStyles(T: ThemeColors) {
     centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
     emptyBlock: { alignItems: 'center', paddingVertical: 48 },
 
-    templateBtn: {
-      flexDirection: 'row', alignItems: 'center', gap: 12,
-      marginHorizontal: D.pad, marginTop: 12, marginBottom: 4,
-      padding: 14, borderRadius: R.card,
-      backgroundColor: withAlpha(T.primary, 0.08),
-      borderWidth: 1, borderColor: withAlpha(T.primary, 0.25),
-    },
-    templateBtnText: { fontFamily: F.uiSemi, fontSize: 15, color: T.text },
-    templateBtnSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 1 },
     skeletonRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: D.pad, paddingVertical: 16, gap: 12, borderBottomWidth: 1, borderBottomColor: T.border },
     emptyText: { fontFamily: F.uiSemi, fontSize: 15, color: T.textDim, marginBottom: 4 },
     emptySub: { fontFamily: F.uiMed, fontSize: 13, color: T.muted },

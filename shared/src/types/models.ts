@@ -8,12 +8,6 @@ export interface User {
   name: string | null;
   avatarUrl: string | null;
   isGuest: boolean;
-  /** ISO timestamp when first-run onboarding was completed; null if not yet. */
-  onboardedAt: string | null;
-}
-
-export interface UpdateMeRequest {
-  onboarded?: boolean;
 }
 
 export interface GuestAuthRequest {
@@ -325,21 +319,6 @@ export interface RoutineListResponse {
   routines: RoutineWithItems[];
 }
 
-export interface CreateFromTemplateRequest {
-  templateId: string;
-}
-
-/** An item a template couldn't resolve to a global exercise/discipline. */
-export interface SkippedTemplateItem {
-  routineName: string;
-  itemName: string;
-  reason: string;
-}
-
-export interface CreateFromTemplateResponse {
-  routines: RoutineWithItems[];
-  skipped: SkippedTemplateItem[];
-}
 
 export interface CreateRoutineItemRequest {
   kind: EntryKind;

@@ -27,7 +27,6 @@ vi.mock('../db', () => ({
 }));
 
 import { Hono } from 'hono';
-import { ROUTINE_TEMPLATES } from '@app/shared';
 import { routineRoutes } from './routines';
 import { signJwt } from '../lib/jwt';
 
@@ -252,121 +251,5 @@ describe('PUT /routines/:id/items/order', () => {
     expect((await res.json() as { error: string }).error).toBe(
       'order must be a non-empty array of item IDs',
     );
-  });
-});
-
-// ---------------------------------------------------------------------------
-// POST /routines/from-template
-// ---------------------------------------------------------------------------
-describe('POST /routines/from-template', () => {
-  // A select chain that resolves to a fixed value, regardless of call order —
-  // fetchRoutineWithItems runs its per-routine selects concurrently (Promise.all),
-  // so the FIFO selectQueue can't be relied on for the fetch phase.
-  function chainResolving(value: unknown) {
-    const chain = {
-      from: () => chain,
-      where: () => chain,
-      limit: () => chain,
-      orderBy: () => chain,
-      leftJoin: () => chain,
-      then: (resolve: (v: unknown) => void, reject: (e: unknown) => void) =>
-        Promise.resolve(value).then(resolve, reject),
-    };
-    return chain;
-  }
-
-  function routineRow(id: string, name: string) {
-    return {
-      id, userId: USER_ID, name, dayLabel: null, notes: null, rrule: null,
-      startDate: null, endDate: null, timeOfDay: null, createdAt: new Date(),
-    };
-  }
-
-  // Build a global seed catalog that matches every exercise/discipline the
-  // template references, so nothing is skipped.
-  function catalogFor(template: (typeof ROUTINE_TEMPLATES)[number]) {
-    const exNames = new Set<string>();
-    const discNames = new Set<string>();
-    for (const day of template.routines) {
-      for (const item of day.items) {
-        if (item.kind === 'exercise') exNames.add(item.name);
-        else discNames.add(item.disciplineName);
-      }
-    }
-    return {
-      exercises: [...exNames].map((name, i) => ({ id: `ex-${i}`, name })),
-      disciplines: [...discNames].map((name, i) => ({ id: `disc-${i}`, name })),
-    };
-  }
-
-  // Route the two catalog selects (calls 1 & 2, sequential and before any
-  // fetch) to the provided arrays; every later select resolves to a routine row
-  // so fetchRoutineWithItems finds each created routine.
-  function stubSelects(exercises: unknown[], disciplines: unknown[]) {
-    let calls = 0;
-    mock.select.mockImplementation(() => {
-      calls += 1;
-      if (calls === 1) return chainResolving(exercises);
-      if (calls === 2) return chainResolving(disciplines);
-      return chainResolving([routineRow('r-created', 'Created day')]);
-    });
-  }
-
-  it('returns 404 for an unknown template id', async () => {
-    const res = await makeApp().request('/routines/from-template', {
-      method: 'POST',
-      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ templateId: 'does-not-exist' }),
-    }, env);
-
-    expect(res.status).toBe(404);
-    expect((await res.json() as { error: string }).error).toBe('Unknown template');
-  });
-
-  it('returns 400 for a malformed body', async () => {
-    const res = await makeApp().request('/routines/from-template', {
-      method: 'POST',
-      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
-      body: 'not json',
-    }, env);
-
-    expect(res.status).toBe(400);
-    expect((await res.json() as { error: string }).error).toBe('Invalid request body');
-  });
-
-  it('clones a template into routines when the catalog resolves every item', async () => {
-    const template = ROUTINE_TEMPLATES[0];
-    const catalog = catalogFor(template);
-    mock.insertedRow = { id: 'r-created' };
-    stubSelects(catalog.exercises, catalog.disciplines);
-
-    const res = await makeApp().request('/routines/from-template', {
-      method: 'POST',
-      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ templateId: template.id }),
-    }, env);
-
-    expect(res.status).toBe(201);
-    const body = await res.json() as { routines: unknown[]; skipped: unknown[] };
-    expect(body.routines).toHaveLength(template.routines.length);
-    expect(body.skipped).toHaveLength(0);
-  });
-
-  it('reports unresolved items in `skipped` instead of failing', async () => {
-    const template = ROUTINE_TEMPLATES[0]; // gym template — all exercise items
-    mock.insertedRow = { id: 'r-created' };
-    stubSelects([], []); // empty catalog → nothing matches
-
-    const res = await makeApp().request('/routines/from-template', {
-      method: 'POST',
-      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ templateId: template.id }),
-    }, env);
-
-    expect(res.status).toBe(201);
-    const body = await res.json() as { routines: unknown[]; skipped: unknown[] };
-    // Routines are still created (empty), and every item is reported skipped.
-    expect(body.routines).toHaveLength(template.routines.length);
-    expect(body.skipped.length).toBeGreaterThan(0);
   });
 });
