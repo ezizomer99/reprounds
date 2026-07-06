@@ -15,7 +15,7 @@ import type {
   UpdateSessionRequest,
   UpdateStrengthSetRequest,
 } from '@app/shared';
-import { apiDelete, apiGet, apiPatch, apiPost } from '../lib/api';
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../lib/api';
 
 const sessionKey = (id: string) => ['session', id] as const;
 
@@ -111,6 +111,42 @@ export function useCompleteSession() {
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['session', variables.id] });
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
+      // A newly completed session changes stats aggregates and may carry notes.
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+    },
+  });
+}
+
+export function useReorderSessionEntries() {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, { sessionId: string; order: string[] }, SessionCtx>({
+    mutationFn: ({ sessionId, order }) =>
+      apiPut<void>(`/sessions/${sessionId}/entries/order`, { order }),
+    onMutate: async ({ sessionId, order }) => {
+      const key = sessionKey(sessionId);
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<SessionWithEntries>(key);
+      if (previous) {
+        const byId = new Map(previous.entries.map((e) => [e.id, e]));
+        const reordered = order
+          .map((id) => byId.get(id))
+          .filter((e): e is SessionEntryWithSets => e !== undefined);
+        // Entries added since the order snapshot was taken keep their spot at the end.
+        const missing = previous.entries.filter((e) => !order.includes(e.id));
+        queryClient.setQueryData<SessionWithEntries>(key, {
+          ...previous,
+          entries: [...reordered, ...missing].map((e, i) => ({ ...e, orderIndex: i })),
+        });
+      }
+      return { previous };
+    },
+    onError: (_e, { sessionId }, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(sessionKey(sessionId), ctx.previous);
+    },
+    onSettled: (_d, _e, { sessionId }) => {
+      queryClient.invalidateQueries({ queryKey: sessionKey(sessionId) });
     },
   });
 }

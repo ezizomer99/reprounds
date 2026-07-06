@@ -1,7 +1,7 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import type { User } from '@app/shared';
-import { apiGet, apiPost, apiDelete } from '../lib/api';
+import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api';
 import {
   clearSessionToken,
   setSessionToken,
@@ -104,6 +104,20 @@ export function useSignIn() {
   }
 
   return { signInWithGoogle, signInAsGuest, registerWithEmail, signInWithEmail };
+}
+
+export function useCompleteOnboarding() {
+  const queryClient = useQueryClient();
+
+  return useMutation<User, Error, void>({
+    mutationFn: async () => {
+      const data = await apiPatch<MeResponse>('/auth/me', { onboarded: true });
+      return data.user;
+    },
+    onSuccess: (user) => {
+      queryClient.setQueryData<User>(['auth', 'me'], user);
+    },
+  });
 }
 
 export function useSignOut() {

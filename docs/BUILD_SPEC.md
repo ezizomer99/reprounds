@@ -291,6 +291,21 @@ PATCH  /sessions/:id/entries/:entryId
 POST   /sessions/:id/entries/:entryId/sets
 PATCH  /sessions/:id/entries/:entryId/sets/:setId
 DELETE /sessions/:id/entries/:entryId/sets/:setId
+PUT    /sessions/:id/entries/order                 reorder entries (entry IDs, first = top)
+
+GET    /stats/muscles                              ?since=YYYY-MM-DD — muscle groups trained (gym)
+GET    /stats/top-lifts                            ?since= — top 10 exercises by est. 1RM (gym)
+GET    /stats/mat                                  ?since=YYYY-MM-DD&weeks= — weekly rounds/mat-time
+                                                   buckets + intensity split + sparring aggregates
+                                                   (MatStatsResponse); since = Monday of oldest bucket
+GET    /stats/partners                             ?since=YYYY-MM-DD — per-partner sparring breakdown
+                                                   (rounds, minutes, subs for/against, last date)
+GET    /notes                                      ?limit=&cursor=&tag=&q= — all notes (session,
+                                                   entry, technique, per-round) grouped per
+                                                   completed session, newest first; keyset-paginated;
+                                                   optional technique-tag filter + ILIKE text search
+                                                   (NotesTimelineResponse)
+GET    /notes/tags                                 distinct technique tags + counts (TagListResponse)
 ```
 
 ---

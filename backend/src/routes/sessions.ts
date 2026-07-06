@@ -16,6 +16,7 @@ import type {
   CreateSessionEntryRequest,
   CreateSessionRequest,
   CreateStrengthSetRequest,
+  ReorderSessionEntriesRequest,
   SessionEntryWithSets,
   SessionWithEntries,
   StrengthSet,
@@ -567,6 +568,49 @@ sessionRoutes.post('/:id/entries', async (c) => {
 
   const entry = await fetchEntryWithSets(db, inserted.id);
   return c.json({ entry }, 201);
+});
+
+// PUT /sessions/:id/entries/order — full new ordering of the session's
+// entries. Mirrors PUT /routines/:id/items/order.
+sessionRoutes.put('/:id/entries/order', async (c) => {
+  const userId = c.get('userId');
+  const sessionId = c.req.param('id');
+  const db = getDb(c.env);
+
+  const ownerCheck = await db
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId)))
+    .limit(1);
+
+  if (ownerCheck.length === 0) return c.json({ error: 'Not found' }, 404);
+
+  let body: ReorderSessionEntriesRequest;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid request body' }, 400);
+  }
+
+  if (!Array.isArray(body.order) || body.order.length === 0) {
+    return c.json({ error: 'order must be a non-empty array of entry IDs' }, 400);
+  }
+
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < body.order.length; i++) {
+      await tx
+        .update(sessionEntries)
+        .set({ orderIndex: i })
+        .where(
+          and(
+            eq(sessionEntries.id, body.order[i]),
+            eq(sessionEntries.sessionId, sessionId),
+          ),
+        );
+    }
+  });
+
+  return c.json({ success: true });
 });
 
 // PATCH /sessions/:id/entries/:entryId

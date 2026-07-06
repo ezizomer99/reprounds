@@ -36,6 +36,8 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash'),
   name:         text('name'),
   avatarUrl:    text('avatar_url'),
+  // Set when the user completes first-run onboarding. Null = not yet onboarded.
+  onboardedAt:  timestamp('onboarded_at', { withTimezone: true }),
   createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   // Enforce email uniqueness for credential accounts only, case-insensitively.

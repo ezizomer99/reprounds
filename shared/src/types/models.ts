@@ -1,5 +1,6 @@
 import type { ActivityType, DisciplineCat, EntryKind, FightMethod, FightResult, GiType, SessionStatus, SetType } from './enums';
 import type { FieldConfig } from './fieldConfig';
+import type { StrikeCounts, StrikingRoundType } from './rounds';
 
 export interface User {
   id: string;
@@ -7,6 +8,12 @@ export interface User {
   name: string | null;
   avatarUrl: string | null;
   isGuest: boolean;
+  /** ISO timestamp when first-run onboarding was completed; null if not yet. */
+  onboardedAt: string | null;
+}
+
+export interface UpdateMeRequest {
+  onboarded?: boolean;
 }
 
 export interface GuestAuthRequest {
@@ -318,6 +325,22 @@ export interface RoutineListResponse {
   routines: RoutineWithItems[];
 }
 
+export interface CreateFromTemplateRequest {
+  templateId: string;
+}
+
+/** An item a template couldn't resolve to a global exercise/discipline. */
+export interface SkippedTemplateItem {
+  routineName: string;
+  itemName: string;
+  reason: string;
+}
+
+export interface CreateFromTemplateResponse {
+  routines: RoutineWithItems[];
+  skipped: SkippedTemplateItem[];
+}
+
 export interface CreateRoutineItemRequest {
   kind: EntryKind;
   exerciseId?: string | null;
@@ -410,6 +433,11 @@ export interface UpdateSessionEntryRequest {
   exerciseId?: string | null;
 }
 
+/** Full new ordering of a session's entries (entry IDs, first = top). */
+export interface ReorderSessionEntriesRequest {
+  order: string[];
+}
+
 export interface CreateStrengthSetRequest {
   setNumber: number;
   setType?: SetType;
@@ -482,6 +510,108 @@ export interface TopLift {
 
 export interface TopLiftsResponse {
   lifts: TopLift[];
+}
+
+// ---- Mat (martial arts) stats ----
+
+export interface MatWeekBucket {
+  /** ISO date of the bucket's Monday, YYYY-MM-DD. */
+  weekStart: string;
+  rounds: number;
+  /** Whole minutes of mat time attributed to this week. */
+  minutes: number;
+  /** Distinct completed sessions containing a martial-arts entry. */
+  sessions: number;
+}
+
+export interface MatStatsResponse {
+  /** Oldest → newest, one bucket per requested week. */
+  weeks: MatWeekBucket[];
+  totals: {
+    sessions: number;
+    rounds: number;
+    minutes: number;
+  };
+  /** Round counts by intensity; rounds without an intensity land in `unspecified`. */
+  intensity: {
+    light: number;
+    medium: number;
+    hard: number;
+    unspecified: number;
+  };
+  // Mixed (MMA) rounds fold their counters into these blocks but only
+  // category-pure rounds contribute to each block's `rounds` count.
+  grappling: {
+    rounds: number;
+    submissionsFor: number;
+    submissionsAgainst: number;
+    sweeps: number;
+    takedowns: number;
+  };
+  striking: {
+    rounds: number;
+    roundsByType: Partial<Record<StrikingRoundType, number>>;
+    strikes: StrikeCounts;
+    totalStrikes: number;
+  };
+}
+
+// ---- Per-partner sparring stats ----
+
+export interface PartnerStatsItem {
+  /** partnerId, or null for the "Unassigned" bucket (rounds with no partner). */
+  partnerId: string | null;
+  name: string;
+  rounds: number;
+  minutes: number;
+  sessions: number;
+  submissionsFor: number;
+  submissionsAgainst: number;
+  /** ISO date (YYYY-MM-DD) of the most recent session rolled together. */
+  lastDate: string | null;
+}
+
+export interface PartnerStatsResponse {
+  since: string;
+  partners: PartnerStatsItem[];
+}
+
+// ---- Notes timeline ----
+
+export type NoteSource =
+  | { type: 'session' }
+  | { type: 'entry'; entryId: string }
+  | { type: 'technique'; entryId: string }
+  | { type: 'round'; entryId: string; roundNumber: number };
+
+export interface NoteItem {
+  source: NoteSource;
+  /** Display label computed server-side, e.g. "Session notes", "BJJ — Round 3". */
+  label: string;
+  text: string;
+}
+
+export interface NotesSessionGroup {
+  sessionId: string;
+  date: string;
+  sessionName: string | null;
+  kinds: EntryKind[];
+  notes: NoteItem[];
+}
+
+export interface NotesTimelineResponse {
+  groups: NotesSessionGroup[];
+  /** Opaque keyset cursor ("<date>_<sessionId>"); null when exhausted. */
+  nextCursor: string | null;
+}
+
+export interface TagCount {
+  tag: string;
+  count: number;
+}
+
+export interface TagListResponse {
+  tags: TagCount[];
 }
 
 // ---- Phase 5: Calendar + Recurrence ----

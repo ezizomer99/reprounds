@@ -46,6 +46,21 @@ export function avgPerWeek(sessions: Session[], weeks = 4): number {
   return Math.round((recent.length / weeks) * 10) / 10;
 }
 
+/**
+ * ISO date (local) of the Monday `weeks - 1` weeks before the current week —
+ * the window start for weekly charts (last bucket = this week). Formats the
+ * local date directly rather than via toISOString so timezones ahead of UTC
+ * don't slide the Monday back to Sunday.
+ */
+export function weeksAgoMonday(weeks = 8): string {
+  const monday = mondayOf(new Date());
+  monday.setDate(monday.getDate() - (weeks - 1) * 7);
+  const y = monday.getFullYear();
+  const m = String(monday.getMonth() + 1).padStart(2, '0');
+  const d = String(monday.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 /** Aggregate session counts into weekly buckets for a bar chart. */
 export function getWeeklyBarData(
   sessions: Session[],

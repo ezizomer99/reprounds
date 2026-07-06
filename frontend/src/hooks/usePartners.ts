@@ -3,8 +3,18 @@ import type {
   CreatePartnerRequest,
   Partner,
   PartnerListResponse,
+  PartnerStatsResponse,
+  UpdatePartnerRequest,
 } from '@app/shared';
-import { apiDelete, apiGet, apiPost } from '../lib/api';
+import { apiDelete, apiGet, apiPatch, apiPost } from '../lib/api';
+
+export function usePartnerStats() {
+  return useQuery<PartnerStatsResponse, Error>({
+    queryKey: ['stats', 'partners'],
+    queryFn: () => apiGet<PartnerStatsResponse>('/stats/partners'),
+    staleTime: 5 * 60 * 1000,
+  });
+}
 
 export function usePartners() {
   return useQuery<Partner[], Error>({
@@ -28,6 +38,19 @@ export function useCreatePartner() {
   });
 }
 
+export function useUpdatePartner() {
+  const queryClient = useQueryClient();
+
+  return useMutation<Partner, Error, { id: string } & UpdatePartnerRequest>({
+    mutationFn: ({ id, ...body }) =>
+      apiPatch<{ partner: Partner }>(`/partners/${id}`, body).then((r) => r.partner),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['partners'] });
+      queryClient.invalidateQueries({ queryKey: ['stats', 'partners'] });
+    },
+  });
+}
+
 export function useDeletePartner() {
   const queryClient = useQueryClient();
 
@@ -35,6 +58,7 @@ export function useDeletePartner() {
     mutationFn: (id) => apiDelete(`/partners/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['partners'] });
+      queryClient.invalidateQueries({ queryKey: ['stats', 'partners'] });
     },
   });
 }
