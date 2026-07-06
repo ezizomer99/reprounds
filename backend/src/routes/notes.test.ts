@@ -195,4 +195,39 @@ describe('GET /notes', () => {
     const res = await makeApp().request('/notes', {}, env);
     expect(res.status).toBe(401);
   });
+
+  it('accepts tag and q filters together', async () => {
+    mock.executeQueue.push([{ id: S1, date: '2026-07-02', name: null, notes: 'triangle from guard' }]);
+    mock.selectQueue.push([]);
+    const res = await makeApp().request(
+      '/notes?tag=triangle&q=guard',
+      { headers: await bearer() },
+      env,
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.groups).toHaveLength(1);
+  });
+});
+
+describe('GET /notes/tags', () => {
+  it('returns tags with counts', async () => {
+    mock.executeQueue.push([
+      { tag: 'triangle', count: 5 },
+      { tag: 'knee cut', count: 3 },
+    ]);
+    const res = await makeApp().request('/notes/tags', { headers: await bearer() }, env);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      tags: [
+        { tag: 'triangle', count: 5 },
+        { tag: 'knee cut', count: 3 },
+      ],
+    });
+  });
+
+  it('requires auth', async () => {
+    const res = await makeApp().request('/notes/tags', {}, env);
+    expect(res.status).toBe(401);
+  });
 });

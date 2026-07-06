@@ -95,6 +95,12 @@ interface RoundsSessionBase {
   classType?: ClassType | null;
   /** Free-form technique journal for the session. */
   techniqueNotes?: string | null;
+  /**
+   * Lowercased technique tags for the session, e.g. ['knee cut', 'triangle'].
+   * Stored inside the details JSONB (no dedicated table); filterable on the
+   * notes timeline and countable in mat stats.
+   */
+  techniqueTags?: string[];
 }
 
 /**

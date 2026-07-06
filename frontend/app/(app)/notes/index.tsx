@@ -1,17 +1,20 @@
 import {
   ActivityIndicator,
   FlatList,
+  ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { NotesSessionGroup } from '@app/shared';
-import { useNotesTimeline } from '../../../src/hooks/useNotes';
+import { useNotesTimeline, useTechniqueTags } from '../../../src/hooks/useNotes';
+import { useDebouncedValue } from '../../../src/hooks/useDebouncedValue';
 import { Skeleton } from '../../../src/components/Skeleton';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
@@ -32,8 +35,19 @@ export default function NotesScreen() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
 
-  const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = useNotesTimeline();
+  const [search, setSearch] = useState('');
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const debouncedSearch = useDebouncedValue(search.trim(), 300);
+
+  const { data: tagData } = useTechniqueTags();
+  const tags = tagData?.tags ?? [];
+
+  const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = useNotesTimeline({
+    tag: activeTag,
+    q: debouncedSearch || null,
+  });
   const groups = useMemo(() => data?.pages.flatMap((p) => p.groups) ?? [], [data]);
+  const filtering = !!activeTag || debouncedSearch.length > 0;
 
   const renderGroup = ({ item }: { item: NotesSessionGroup }) => {
     const isMat = item.kinds.includes('martial_arts');
@@ -88,6 +102,49 @@ export default function NotesScreen() {
         <Text style={styles.headerTitle}>Notes</Text>
       </View>
 
+      <View style={styles.searchRow}>
+        <Ionicons name="search" size={15} color={T.muted} />
+        <TextInput
+          style={styles.searchInput}
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search notes…"
+          placeholderTextColor={T.muted}
+          returnKeyType="search"
+          selectionColor={T.primary}
+          autoCapitalize="none"
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch('')} hitSlop={8}>
+            <Ionicons name="close-circle" size={16} color={T.muted} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {tags.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tagRow}
+        >
+          {tags.map((t) => {
+            const active = activeTag === t.tag;
+            return (
+              <TouchableOpacity
+                key={t.tag}
+                style={[styles.tagChip, active && styles.tagChipActive]}
+                onPress={() => setActiveTag(active ? null : t.tag)}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.tagChipText, active && styles.tagChipTextActive]}>
+                  {t.tag}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
+
       {isLoading ? (
         <View style={{ padding: D.pad, gap: D.stack }}>
           <Skeleton width="100%" height={110} radius={R.card} />
@@ -96,10 +153,12 @@ export default function NotesScreen() {
         </View>
       ) : groups.length === 0 ? (
         <View style={styles.empty}>
-          <Ionicons name="document-text-outline" size={36} color={T.muted} />
-          <Text style={styles.emptyTitle}>No notes yet</Text>
+          <Ionicons name={filtering ? 'search-outline' : 'document-text-outline'} size={36} color={T.muted} />
+          <Text style={styles.emptyTitle}>{filtering ? 'No matching notes' : 'No notes yet'}</Text>
           <Text style={styles.emptyText}>
-            Notes you add to sessions, techniques, and rounds will collect here for looking back.
+            {filtering
+              ? 'Try a different search or clear the tag filter.'
+              : 'Notes you add to sessions, techniques, and rounds will collect here for looking back.'}
           </Text>
         </View>
       ) : (
@@ -134,6 +193,22 @@ function makeStyles(T: ThemeColors) {
     },
     backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
     headerTitle: { flex: 1, fontFamily: F.uiBold, fontSize: 19, color: T.text, letterSpacing: -0.2 },
+
+    searchRow: {
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.sm,
+      marginHorizontal: D.pad, marginTop: 12, paddingHorizontal: 12,
+    },
+    searchInput: { flex: 1, fontFamily: F.uiMed, fontSize: 14, color: T.text, paddingVertical: 10 },
+
+    tagRow: { gap: 6, paddingHorizontal: D.pad, paddingVertical: 10 },
+    tagChip: {
+      paddingHorizontal: 12, paddingVertical: 6, borderRadius: R.chip,
+      backgroundColor: T.surface2, borderWidth: 1, borderColor: T.border,
+    },
+    tagChipActive: { backgroundColor: withAlpha(T.primary, 0.15), borderColor: withAlpha(T.primary, 0.4) },
+    tagChipText: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
+    tagChipTextActive: { color: T.primary, fontFamily: F.uiSemi },
 
     groupCard: {
       backgroundColor: T.surface,

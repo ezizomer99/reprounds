@@ -605,6 +605,15 @@ export interface NotesTimelineResponse {
   nextCursor: string | null;
 }
 
+export interface TagCount {
+  tag: string;
+  count: number;
+}
+
+export interface TagListResponse {
+  tags: TagCount[];
+}
+
 // ---- Phase 5: Calendar + Recurrence ----
 
 export interface CalendarResponse {

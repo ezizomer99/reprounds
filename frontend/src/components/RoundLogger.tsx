@@ -1,6 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTechniqueTags } from '../hooks/useNotes';
 import type {
   ClassType,
   DisciplineCat,
@@ -17,6 +18,7 @@ import { ROUNDS_SCHEMA } from '@app/shared';
 import { PartnerPicker } from './PartnerPicker';
 import { useTheme } from '../theme/ThemeContext';
 import { F, R, ThemeColors } from '../theme/colors';
+import { withAlpha } from '../lib/color';
 
 // A structural superset of every round type so the editor can hold all possible
 // fields; the active card only renders the ones relevant to its category.
@@ -27,6 +29,7 @@ type EditableSession = {
   rounds: EditableRound[];
   classType?: ClassType | null;
   techniqueNotes?: string | null;
+  techniqueTags?: string[];
 };
 
 function genId() {
@@ -226,6 +229,75 @@ export function RoundLogger({
           textAlignVertical="top"
         />
       </View>
+
+      {/* Technique tags */}
+      <TagEditor
+        tags={data.techniqueTags ?? []}
+        onChange={(tags) => patchSession({ techniqueTags: tags })}
+      />
+    </View>
+  );
+}
+
+/**
+ * Lowercased technique tag editor: removable chips + a text field that adds on
+ * submit/comma, with suggestions drawn from the user's previously used tags.
+ */
+function TagEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string[]) => void }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const [text, setText] = useState('');
+  const { data: tagData } = useTechniqueTags();
+
+  const addTag = (raw: string) => {
+    const tag = raw.trim().toLowerCase().replace(/,+$/, '');
+    if (!tag) return;
+    if (!tags.includes(tag)) onChange([...tags, tag]);
+    setText('');
+  };
+
+  const removeTag = (tag: string) => onChange(tags.filter((t) => t !== tag));
+
+  const suggestions = useMemo(() => {
+    const typed = text.trim().toLowerCase();
+    return (tagData?.tags ?? [])
+      .map((t) => t.tag)
+      .filter((t) => !tags.includes(t) && (typed === '' ? true : t.includes(typed)))
+      .slice(0, 6);
+  }, [tagData, tags, text]);
+
+  return (
+    <View>
+      <Text style={styles.miniLabel}>Technique tags</Text>
+      <View style={styles.tagWrap}>
+        {tags.map((tag) => (
+          <TouchableOpacity key={tag} style={styles.tagChip} onPress={() => removeTag(tag)}>
+            <Text style={styles.tagChipText}>{tag}</Text>
+            <Ionicons name="close" size={13} color={T.primary} />
+          </TouchableOpacity>
+        ))}
+      </View>
+      <TextInput
+        style={styles.numInput}
+        value={text}
+        onChangeText={(t) => (t.endsWith(',') ? addTag(t) : setText(t))}
+        onSubmitEditing={() => addTag(text)}
+        placeholder="Add a tag (e.g. knee cut)"
+        placeholderTextColor={T.muted}
+        autoCapitalize="none"
+        returnKeyType="done"
+        blurOnSubmit={false}
+      />
+      {suggestions.length > 0 && (
+        <View style={styles.tagSuggestRow}>
+          {suggestions.map((s) => (
+            <TouchableOpacity key={s} style={styles.tagSuggest} onPress={() => addTag(s)}>
+              <Ionicons name="add" size={12} color={T.textDim} />
+              <Text style={styles.tagSuggestText}>{s}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -423,6 +495,20 @@ function makeStyles(T: ThemeColors) {
       paddingHorizontal: 12, paddingVertical: 9,
     },
     journal: { minHeight: 64, fontFamily: F.ui },
+    tagWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
+    tagChip: {
+      flexDirection: 'row', alignItems: 'center', gap: 4,
+      paddingHorizontal: 10, paddingVertical: 5, borderRadius: R.chip,
+      backgroundColor: withAlpha(T.primary, 0.14),
+    },
+    tagChipText: { fontFamily: F.uiMed, fontSize: 12, color: T.primary },
+    tagSuggestRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+    tagSuggest: {
+      flexDirection: 'row', alignItems: 'center', gap: 3,
+      paddingHorizontal: 9, paddingVertical: 4, borderRadius: R.chip,
+      backgroundColor: T.surface, borderWidth: 1, borderColor: T.border,
+    },
+    tagSuggestText: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
     roundNotes: {
       fontFamily: F.ui, fontSize: 14, color: T.text,
       backgroundColor: T.surface, borderRadius: R.sm, borderWidth: 1, borderColor: T.border,

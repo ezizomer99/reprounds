@@ -300,10 +300,12 @@ GET    /stats/mat                                  ?since=YYYY-MM-DD&weeks= — 
                                                    (MatStatsResponse); since = Monday of oldest bucket
 GET    /stats/partners                             ?since=YYYY-MM-DD — per-partner sparring breakdown
                                                    (rounds, minutes, subs for/against, last date)
-GET    /notes                                      ?limit=&cursor= — all notes (session, entry,
-                                                   technique, per-round) grouped per completed
-                                                   session, newest first; keyset-paginated
+GET    /notes                                      ?limit=&cursor=&tag=&q= — all notes (session,
+                                                   entry, technique, per-round) grouped per
+                                                   completed session, newest first; keyset-paginated;
+                                                   optional technique-tag filter + ILIKE text search
                                                    (NotesTimelineResponse)
+GET    /notes/tags                                 distinct technique tags + counts (TagListResponse)
 ```
 
 ---

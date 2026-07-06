@@ -4,7 +4,7 @@ import { createDb } from '../db';
 import { disciplines, exercises, sessionEntries } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import { isRoundsSession } from '@app/shared';
-import type { EntryKind, NoteItem, NotesSessionGroup, NotesTimelineResponse } from '@app/shared';
+import type { EntryKind, NoteItem, NotesSessionGroup, NotesTimelineResponse, TagListResponse } from '@app/shared';
 
 type Env = {
   Bindings: {
@@ -63,6 +63,43 @@ notesRoutes.get('/', async (c) => {
       ? sql`AND (s.date, s.id) < (${cursorDate}::date, ${cursorId}::uuid)`
       : sql``;
 
+  // Optional technique-tag filter: session has an entry whose techniqueTags
+  // JSONB array contains the (lowercased) tag.
+  const tag = c.req.query('tag')?.trim().toLowerCase();
+  const tagClause = tag
+    ? sql`AND EXISTS (
+        SELECT 1 FROM session_entries se2
+        WHERE se2.session_id = s.id
+          AND jsonb_typeof(se2.details->'techniqueTags') = 'array'
+          AND se2.details->'techniqueTags' ? ${tag}
+      )`
+    : sql``;
+
+  // Optional free-text search across every note surface (case-insensitive).
+  const rawQ = c.req.query('q')?.trim();
+  const q = rawQ ? rawQ.slice(0, 100) : null;
+  const pattern = q ? `%${q.replace(/[\\%_]/g, (m) => `\\${m}`)}%` : null;
+  const searchClause = pattern
+    ? sql`AND (
+        s.notes ILIKE ${pattern}
+        OR EXISTS (
+          SELECT 1 FROM session_entries se3
+          WHERE se3.session_id = s.id
+            AND (
+              se3.notes ILIKE ${pattern}
+              OR se3.details->>'techniqueNotes' ILIKE ${pattern}
+              OR (
+                jsonb_typeof(se3.details->'rounds') = 'array'
+                AND EXISTS (
+                  SELECT 1 FROM jsonb_array_elements(se3.details->'rounds') r2
+                  WHERE r2->>'notes' ILIKE ${pattern}
+                )
+              )
+            )
+        )
+      )`
+    : sql``;
+
   const pageRows = (await db.execute(sql`
     SELECT s.id, s.date::text AS date, s.name, s.notes
     FROM sessions s
@@ -86,6 +123,8 @@ notesRoutes.get('/', async (c) => {
             )
         )
       )
+      ${tagClause}
+      ${searchClause}
       ${cursorClause}
     ORDER BY s.date DESC, s.id DESC
     LIMIT ${limit + 1}
@@ -174,6 +213,29 @@ notesRoutes.get('/', async (c) => {
   }
 
   const result: NotesTimelineResponse = { groups, nextCursor };
+  return c.json(result);
+});
+
+// GET /notes/tags — distinct technique tags across the user's completed mat
+// sessions, with usage counts. Powers tag autocomplete and the filter chips.
+notesRoutes.get('/tags', async (c) => {
+  const userId = c.get('userId');
+  const db = getDb(c.env);
+
+  const rows = (await db.execute(sql`
+    SELECT lower(t) AS tag, count(*)::int AS count
+    FROM sessions s
+    JOIN session_entries se ON se.session_id = s.id
+    CROSS JOIN LATERAL jsonb_array_elements_text(se.details->'techniqueTags') AS t
+    WHERE s.user_id = ${userId}
+      AND s.status = 'completed'
+      AND jsonb_typeof(se.details->'techniqueTags') = 'array'
+    GROUP BY lower(t)
+    ORDER BY count DESC, tag ASC
+    LIMIT 50
+  `)) as unknown as Array<{ tag: string; count: number }>;
+
+  const result: TagListResponse = { tags: rows.map((r) => ({ tag: r.tag, count: r.count })) };
   return c.json(result);
 });
 
