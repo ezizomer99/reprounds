@@ -35,11 +35,14 @@ export default function OnboardingScreen() {
   const [showTemplates, setShowTemplates] = useState(false);
 
   function finish() {
-    completeOnboarding.mutate(undefined, {
-      // Even on error, don't trap the user on onboarding — the gate re-checks
-      // on next load, and a failed PATCH just means they'll see it again.
-      onSettled: () => router.replace('/(app)/(tabs)/workout'),
-    });
+    // Fire the completion write (it optimistically flips the onboarded flag in
+    // cache and retries in the background) and navigate SYNCHRONOUSLY. We must
+    // not gate navigation on the request resolving: while offline the mutation
+    // pauses and never settles, which previously left the user stuck on the
+    // spinner — and the app-layout gate bounced them back whenever the flag
+    // hadn't landed. The optimistic update keeps the gate satisfied.
+    completeOnboarding.mutate();
+    router.replace('/(app)/(tabs)/workout');
   }
 
   async function handleEnableNotifications() {

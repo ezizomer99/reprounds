@@ -114,6 +114,22 @@ export function useCompleteOnboarding() {
       const data = await apiPatch<MeResponse>('/auth/me', { onboarded: true });
       return data.user;
     },
+    // Optimistically mark the user onboarded so the app-layout gate lets them
+    // through immediately — even if the PATCH is slow, paused offline, or fails.
+    // We deliberately do NOT roll back on error: a failed write just means the
+    // server flag stays unset and the user re-sees onboarding on their next cold
+    // /auth/me fetch. This is what breaks the "close the questionnaire and get
+    // bounced straight back" trap.
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['auth', 'me'] });
+      const prev = queryClient.getQueryData<User>(['auth', 'me']);
+      if (prev && !prev.onboardedAt) {
+        queryClient.setQueryData<User>(['auth', 'me'], {
+          ...prev,
+          onboardedAt: new Date().toISOString(),
+        });
+      }
+    },
     onSuccess: (user) => {
       queryClient.setQueryData<User>(['auth', 'me'], user);
     },

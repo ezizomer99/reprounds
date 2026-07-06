@@ -280,72 +280,80 @@ routineRoutes.post('/from-template', async (c) => {
   const template = findRoutineTemplate(body.templateId);
   if (!template) return c.json({ error: 'Unknown template' }, 404);
 
-  // Resolve names against the global seed catalog (user_id IS NULL).
-  const globalExercises = await db
-    .select({ id: exercises.id, name: exercises.name })
-    .from(exercises)
-    .where(isNull(exercises.userId));
-  const globalDisciplines = await db
-    .select({ id: disciplines.id, name: disciplines.name })
-    .from(disciplines)
-    .where(isNull(disciplines.userId));
+  try {
+    // Resolve names against the global seed catalog (user_id IS NULL).
+    const globalExercises = await db
+      .select({ id: exercises.id, name: exercises.name })
+      .from(exercises)
+      .where(isNull(exercises.userId));
+    const globalDisciplines = await db
+      .select({ id: disciplines.id, name: disciplines.name })
+      .from(disciplines)
+      .where(isNull(disciplines.userId));
 
-  const skipped: SkippedTemplateItem[] = [];
+    const skipped: SkippedTemplateItem[] = [];
 
-  const createdIds = await db.transaction(async (tx) => {
-    const ids: string[] = [];
-    for (const day of template.routines) {
-      const [routine] = await tx
-        .insert(routines)
-        .values({ userId, name: day.name, dayLabel: day.dayLabel ?? null })
-        .returning();
-      ids.push(routine.id);
+    const createdIds = await db.transaction(async (tx) => {
+      const ids: string[] = [];
+      for (const day of template.routines) {
+        const [routine] = await tx
+          .insert(routines)
+          .values({ userId, name: day.name, dayLabel: day.dayLabel ?? null })
+          .returning();
+        ids.push(routine.id);
 
-      const itemValues: (typeof routineItems.$inferInsert)[] = [];
-      for (const item of day.items) {
-        if (item.kind === 'exercise') {
-          const exerciseId = matchExercise(item.name, globalExercises);
-          if (!exerciseId) {
-            skipped.push({ routineName: day.name, itemName: item.name, reason: 'exercise not found' });
-            continue;
+        const itemValues: (typeof routineItems.$inferInsert)[] = [];
+        for (const item of day.items) {
+          if (item.kind === 'exercise') {
+            const exerciseId = matchExercise(item.name, globalExercises);
+            if (!exerciseId) {
+              skipped.push({ routineName: day.name, itemName: item.name, reason: 'exercise not found' });
+              continue;
+            }
+            itemValues.push({
+              routineId: routine.id,
+              kind: 'exercise',
+              exerciseId,
+              orderIndex: itemValues.length,
+              target: plannedSetsFromTemplate(item.sets, item.reps),
+            });
+          } else {
+            const disciplineId = matchDiscipline(item.disciplineName, globalDisciplines);
+            if (!disciplineId) {
+              skipped.push({ routineName: day.name, itemName: item.disciplineName, reason: 'discipline not found' });
+              continue;
+            }
+            itemValues.push({
+              routineId: routine.id,
+              kind: 'martial_arts',
+              disciplineId,
+              orderIndex: itemValues.length,
+            });
           }
-          itemValues.push({
-            routineId: routine.id,
-            kind: 'exercise',
-            exerciseId,
-            orderIndex: itemValues.length,
-            target: plannedSetsFromTemplate(item.sets, item.reps),
-          });
-        } else {
-          const disciplineId = matchDiscipline(item.disciplineName, globalDisciplines);
-          if (!disciplineId) {
-            skipped.push({ routineName: day.name, itemName: item.disciplineName, reason: 'discipline not found' });
-            continue;
-          }
-          itemValues.push({
-            routineId: routine.id,
-            kind: 'martial_arts',
-            disciplineId,
-            orderIndex: itemValues.length,
-          });
+        }
+
+        if (itemValues.length > 0) {
+          await tx.insert(routineItems).values(itemValues);
         }
       }
+      return ids;
+    });
 
-      if (itemValues.length > 0) {
-        await tx.insert(routineItems).values(itemValues);
-      }
-    }
-    return ids;
-  });
-
-  const created = await Promise.all(
-    createdIds.map((id) => fetchRoutineWithItems(db, id, userId)),
-  );
-  const result: CreateFromTemplateResponse = {
-    routines: created.filter((r): r is RoutineWithItems => r !== null),
-    skipped,
-  };
-  return c.json(result, 201);
+    const created = await Promise.all(
+      createdIds.map((id) => fetchRoutineWithItems(db, id, userId)),
+    );
+    const result: CreateFromTemplateResponse = {
+      routines: created.filter((r): r is RoutineWithItems => r !== null),
+      skipped,
+    };
+    return c.json(result, 201);
+  } catch (e) {
+    // The global onError would also catch this, but a local catch names the
+    // template that failed — the single most useful fact when triaging a
+    // "request failed" from the onboarding template picker.
+    console.error(`[routines/from-template] failed for template ${body.templateId}:`, e);
+    return c.json({ error: 'Failed to create routines from template' }, 500);
+  }
 });
 
 routineRoutes.patch('/:id', async (c) => {
