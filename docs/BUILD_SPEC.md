@@ -298,6 +298,8 @@ GET    /stats/top-lifts                            ?since= — top 10 exercises 
 GET    /stats/mat                                  ?since=YYYY-MM-DD&weeks= — weekly rounds/mat-time
                                                    buckets + intensity split + sparring aggregates
                                                    (MatStatsResponse); since = Monday of oldest bucket
+GET    /stats/partners                             ?since=YYYY-MM-DD — per-partner sparring breakdown
+                                                   (rounds, minutes, subs for/against, last date)
 GET    /notes                                      ?limit=&cursor= — all notes (session, entry,
                                                    technique, per-round) grouped per completed
                                                    session, newest first; keyset-paginated

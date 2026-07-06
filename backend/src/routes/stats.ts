@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
 import { and, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import { createDb } from '../db';
-import { exercises, sessionEntries, sessions } from '../db/schema';
+import { exercises, partners, sessionEntries, sessions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
-import { aggregateMatStats } from '../lib/matStats';
-import type { MuscleSummaryResponse, TopLiftsResponse } from '@app/shared';
+import { aggregateMatStats, type MatEntryRow } from '../lib/matStats';
+import { aggregatePartnerStats } from '../lib/partnerStats';
+import type { MuscleSummaryResponse, PartnerStatsResponse, TopLiftsResponse } from '@app/shared';
 
 type Env = {
   Bindings: {
@@ -153,23 +154,7 @@ statsRoutes.get('/mat', async (c) => {
   // so aggregation happens in TS (reusing the shared isRoundsSession guard)
   // rather than triple-implementing the schema in SQL. Volume is bounded by
   // the window: tens of entries, not thousands.
-  const entryRows = await db
-    .select({
-      sessionId: sessionEntries.sessionId,
-      sessionDate: sessions.date,
-      sessionDurationMinutes: sessions.durationMinutes,
-      details: sessionEntries.details,
-    })
-    .from(sessionEntries)
-    .innerJoin(sessions, eq(sessionEntries.sessionId, sessions.id))
-    .where(
-      and(
-        eq(sessions.userId, userId),
-        eq(sessions.status, 'completed'),
-        eq(sessionEntries.kind, 'martial_arts'),
-        gte(sessions.date, since),
-      ),
-    );
+  const entryRows = await fetchMatEntries(db, userId, since);
 
   // Sessions that also contain gym entries must not attribute their whole
   // duration to mat time when rounds carry no durations of their own.
@@ -190,5 +175,54 @@ statsRoutes.get('/mat', async (c) => {
 
   return c.json(aggregateMatStats(entryRows, mixedSessionIds, since, weeks));
 });
+
+// GET /stats/partners?since=YYYY-MM-DD
+// Per-training-partner sparring breakdown over the window (default ~1 year).
+statsRoutes.get('/partners', async (c) => {
+  const userId = c.get('userId');
+  const db = getDb(c.env);
+
+  const sinceParam = c.req.query('since');
+  const since =
+    sinceParam && /^\d{4}-\d{2}-\d{2}$/.test(sinceParam)
+      ? sinceParam
+      : new Date(Date.now() - 365 * 86_400_000).toISOString().slice(0, 10);
+
+  const [entryRows, partnerRows] = await Promise.all([
+    fetchMatEntries(db, userId, since),
+    db.select({ id: partners.id, name: partners.name }).from(partners).where(eq(partners.userId, userId)),
+  ]);
+
+  const result: PartnerStatsResponse = {
+    since,
+    partners: aggregatePartnerStats(entryRows, partnerRows),
+  };
+  return c.json(result);
+});
+
+// Completed martial-arts entries (with session date/duration) since a date.
+function fetchMatEntries(
+  db: ReturnType<typeof getDb>,
+  userId: string,
+  since: string,
+): Promise<MatEntryRow[]> {
+  return db
+    .select({
+      sessionId: sessionEntries.sessionId,
+      sessionDate: sessions.date,
+      sessionDurationMinutes: sessions.durationMinutes,
+      details: sessionEntries.details,
+    })
+    .from(sessionEntries)
+    .innerJoin(sessions, eq(sessionEntries.sessionId, sessions.id))
+    .where(
+      and(
+        eq(sessions.userId, userId),
+        eq(sessions.status, 'completed'),
+        eq(sessionEntries.kind, 'martial_arts'),
+        gte(sessions.date, since),
+      ),
+    );
+}
 
 export { statsRoutes };

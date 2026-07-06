@@ -556,6 +556,26 @@ export interface MatStatsResponse {
   };
 }
 
+// ---- Per-partner sparring stats ----
+
+export interface PartnerStatsItem {
+  /** partnerId, or null for the "Unassigned" bucket (rounds with no partner). */
+  partnerId: string | null;
+  name: string;
+  rounds: number;
+  minutes: number;
+  sessions: number;
+  submissionsFor: number;
+  submissionsAgainst: number;
+  /** ISO date (YYYY-MM-DD) of the most recent session rolled together. */
+  lastDate: string | null;
+}
+
+export interface PartnerStatsResponse {
+  since: string;
+  partners: PartnerStatsItem[];
+}
+
 // ---- Notes timeline ----
 
 export type NoteSource =

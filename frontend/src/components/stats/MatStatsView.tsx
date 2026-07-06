@@ -1,5 +1,6 @@
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useMemo } from 'react';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { BarChart } from 'react-native-gifted-charts';
 import type { StrikeWeapon, StrikingRoundType } from '@app/shared';
@@ -41,6 +42,7 @@ function fmtMatTime(minutes: number): string {
 }
 
 export function MatStatsView() {
+  const router = useRouter();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { isPro, showPaywall } = useProGate();
@@ -334,6 +336,22 @@ export function MatStatsView() {
               </TouchableOpacity>
             )}
           </View>
+
+          {/* ── Training partners (nav) ── */}
+          <TouchableOpacity
+            style={styles.partnersCard}
+            onPress={() => router.push('/partners' as never)}
+            activeOpacity={0.75}
+          >
+            <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.grappling, 0.15) }]}>
+              <Ionicons name="people-outline" size={16} color={T.grappling} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>Training partners</Text>
+              <Text style={styles.partnersSub}>Who you roll with most, subs for & against</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={T.muted} />
+          </TouchableOpacity>
         </>
       )}
     </>
@@ -342,6 +360,17 @@ export function MatStatsView() {
 
 function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
+    partnersCard: {
+      backgroundColor: T.surface,
+      borderWidth: 1,
+      borderColor: T.border,
+      borderRadius: R.card,
+      padding: D.cardPad,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    partnersSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 2 },
     card: {
       backgroundColor: T.surface,
       borderWidth: 1,
