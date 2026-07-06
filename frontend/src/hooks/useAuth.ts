@@ -1,7 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import type { User } from '@app/shared';
-import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api';
+import { apiGet, apiPost, apiDelete } from '../lib/api';
 import {
   clearSessionToken,
   setSessionToken,
@@ -104,36 +104,6 @@ export function useSignIn() {
   }
 
   return { signInWithGoogle, signInAsGuest, registerWithEmail, signInWithEmail };
-}
-
-export function useCompleteOnboarding() {
-  const queryClient = useQueryClient();
-
-  return useMutation<User, Error, void>({
-    mutationFn: async () => {
-      const data = await apiPatch<MeResponse>('/auth/me', { onboarded: true });
-      return data.user;
-    },
-    // Optimistically mark the user onboarded so the app-layout gate lets them
-    // through immediately — even if the PATCH is slow, paused offline, or fails.
-    // We deliberately do NOT roll back on error: a failed write just means the
-    // server flag stays unset and the user re-sees onboarding on their next cold
-    // /auth/me fetch. This is what breaks the "close the questionnaire and get
-    // bounced straight back" trap.
-    onMutate: async () => {
-      await queryClient.cancelQueries({ queryKey: ['auth', 'me'] });
-      const prev = queryClient.getQueryData<User>(['auth', 'me']);
-      if (prev && !prev.onboardedAt) {
-        queryClient.setQueryData<User>(['auth', 'me'], {
-          ...prev,
-          onboardedAt: new Date().toISOString(),
-        });
-      }
-    },
-    onSuccess: (user) => {
-      queryClient.setQueryData<User>(['auth', 'me'], user);
-    },
-  });
 }
 
 export function useSignOut() {
