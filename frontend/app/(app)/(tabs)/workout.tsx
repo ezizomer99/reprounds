@@ -152,11 +152,7 @@ export default function WorkoutTab() {
         </View>
 
         {/* My Week */}
-        <TouchableOpacity
-          style={styles.card}
-          onPress={() => router.push('/calendar' as never)}
-          activeOpacity={0.88}
-        >
+        <View style={styles.card}>
           <View style={styles.weekHeader}>
             <View style={styles.weekHeaderLeft}>
               <View style={styles.calIconBox}>
@@ -164,7 +160,6 @@ export default function WorkoutTab() {
               </View>
               <Text style={styles.weekTitle}>My Week</Text>
             </View>
-            <Ionicons name="chevron-forward" size={16} color={T.muted} />
           </View>
           <Text style={styles.weekSub}>
             {weekCount > 0
@@ -203,7 +198,7 @@ export default function WorkoutTab() {
               </View>
             </View>
           </View>
-        </TouchableOpacity>
+        </View>
 
         {/* Routines */}
         <View style={styles.sectionHeader}>

@@ -10,7 +10,7 @@ Full spec: [docs/BUILD_SPEC.md](docs/BUILD_SPEC.md) — that file is the source 
 
 ```
 /frontend   Expo RN app (Expo Router, React Query, expo-secure-store)
-/backend    Cloudflare Worker (Hono) + Hyperdrive + Drizzle schema/migrations/seed + RRULE projection
+/backend    Cloudflare Worker (Hono) + Hyperdrive + Drizzle schema/migrations/seed
 /shared     API contract types, field_config types, pure calculators (e.g. est. 1RM)
 ```
 
@@ -21,9 +21,9 @@ Package manager: **pnpm workspaces**. Always `pnpm install` from root. Each pack
 ## Hard boundaries
 
 - `frontend` NEVER imports from `backend`. It only imports from `@app/shared`.
-- `backend` owns the database exclusively — Drizzle schema, migrations, seed, and RRULE projection all live here.
+- `backend` owns the database exclusively — Drizzle schema, migrations, and seed all live here.
 - `shared` is pure TypeScript only — no platform-specific code, no runtime deps beyond what both sides can use.
-- RRULE recurrence is computed **server-side only** (in the `/calendar` endpoint). Never project dates in the app.
+- Routines are **started on demand**, not scheduled — there is no calendar, recurrence, or RRULE projection. (The weekly-schedule/`/calendar` feature was removed; routines are reusable plans the user runs whenever.)
 - Hyperdrive binding is required in production — never call Neon directly from a Worker.
 - **Never use `@gorhom/bottom-sheet` `BottomSheetModal`** — its `present()` silently no-ops in release builds on RN 0.79 + New Architecture (two fix attempts failed on device, including `enableDynamicSizing={false}`). Use plain RN `Modal` with `presentationStyle="pageSheet"` like every existing dialog. The `BottomSheetModalProvider` in the root layout is vestigial.
 
@@ -113,7 +113,6 @@ Invoke these for deep domain work:
 | `backend-worker` | Hono routes, Cloudflare Worker config, Wrangler, Hyperdrive |
 | `database` | Drizzle schema, migrations, seed, SQL queries |
 | `auth` | Google Sign-In flow, JWT minting/verification, JWKS |
-| `calendar-recurrence` | RRULE projection, exception materialization, the three edit modes |
 | `shared-types` | API contract types, field_config schema, est. 1RM calculator |
 | `security-reviewer` | Pre-commit/pre-push security review: leaked secrets, auth/authz mistakes, IDOR, injection risks, data exposure |
 

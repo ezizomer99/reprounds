@@ -10,7 +10,6 @@ import type {
   RoutineItemWithDetails,
   RoutineListResponse,
   RoutineWithItems,
-  SkipOccurrenceRequest,
   UpdateRoutineItemRequest,
   UpdateRoutineRequest,
 } from '@app/shared';
@@ -42,10 +41,6 @@ function routineMeta(row: typeof routines.$inferSelect) {
     name: row.name,
     dayLabel: row.dayLabel,
     notes: row.notes,
-    rrule: row.rrule ?? null,
-    startDate: row.startDate ?? null,
-    endDate: row.endDate ?? null,
-    timeOfDay: row.timeOfDay ?? null,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -201,10 +196,6 @@ routineRoutes.post('/', async (c) => {
         name: body.name,
         dayLabel: body.dayLabel ?? null,
         notes: body.notes ?? null,
-        rrule: body.rrule ?? null,
-        startDate: body.startDate ?? null,
-        endDate: body.endDate ?? null,
-        timeOfDay: body.timeOfDay ?? null,
       })
       .returning();
 
@@ -256,10 +247,6 @@ routineRoutes.patch('/:id', async (c) => {
   if (body.name !== undefined) updates.name = body.name;
   if ('dayLabel' in body) updates.dayLabel = body.dayLabel ?? null;
   if ('notes' in body) updates.notes = body.notes ?? null;
-  if ('rrule' in body) updates.rrule = body.rrule ?? null;
-  if ('startDate' in body) updates.startDate = body.startDate ?? null;
-  if ('endDate' in body) updates.endDate = body.endDate ?? null;
-  if ('timeOfDay' in body) updates.timeOfDay = body.timeOfDay ?? null;
 
   if (Object.keys(updates).length > 0) {
     await db
@@ -300,49 +287,6 @@ routineRoutes.delete('/:id', async (c) => {
     .where(and(eq(routines.id, id), eq(routines.userId, userId)));
 
   return c.json({ success: true });
-});
-
-// POST /routines/:id/skip — mark a single scheduled occurrence as skipped
-routineRoutes.post('/:id/skip', async (c) => {
-  const userId = c.get('userId');
-  const id = c.req.param('id');
-  const db = getDb(c.env);
-
-  const [existing] = await db
-    .select({ id: routines.id })
-    .from(routines)
-    .where(and(eq(routines.id, id), eq(routines.userId, userId)))
-    .limit(1);
-
-  if (!existing) return c.json({ error: 'Not found' }, 404);
-
-  let body: SkipOccurrenceRequest;
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ error: 'Invalid request body' }, 400);
-  }
-
-  if (!body.date) return c.json({ error: 'date is required' }, 400);
-
-  const [existingSession] = await db
-    .select({ id: sessions.id })
-    .from(sessions)
-    .where(and(eq(sessions.routineId, id), eq(sessions.date, body.date), eq(sessions.userId, userId)))
-    .limit(1);
-
-  if (existingSession) {
-    await db
-      .update(sessions)
-      .set({ status: 'skipped' })
-      .where(eq(sessions.id, existingSession.id));
-  } else {
-    await db
-      .insert(sessions)
-      .values({ userId, routineId: id, date: body.date, status: 'skipped' });
-  }
-
-  return new Response(null, { status: 204 });
 });
 
 routineRoutes.post('/:id/items', async (c) => {

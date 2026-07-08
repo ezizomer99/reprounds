@@ -24,8 +24,7 @@
     "@app/shared": "workspace:*",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.27",
-    "postgres": "^3.4.4",
-    "rrule": "^2.8.1"
+    "postgres": "^3.4.4"
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.1079.0",

@@ -127,12 +127,6 @@ export interface Routine {
   name: string;
   dayLabel: string | null;
   notes: string | null;
-  // Optional recurring schedule. A routine with rrule === null is unscheduled
-  // (run ad-hoc); a routine with rrule set recurs on the calendar.
-  rrule: string | null;
-  startDate: string | null;
-  endDate: string | null;
-  timeOfDay: string | null;
   createdAt: string;
   items?: RoutineItem[];
 }
@@ -210,10 +204,6 @@ export interface StrengthSet {
   completed: boolean;
   notes: string | null;
 }
-
-export type CalendarItem =
-  | { kind: 'real'; session: Session }
-  | { kind: 'virtual'; date: string; routineId: string };
 
 export interface ExerciseListResponse {
   exercises: Exercise[];
@@ -334,10 +324,6 @@ export interface CreateRoutineRequest {
   name: string;
   dayLabel?: string | null;
   notes?: string | null;
-  rrule?: string | null;
-  startDate?: string | null;
-  endDate?: string | null;
-  timeOfDay?: string | null;
   items?: CreateRoutineItemRequest[];
 }
 
@@ -345,11 +331,6 @@ export interface UpdateRoutineRequest {
   name?: string;
   dayLabel?: string | null;
   notes?: string | null;
-  // Schedule fields — set rrule to null to remove a routine from the calendar.
-  rrule?: string | null;
-  startDate?: string | null;
-  endDate?: string | null;
-  timeOfDay?: string | null;
 }
 
 export type AddRoutineItemRequest = CreateRoutineItemRequest;
@@ -363,11 +344,6 @@ export interface UpdateRoutineItemRequest {
 
 export interface ReorderRoutineItemsRequest {
   order: string[];
-}
-
-// Skip a single scheduled occurrence of a routine on a given date.
-export interface SkipOccurrenceRequest {
-  date: string; // ISO date YYYY-MM-DD
 }
 
 // ---- Phase 4: Session Logging ----
@@ -591,10 +567,4 @@ export interface TagCount {
 
 export interface TagListResponse {
   tags: TagCount[];
-}
-
-// ---- Phase 5: Calendar + Recurrence ----
-
-export interface CalendarResponse {
-  items: CalendarItem[];
 }

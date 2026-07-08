@@ -2,12 +2,21 @@
 
 *Reps for the gym, rounds for the mat — one log.*
 
-A mobile app for tracking **gym workouts** (strength + conditioning) and **martial arts** training (BJJ first, other arts later) in one place, with a unified calendar and recurring weekly schedule.
+A mobile app for tracking **gym workouts** (strength + conditioning) and **martial arts** training (BJJ first, other arts later) in one place. *[amended: the recurring weekly schedule + calendar was removed — routines are now reusable plans the user starts on demand, not projected onto a calendar. See "Calendar/recurrence removed" note below.]*
 
 This document was the source of truth for the initial build (phases 0–7 have
 all shipped — see [PROGRESS.md](PROGRESS.md) for current status). It remains
 the reference for the domain model and architecture decisions; amendments are
 marked *[amended]* where the shipped product deliberately went beyond it.
+
+> **Calendar/recurrence removed.** The weekly-schedule + calendar layer
+> (§5.2, the `/calendar` endpoint, RRULE projection, exception materialization,
+> and the three edit modes) has been **removed** from the product. Routines are
+> now reusable plans the user **starts on demand** from the Workout tab — the
+> flow the app already leaned on (sessions are created ad-hoc, not projected
+> from a schedule). The recurrence columns (`rrule`, `start_date`, `end_date`,
+> `time_of_day`) were dropped from `routines`. Sections describing the calendar
+> below are kept for history and struck through / annotated as removed.
 
 ---
 
@@ -15,7 +24,7 @@ marked *[amended]* where the shipped product deliberately went beyond it.
 
 - Log gym workouts with the speed and feel of Hevy / StrengthLog: fast set entry, "last time" shown inline, set types, RPE/RIR, rest timers.
 - Log martial arts sessions as a lightweight journal: discipline, gi/no-gi (where relevant), what was taught/focused on, notes.
-- One calendar showing both training types, driven by a recurring weekly schedule with per-instance exceptions (Google Calendar–style editing).
+- ~~One calendar showing both training types, driven by a recurring weekly schedule with per-instance exceptions (Google Calendar–style editing).~~ *[amended: removed — see "Calendar/recurrence removed" note below. Routines are started on demand instead of scheduled.]*
 - Built to add new martial arts later with **zero code changes** (data-driven discipline forms).
 - Single user to start, but multi-user-ready (every row keyed by `user_id`).
 - Google sign-in as the primary method. *[amended: the shipped product also
@@ -104,17 +113,15 @@ CREATE TABLE disciplines (
   created_at   timestamptz NOT NULL DEFAULT now()
 );
 
--- Reusable plans with optional recurrence ("Lift + bag day", "Tuesday BJJ")
+-- Reusable plans started on demand ("Lift + bag day", "Tuesday BJJ")
+-- [amended: the rrule/start_date/end_date/time_of_day recurrence columns were
+--  dropped — routines no longer project onto a calendar.]
 CREATE TABLE routines (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id      uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   name         text NOT NULL,
   day_label    text,
   notes        text,
-  rrule        text,        -- RFC 5545 RRULE string, e.g. "FREQ=WEEKLY;BYDAY=TU"; NULL = unscheduled
-  start_date   date,
-  end_date     date,        -- NULL = open-ended
-  time_of_day  time,
   created_at   timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX ON routines(user_id);
@@ -194,7 +201,9 @@ Indexes worth adding: `sessions(user_id, date)`, `session_entries(session_id)`, 
 
 Setup gotchas to handle: needs a **Web OAuth client ID** (used on both platforms) + an iOS client ID; register **both debug and release SHA-1 fingerprints** in Google Cloud Console or release builds break silently.
 
-### 5.2 Recurring schedule + exceptions
+### 5.2 Recurring schedule + exceptions — *[REMOVED]*
+
+*[amended: this entire section was removed. Routines no longer carry recurrence and are started on demand; there is no `/calendar` endpoint. The original design is preserved below for history.]*
 
 The recurrence fields (`rrule`, `start_date`, `end_date`, `time_of_day`) live directly on the `routines` row — there is no separate schedule table. A routine with `rrule = NULL` is an unscheduled plan; one with an rrule is a recurring series. Use a maintained RRULE library to compute occurrence dates — do not hand-roll calendar math.
 
@@ -237,7 +246,7 @@ The recurrence fields (`rrule`, `start_date`, `end_date`, `time_of_day`) live di
 - Dynamic discipline forms (the engine, seeded with BJJ; ready for more arts)
 - Templates (gym days and martial-arts days)
 - Logging: strength (set types, reps/weight, RPE/RIR, rest timer, "last time", reorder, per-set/exercise notes); conditioning (rounds/duration via `details`); martial arts (dynamic form + gi)
-- Calendar with recurring schedule + per-instance exceptions
+- ~~Calendar with recurring schedule + per-instance exceptions~~ *[amended: removed — routines are started on demand]*
 - Session history
 - Computed estimated 1RM + PRs per exercise
 
@@ -273,13 +282,11 @@ GET    /routines                                   (with items)
 POST   /routines                                   (with optional items)
 PATCH  /routines/:id
 DELETE /routines/:id
-POST   /routines/:id/skip                          skip one occurrence — materializes a skipped session
 POST   /routines/:id/items
 PATCH  /routines/:id/items/:itemId
 DELETE /routines/:id/items/:itemId
 PUT    /routines/:id/items/order                   reorder items
 
-GET    /calendar                                   ?from=YYYY-MM-DD&to=YYYY-MM-DD
 GET    /sessions                                   ?status=&limit=
 POST   /sessions
 GET    /sessions/:id                               (with entries + sets)
@@ -314,7 +321,7 @@ GET    /notes/tags                                 distinct technique tags + cou
 
 ```
 /frontend      Expo RN app (Expo Router, React Query, secure-store)
-/backend       Worker (Hono) + Hyperdrive; Drizzle schema, migrations, seed; RRULE projection
+/backend       Worker (Hono) + Hyperdrive; Drizzle schema, migrations, seed
 /shared        API contract types, field_config types, pure calcs (e.g. est. 1RM)
 ```
 
@@ -322,7 +329,7 @@ Three pnpm workspace packages, each with its own `package.json`, so `shared` is 
 
 Boundaries (the point of the layout):
 
-- **`backend` owns the database.** The Drizzle schema, migrations, seed, and recurrence (RRULE) projection all live here — nothing else talks to Postgres, and recurrence dates are computed server-side for the `/calendar` endpoint.
+- **`backend` owns the database.** The Drizzle schema, migrations, and seed all live here — nothing else talks to Postgres. *[amended: recurrence/RRULE projection and the `/calendar` endpoint were removed.]*
 - **`shared` is the contract** both apps depend on: request/response types, the `field_config` field-definition types, and pure calculators that genuinely run on both sides (e.g. estimated 1RM shown live in the logger and also returned by the API).
 - **`frontend` depends only on `shared`** — never on `backend` internals or the Drizzle schema. That keeps the client tied to the API contract, so the database can be refactored without touching the app.
 
@@ -333,9 +340,9 @@ Boundaries (the point of the layout):
 0. ✅ **Scaffold** — monorepo, Drizzle schema + first migration against Neon, Hyperdrive binding, Worker "hello", Expo app boots as an EAS **dev build** on device.
 1. ✅ **Auth** — Google sign-in → `/auth/google` verify → session JWT → `/auth/me`; secure-store wiring. *[amended: plus email/password and guest auth]*
 2. ✅ **Libraries** — exercises + disciplines CRUD; seed global defaults (common lifts, jump rope, heavy bag, BJJ discipline with its `field_config`).
-3. ✅ **Routines** (renamed from Templates) — create/edit routines with mixed gym + martial-arts items; items management, reorder, skip-occurrence.
+3. ✅ **Routines** (renamed from Templates) — create/edit routines with mixed gym + martial-arts items; items management, reorder. *[amended: skip-occurrence removed with the calendar]*
 4. ✅ **Logging** — sessions/entries/sets API; session logger with "last time", rest timer, RPE/RIR, set types, supersets, plate calculator, martial-arts round logger.
-5. ✅ **Calendar + recurrence** — `/calendar` endpoint with server-side RRULE projection; skip/materialize; the three edit modes.
+5. ~~✅ **Calendar + recurrence** — `/calendar` endpoint with server-side RRULE projection; skip/materialize; the three edit modes.~~ *[amended: **removed** — routines are started on demand; recurrence columns dropped, `/calendar` deleted.]*
 6. ✅ **History + stats** — history + PRs endpoints and screens; computed est. 1RM; premium analytics (muscle map, top lifts).
 7. ✅ **Subscriptions** *[amended: added post-spec]* — RevenueCat + Pro gating.
 8. 🔄 **Differentiation & polish** — tracked on the GitHub project board and in
@@ -346,7 +353,7 @@ Boundaries (the point of the layout):
 ## 10. Decisions to confirm before/while building
 
 - Worker framework: ✅ **Hono** confirmed.
-- RRULE storage: ✅ Full RFC 5545 string confirmed.
+- ~~RRULE storage: ✅ Full RFC 5545 string confirmed.~~ *[amended: removed with the calendar/recurrence feature]*
 - Session JWT lifetime + refresh strategy: TBD — HMAC SHA-256 implemented; expiry/refresh strategy not finalized.
 - Monorepo tooling: ✅ pnpm workspaces (no Turborepo) confirmed.
 - Seed list: TBD — seeding mechanism exists but final list not confirmed as shipped.
