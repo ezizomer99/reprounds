@@ -9,7 +9,6 @@ import {
   pgEnum,
   pgTable,
   text,
-  time,
   timestamp,
   uniqueIndex,
   uuid,
@@ -95,19 +94,15 @@ export const partners = pgTable('partners', {
   userIdIdx: index('partners_user_id_idx').on(t.userId),
 }));
 
-// A routine is a workout definition (its items) plus an optional recurring
-// schedule. rrule === null means the routine is unscheduled (run ad-hoc);
-// when rrule is set, the routine projects onto the calendar.
+// A routine is a reusable workout definition (its items) that the user starts
+// on demand from the Workout tab. Routines are not scheduled — there is no
+// recurrence; a session is created ad-hoc when the user chooses to run one.
 export const routines = pgTable('routines', {
   id:        uuid('id').primaryKey().defaultRandom(),
   userId:    uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
   name:      text('name').notNull(),
   dayLabel:  text('day_label'),
   notes:     text('notes'),
-  rrule:     text('rrule'),
-  startDate: date('start_date'),
-  endDate:   date('end_date'),
-  timeOfDay: time('time_of_day'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   userIdIdx: index('routines_user_id_idx').on(t.userId),

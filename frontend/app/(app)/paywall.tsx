@@ -19,7 +19,6 @@ import { withAlpha } from '../../src/lib/color';
 const PRO_FEATURES = [
   { icon: 'infinite-outline' as const, text: 'Unlimited custom exercises & disciplines' },
   { icon: 'list-outline' as const, text: 'Unlimited routines' },
-  { icon: 'calendar-outline' as const, text: 'Weekly schedule & calendar view' },
   { icon: 'time-outline' as const, text: 'Full session history (all time)' },
   { icon: 'trophy-outline' as const, text: 'PR tracking & estimated 1RM' },
   { icon: 'trending-up-outline' as const, text: 'Advanced analytics & streaks' },
@@ -84,8 +83,8 @@ export default function PaywallScreen() {
           </View>
           <Text style={styles.heroTitle}>RepRounds Pro</Text>
           <Text style={styles.heroSub}>
-            The full toolkit for serious athletes — unlimited tracking, advanced analytics,
-            and scheduled programming.
+            The full toolkit for serious athletes — unlimited tracking, advanced
+            analytics, and complete training history.
           </Text>
         </View>
 

@@ -28,7 +28,6 @@ export function useCreateRoutine() {
     mutationFn: (body) => apiPost<RoutineWithItems>('/routines', body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['routines'] });
-      queryClient.invalidateQueries({ queryKey: ['calendar'] });
     },
   });
 }
@@ -41,7 +40,6 @@ export function useUpdateRoutine() {
       apiPatch<RoutineWithItems>(`/routines/${id}`, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['routines'] });
-      queryClient.invalidateQueries({ queryKey: ['calendar'] });
     },
   });
 }
@@ -53,20 +51,6 @@ export function useDeleteRoutine() {
     mutationFn: (id) => apiDelete(`/routines/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['routines'] });
-      queryClient.invalidateQueries({ queryKey: ['calendar'] });
-    },
-  });
-}
-
-// Skip a single scheduled occurrence of a routine on a given date.
-export function useSkipOccurrence() {
-  const queryClient = useQueryClient();
-
-  return useMutation<void, Error, { id: string; date: string }>({
-    mutationFn: ({ id, date }) => apiPost<void>(`/routines/${id}/skip`, { date }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['calendar'] });
-      queryClient.invalidateQueries({ queryKey: ['sessions'] });
     },
   });
 }

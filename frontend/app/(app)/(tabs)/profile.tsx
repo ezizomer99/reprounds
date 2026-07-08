@@ -159,11 +159,6 @@ export default function ProfileTab() {
         </View>
         <View style={styles.listCard}>
           <NavRow
-            icon="calendar-outline"
-            label="Calendar"
-            onPress={() => router.push('/calendar' as never)}
-          />
-          <NavRow
             icon="layers-outline"
             label="Routines"
             onPress={() => router.push('/routines' as never)}
