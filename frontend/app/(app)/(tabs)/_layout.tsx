@@ -41,10 +41,13 @@ export default function TabLayout() {
 
   return (
     <View style={{ flex: 1 }}>
+      {/* Static branded header: rendered outside <Tabs> so the tab slide
+          transform (which wraps each Screen's header + body) no longer moves
+          it. Only the scene body slides during tab-to-tab navigation. */}
+      <BrandedHeader />
       <Tabs
         screenOptions={{
-          headerShown: true,
-          header: () => <BrandedHeader />,
+          headerShown: false,
           ...slideTransition,
           sceneStyle: { backgroundColor: T.bg },
           tabBarStyle: {
