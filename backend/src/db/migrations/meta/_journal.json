@@ -134,6 +134,13 @@
       "when": 1783278180227,
       "tag": "0018_giant_zemo",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1783500225094,
+      "tag": "0019_ordinary_doctor_strange",
+      "breakpoints": true
     }
   ]
 }
