@@ -1,6 +1,7 @@
 import {
   ActivityIndicator,
   Alert,
+  AppState,
   FlatList,
   Modal,
   ScrollView,
@@ -1572,16 +1573,43 @@ export default function SessionScreen() {
   const [showReorder, setShowReorder] = useState(false);
   const [restSeconds, setRestSeconds] = useState<number | null>(null);
   const [restTotal, setRestTotal] = useState(restTimerDefault);
+  // Absolute wall-clock time (epoch ms) the rest period ends. The visible
+  // countdown is derived from this, not decremented tick-by-tick, so it stays
+  // aligned with the scheduled "Rest complete" notification even when the app
+  // is backgrounded (JS timers freeze while the notification fires on time).
+  const [restEndsAt, setRestEndsAt] = useState<number | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [prBanner, setPrBanner] = useState<string | null>(null);
   const prTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
 
+  // Derive the visible rest countdown from the absolute end time. The interval
+  // only recomputes from Date.now(), so on return from background it snaps to
+  // the true remaining time instead of resuming from where JS froze.
   useEffect(() => {
-    if (restSeconds === null || restSeconds <= 0) return;
-    const t = setTimeout(() => setRestSeconds((s) => (s !== null && s > 0 ? s - 1 : null)), 1000);
-    return () => clearTimeout(t);
-  }, [restSeconds]);
+    if (restEndsAt === null) return;
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((restEndsAt - Date.now()) / 1000));
+      setRestSeconds(remaining);
+      if (remaining <= 0) setRestEndsAt(null); // reached 0 → stop ticking, UI stays at 0:00
+    };
+    tick();
+    const intervalId = setInterval(tick, 500);
+    return () => clearInterval(intervalId);
+  }, [restEndsAt]);
+
+  // Snap the countdown back in sync the instant the app is foregrounded,
+  // rather than waiting for the next interval tick.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && restEndsAt !== null) {
+        const remaining = Math.max(0, Math.ceil((restEndsAt - Date.now()) / 1000));
+        setRestSeconds(remaining);
+        if (remaining <= 0) setRestEndsAt(null);
+      }
+    });
+    return () => sub.remove();
+  }, [restEndsAt]);
 
   useEffect(() => {
     if (!session?.startedAt || session.status !== 'in_progress') return;
@@ -1607,20 +1635,26 @@ export default function SessionScreen() {
   function handleSetCompleted(secs: number) {
     setRestTotal(secs);
     setRestSeconds(secs);
+    setRestEndsAt(Date.now() + secs * 1000);
     armRestNotification(secs);
   }
 
   function handleRestSkip() {
     cancelScheduled(restNotifId.current);
     restNotifId.current = null;
+    setRestEndsAt(null);
     setRestSeconds(null);
   }
 
   function handleRestAdd() {
-    const next = (restSeconds ?? 0) + 15;
+    // Extend from the existing end time so wall-clock and notification stay
+    // aligned; re-arm the notification for the newly-remaining duration.
+    const newEnd = (restEndsAt ?? Date.now()) + 15 * 1000;
+    const remaining = Math.max(0, Math.ceil((newEnd - Date.now()) / 1000));
+    setRestEndsAt(newEnd);
     setRestTotal((t) => t + 15);
-    setRestSeconds(next);
-    armRestNotification(next);
+    setRestSeconds(remaining);
+    armRestNotification(remaining);
   }
 
   function handlePR(exerciseName: string) {
