@@ -8,6 +8,7 @@ import {
   numeric,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -23,6 +24,7 @@ export const setTypeEnum      = pgEnum('set_type',      ['warmup', 'normal', 'dr
 export const giTypeEnum       = pgEnum('gi_type',       ['gi', 'no_gi']);
 export const fightResultEnum  = pgEnum('fight_result',  ['win', 'loss', 'draw']);
 export const fightMethodEnum  = pgEnum('fight_method',  ['ko', 'tko', 'submission', 'decision', 'points', 'other']);
+export const focusStatusEnum  = pgEnum('focus_status',  ['active', 'achieved', 'archived']);
 
 export const users = pgTable('users', {
   id:           uuid('id').primaryKey().defaultRandom(),
@@ -232,4 +234,37 @@ export const weightLogs = pgTable('weight_logs', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   userIdDateIdx: index('weight_logs_user_id_date_idx').on(t.userId, t.date),
+}));
+
+// Training focuses — ongoing martial-arts goals the user works toward across
+// many sessions (e.g. "maintain guard", "better strangle submissions"). No
+// time horizon: a focus is `active` until manually marked `achieved`/`archived`.
+// disciplineId is optional — null means the focus applies across all arts.
+export const trainingFocuses = pgTable('training_focuses', {
+  id:           uuid('id').primaryKey().defaultRandom(),
+  userId:       uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // set null (not cascade/restrict): deleting a custom discipline turns its
+  // focuses global rather than destroying them — mirrors how routines detach
+  // their sessions on delete.
+  disciplineId: uuid('discipline_id').references(() => disciplines.id, { onDelete: 'set null' }),
+  title:        text('title').notNull(),
+  notes:        text('notes'),
+  status:       focusStatusEnum('status').notNull().default('active'),
+  achievedAt:   timestamp('achieved_at', { withTimezone: true }),
+  createdAt:    timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  // Hot path: the active focuses shown as the session tick-off checklist.
+  userIdStatusIdx: index('training_focuses_user_id_status_idx').on(t.userId, t.status),
+}));
+
+// Join table linking a session to the focuses the user ticked as "worked on"
+// during that session. Drives each focus's auto session count + last-worked date.
+export const sessionFocuses = pgTable('session_focuses', {
+  sessionId: uuid('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  focusId:   uuid('focus_id').notNull().references(() => trainingFocuses.id, { onDelete: 'cascade' }),
+}, (t) => ({
+  // Composite PK dedupes ticks (one link per session/focus pair).
+  pk: primaryKey({ columns: [t.sessionId, t.focusId] }),
+  // COUNT(*) per focus for the session tally.
+  focusIdIdx: index('session_focuses_focus_id_idx').on(t.focusId),
 }));

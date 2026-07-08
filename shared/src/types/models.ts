@@ -1,4 +1,4 @@
-import type { ActivityType, DisciplineCat, EntryKind, FightMethod, FightResult, GiType, SessionStatus, SetType } from './enums';
+import type { ActivityType, DisciplineCat, EntryKind, FightMethod, FightResult, FocusStatus, GiType, SessionStatus, SetType } from './enums';
 import type { FieldConfig } from './fieldConfig';
 import type { StrikeCounts, StrikingRoundType } from './rounds';
 
@@ -121,6 +121,49 @@ export interface RankPromotion {
   createdAt: string;
 }
 
+// A training focus — an ongoing martial-arts goal the user works toward across
+// many sessions. `disciplineId` null = a global focus (applies to all arts).
+export interface TrainingFocus {
+  id: string;
+  userId: string;
+  disciplineId: string | null;
+  title: string;
+  notes: string | null;
+  status: FocusStatus;
+  achievedAt: string | null;
+  createdAt: string;
+}
+
+// A focus with its computed progress: how many sessions ticked it and when it
+// was last worked. `disciplineName` is joined from the tagged discipline.
+export interface FocusWithStats extends TrainingFocus {
+  sessionCount: number;
+  lastWorkedDate: string | null;
+  disciplineName: string | null;
+}
+
+export interface FocusListResponse {
+  focuses: FocusWithStats[];
+}
+
+export interface CreateFocusRequest {
+  title: string;
+  notes?: string | null;
+  disciplineId?: string | null;
+}
+
+export interface UpdateFocusRequest {
+  title?: string;
+  notes?: string | null;
+  disciplineId?: string | null;
+  status?: FocusStatus;
+}
+
+// Replace-semantics: sets the full set of focuses ticked for a session.
+export interface SetSessionFocusesRequest {
+  focusIds: string[];
+}
+
 export interface Routine {
   id: string;
   userId: string;
@@ -175,6 +218,8 @@ export interface Session {
   entries?: SessionEntry[];
   /** Distinct entry kinds present in this session (set on list responses). */
   kinds?: EntryKind[];
+  /** IDs of the training focuses the user ticked as worked on this session. */
+  focusIds?: string[];
 }
 
 export interface SessionEntry {
