@@ -134,13 +134,6 @@
       "when": 1783278180227,
       "tag": "0018_giant_zemo",
       "breakpoints": true
-    },
-    {
-      "idx": 19,
-      "version": "7",
-      "when": 1783495624683,
-      "tag": "0019_famous_bastion",
-      "breakpoints": true
     }
   ]
 }
