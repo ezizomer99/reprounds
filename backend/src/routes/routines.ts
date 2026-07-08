@@ -34,7 +34,28 @@ function getDb(env: Env['Bindings']) {
   return createDb(env.HYPERDRIVE?.connectionString ?? env.DATABASE_URL!);
 }
 
-function routineMeta(row: typeof routines.$inferSelect) {
+// Explicit projection of only the columns routineMeta needs. Selecting an
+// explicit set (rather than db.select() over the whole schema) keeps GET
+// /routines stable if the schema object and the live DB ever drift on a
+// non-essential column — the class of failure behind the recurrence-column
+// (rrule/start_date/...) 500s during the 0019 destructive-migration deploy.
+const routineSelect = {
+  id: routines.id,
+  userId: routines.userId,
+  name: routines.name,
+  dayLabel: routines.dayLabel,
+  notes: routines.notes,
+  createdAt: routines.createdAt,
+};
+
+function routineMeta(row: {
+  id: string;
+  userId: string;
+  name: string;
+  dayLabel: string | null;
+  notes: string | null;
+  createdAt: Date;
+}) {
   return {
     id: row.id,
     userId: row.userId,
@@ -93,7 +114,7 @@ async function fetchRoutineWithItems(
   userId: string,
 ): Promise<RoutineWithItems | null> {
   const [routine] = await db
-    .select()
+    .select(routineSelect)
     .from(routines)
     .where(and(eq(routines.id, routineId), eq(routines.userId, userId)))
     .limit(1);
@@ -129,7 +150,7 @@ routineRoutes.get('/', async (c) => {
   const db = getDb(c.env);
 
   const userRoutines = await db
-    .select()
+    .select(routineSelect)
     .from(routines)
     .where(eq(routines.userId, userId))
     .orderBy(desc(routines.createdAt));

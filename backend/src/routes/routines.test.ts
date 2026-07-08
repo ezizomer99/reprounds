@@ -100,6 +100,45 @@ beforeEach(() => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /routines — list endpoint (the path that 500s on schema/DB drift)
+// ---------------------------------------------------------------------------
+describe('GET /routines', () => {
+  it('returns 200 with the caller\'s routines and their items', async () => {
+    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+    mock.selectQueue.push([
+      { id: ROUTINE_ID, userId: USER_ID, name: 'Push Day', dayLabel: 'Mon', notes: null, createdAt },
+    ]); // routines list
+    mock.selectQueue.push([
+      {
+        id: 'item-1', routineId: ROUTINE_ID, kind: 'exercise', exerciseId: 'ex-1',
+        disciplineId: null, orderIndex: 0, supersetGroup: null, defaultRestSeconds: null,
+        target: null, exerciseName: 'Bench Press', disciplineName: null,
+      },
+    ]); // items for those routines
+
+    const res = await makeApp().request('/routines', { headers: await bearer() }, env);
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      routines: Array<{ id: string; name: string; createdAt: string; items: unknown[] }>;
+    };
+    expect(body.routines).toHaveLength(1);
+    expect(body.routines[0].id).toBe(ROUTINE_ID);
+    expect(body.routines[0].createdAt).toBe('2026-01-01T00:00:00.000Z');
+    expect(body.routines[0].items).toHaveLength(1);
+  });
+
+  it('returns an empty list (200) when the caller has no routines', async () => {
+    mock.selectQueue.push([]); // no routines — handler must short-circuit, not error
+
+    const res = await makeApp().request('/routines', { headers: await bearer() }, env);
+
+    expect(res.status).toBe(200);
+    expect((await res.json() as { routines: unknown[] }).routines).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // DELETE /routines/:id
 // ---------------------------------------------------------------------------
 describe('DELETE /routines/:id', () => {
