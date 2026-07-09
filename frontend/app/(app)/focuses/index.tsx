@@ -239,6 +239,7 @@ function FocusRow({ focus, disciplines, onEdit, onSetStatus, onDelete }: {
     ? 'Not worked yet'
     : `${focus.sessionCount} session${focus.sessionCount === 1 ? '' : 's'}` +
       (focus.lastWorkedDate ? ` · last ${formatDate(focus.lastWorkedDate)}` : '');
+  const meta = discipline ? `${discipline.name} · ${worked}` : worked;
 
   return (
     <TouchableOpacity
@@ -247,16 +248,12 @@ function FocusRow({ focus, disciplines, onEdit, onSetStatus, onDelete }: {
       onLongPress={handleMenu}
       activeOpacity={0.7}
     >
+      <View style={[styles.rowAvatar, { backgroundColor: withAlpha(tagColor, 0.14) }]}>
+        <Ionicons name="flag" size={18} color={tagColor} />
+      </View>
       <View style={styles.rowContent}>
-        <Text style={styles.rowTitle}>{focus.title}</Text>
-        <View style={styles.rowMetaRow}>
-          <View style={[styles.tag, { backgroundColor: withAlpha(tagColor, 0.14) }]}>
-            <Text style={[styles.tagText, { color: tagColor }]}>
-              {discipline?.name ?? 'All disciplines'}
-            </Text>
-          </View>
-          <Text style={styles.rowMeta}>{worked}</Text>
-        </View>
+        <Text style={styles.rowTitle} numberOfLines={2}>{focus.title}</Text>
+        <Text style={styles.rowMeta} numberOfLines={1}>{meta}</Text>
       </View>
       <TouchableOpacity
         onPress={handleMenu}
@@ -393,23 +390,31 @@ export default function FocusesScreen() {
             />
           )}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListHeaderComponent={
+            statusFilter === 'active' ? (
+              <View style={styles.heroWrap}>
+                <TouchableOpacity style={styles.heroCta} onPress={handleAddPress} activeOpacity={0.85}>
+                  <Ionicons name="add" size={20} color={T.onPrimary} />
+                  <View>
+                    <Text style={styles.heroCtaTitle}>New focus</Text>
+                    <Text style={styles.heroCtaSub}>What you want to work on</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            ) : null
+          }
           ListEmptyComponent={
-            <View style={styles.centered}>
+            <View style={statusFilter === 'active' ? styles.emptyUnderHero : styles.centered}>
               <Ionicons name="flag-outline" size={40} color={T.muted} />
               <Text style={styles.emptyText}>
                 {statusFilter === 'active'
-                  ? 'No active focuses yet.'
+                  ? 'No active focuses yet — add one above to get started.'
                   : `No ${statusFilter} focuses.`}
               </Text>
-              {statusFilter === 'active' && (
-                <TouchableOpacity onPress={handleAddPress} activeOpacity={0.7}>
-                  <Text style={styles.emptyLink}>Add your first focus →</Text>
-                </TouchableOpacity>
-              )}
             </View>
           }
           contentContainerStyle={[
-            list.length === 0 && { flex: 1 },
+            list.length === 0 && statusFilter !== 'active' && { flex: 1 },
             { paddingBottom: insets.bottom + 32 },
           ]}
           showsVerticalScrollIndicator={false}
@@ -465,6 +470,14 @@ function makeStyles(T: ThemeColors) {
     filterChipText: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim },
     filterChipTextActive: { color: T.primary },
 
+    heroWrap: { paddingHorizontal: D.pad, paddingTop: 4, paddingBottom: 8 },
+    heroCta: {
+      flexDirection: 'row', alignItems: 'center', gap: 14,
+      backgroundColor: T.primary, borderRadius: R.card, padding: 18,
+    },
+    heroCtaTitle: { fontFamily: F.uiBold, fontSize: 16, color: T.onPrimary },
+    heroCtaSub: { fontFamily: F.uiMed, fontSize: 12, color: 'rgba(13,15,20,0.65)', marginTop: 1 },
+
     row: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -472,16 +485,15 @@ function makeStyles(T: ThemeColors) {
       paddingHorizontal: D.pad,
       paddingVertical: 14,
     },
-    rowContent: { flex: 1 },
-    rowTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text, marginBottom: 6 },
-    rowMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-    tag: { paddingVertical: 3, paddingHorizontal: 8, borderRadius: R.sm },
-    tagText: {
-      fontFamily: F.uiBold,
-      fontSize: 10,
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
+    rowAvatar: {
+      width: 38,
+      height: 38,
+      borderRadius: R.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
+    rowContent: { flex: 1 },
+    rowTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text, marginBottom: 3 },
     rowMeta: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
     menuButton: {
       width: 32,
@@ -490,7 +502,7 @@ function makeStyles(T: ThemeColors) {
       justifyContent: 'center',
     },
 
-    separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad },
+    separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad + 38 + 10 },
     centered: {
       flex: 1,
       alignItems: 'center',
@@ -498,8 +510,13 @@ function makeStyles(T: ThemeColors) {
       paddingVertical: 48,
       gap: 10,
     },
-    emptyText: { fontFamily: F.uiMed, fontSize: 15, color: T.muted },
-    emptyLink: { fontFamily: F.uiMed, fontSize: 13, color: T.primary },
+    emptyUnderHero: {
+      alignItems: 'center',
+      paddingTop: 44,
+      paddingHorizontal: 24,
+      gap: 10,
+    },
+    emptyText: { fontFamily: F.uiMed, fontSize: 15, color: T.muted, textAlign: 'center' },
     errorText: {
       fontFamily: F.uiMed,
       fontSize: 15,
