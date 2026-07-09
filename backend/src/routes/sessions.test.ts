@@ -445,6 +445,85 @@ describe('PATCH /sessions/:id/entries/:entryId — exerciseId swap', () => {
 });
 
 // ---------------------------------------------------------------------------
+// PUT /sessions/:id/focuses
+// ---------------------------------------------------------------------------
+describe('PUT /sessions/:id/focuses', () => {
+  it('returns 404 when the session is not owned by the caller', async () => {
+    mock.selectQueue.push([]); // owner check: not found
+
+    const res = await makeApp().request(`/sessions/${SESSION_ID}/focuses`, {
+      method: 'PUT',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ focusIds: ['focus-1'] }),
+    }, env);
+
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 400 when focusIds is not an array', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]); // owner check ✓
+
+    const res = await makeApp().request(`/sessions/${SESSION_ID}/focuses`, {
+      method: 'PUT',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ focusIds: 'nope' }),
+    }, env);
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe(
+      'focusIds must be an array of focus IDs',
+    );
+  });
+
+  it('returns 400 when a focusId does not belong to the caller', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]); // owner check ✓
+    mock.selectQueue.push([]);                    // ownership of focuses: none match
+
+    const res = await makeApp().request(`/sessions/${SESSION_ID}/focuses`, {
+      method: 'PUT',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ focusIds: ['focus-foreign'] }),
+    }, env);
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe(
+      'One or more focusIds are invalid',
+    );
+  });
+
+  it('replaces the links in a transaction and echoes the deduped focusIds', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]);          // owner check ✓
+    mock.selectQueue.push([{ id: 'focus-1' }]);           // both refs resolve to one owned focus
+
+    const res = await makeApp().request(`/sessions/${SESSION_ID}/focuses`, {
+      method: 'PUT',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ focusIds: ['focus-1', 'focus-1'] }),
+    }, env);
+
+    expect(res.status).toBe(200);
+    expect(mock.transaction).toHaveBeenCalledTimes(1);
+    expect((await res.json() as { focusIds: string[] }).focusIds).toEqual(['focus-1']);
+  });
+
+  it('clears all links for an empty focusIds array without an ownership query', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]); // owner check ✓
+
+    const res = await makeApp().request(`/sessions/${SESSION_ID}/focuses`, {
+      method: 'PUT',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ focusIds: [] }),
+    }, env);
+
+    expect(res.status).toBe(200);
+    expect(mock.transaction).toHaveBeenCalledTimes(1);
+    // Only the session owner check ran; no focus-ownership select for an empty set.
+    expect(mock.select).toHaveBeenCalledTimes(1);
+    expect((await res.json() as { focusIds: string[] }).focusIds).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // POST /sessions/:id/complete
 // ---------------------------------------------------------------------------
 describe('POST /sessions/:id/complete', () => {

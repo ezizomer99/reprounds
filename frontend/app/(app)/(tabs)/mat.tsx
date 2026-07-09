@@ -302,20 +302,36 @@ export default function MatTab() {
           data={list}
           keyExtractor={(item) => item.id}
           ListHeaderComponent={
-            <TouchableOpacity
-              style={styles.quickCard}
-              onPress={() => router.push('/sessions/new' as never)}
-              activeOpacity={0.8}
-            >
-              <View style={styles.quickIconBox}>
-                <Ionicons name="flash" size={18} color={T.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.quickTitle}>Quick mat session</Text>
-                <Text style={styles.quickSub}>Log rounds and techniques right away</Text>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={T.muted} />
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={styles.quickCard}
+                onPress={() => router.push('/sessions/new' as never)}
+                activeOpacity={0.8}
+              >
+                <View style={styles.quickIconBox}>
+                  <Ionicons name="flash" size={18} color={T.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.quickTitle}>Quick mat session</Text>
+                  <Text style={styles.quickSub}>Log rounds and techniques right away</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={T.muted} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.quickCard}
+                onPress={() => router.push('/focuses' as never)}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.quickIconBox, { backgroundColor: withAlpha(T.grappling, 0.14) }]}>
+                  <Ionicons name="flag" size={18} color={T.grappling} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.quickTitle}>Training focuses</Text>
+                  <Text style={styles.quickSub}>Plan what to work on before you train</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={T.muted} />
+              </TouchableOpacity>
+            </>
           }
           renderItem={({ item }) => (
             <DisciplineRow

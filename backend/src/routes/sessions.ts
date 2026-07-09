@@ -7,8 +7,10 @@ import {
   routineItems,
   routines,
   sessionEntries,
+  sessionFocuses,
   sessions,
   strengthSets,
+  trainingFocuses,
 } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type {
@@ -19,6 +21,7 @@ import type {
   ReorderSessionEntriesRequest,
   SessionEntryWithSets,
   SessionWithEntries,
+  SetSessionFocusesRequest,
   StrengthSet,
   UpdateSessionEntryRequest,
   UpdateSessionRequest,
@@ -134,6 +137,11 @@ async function fetchSessionWithEntries(
     setsByEntryId.set(set.sessionEntryId, list);
   }
 
+  const focusLinks = await db
+    .select({ focusId: sessionFocuses.focusId })
+    .from(sessionFocuses)
+    .where(eq(sessionFocuses.sessionId, sessionId));
+
   return {
     id: session.id,
     userId: session.userId,
@@ -146,6 +154,7 @@ async function fetchSessionWithEntries(
     durationMinutes: session.durationMinutes,
     notes: session.notes,
     createdAt: session.createdAt.toISOString(),
+    focusIds: focusLinks.map((f) => f.focusId),
     entries: entriesWithNames.map((e) =>
       buildEntryWithSets(
         {
@@ -503,6 +512,58 @@ sessionRoutes.post('/:id/complete', async (c) => {
 
   const session = await fetchSessionWithEntries(db, id, userId);
   return c.json({ session });
+});
+
+// PUT /sessions/:id/focuses — replace the set of training focuses ticked as
+// worked on during this session. Replace-semantics (delete + re-insert), like
+// the entries reorder endpoint.
+sessionRoutes.put('/:id/focuses', async (c) => {
+  const userId = c.get('userId');
+  const id = c.req.param('id');
+  const db = getDb(c.env);
+
+  const [existing] = await db
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(and(eq(sessions.id, id), eq(sessions.userId, userId)))
+    .limit(1);
+
+  if (!existing) return c.json({ error: 'Not found' }, 404);
+
+  let body: SetSessionFocusesRequest;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid request body' }, 400);
+  }
+
+  if (!Array.isArray(body.focusIds)) {
+    return c.json({ error: 'focusIds must be an array of focus IDs' }, 400);
+  }
+
+  // Dedupe and, if any provided, verify every focus belongs to the caller —
+  // reject the whole request rather than silently dropping foreign IDs.
+  const focusIds = [...new Set(body.focusIds)];
+  if (focusIds.length > 0) {
+    const owned = await db
+      .select({ id: trainingFocuses.id })
+      .from(trainingFocuses)
+      .where(and(eq(trainingFocuses.userId, userId), inArray(trainingFocuses.id, focusIds)));
+    if (owned.length !== focusIds.length) {
+      return c.json({ error: 'One or more focusIds are invalid' }, 400);
+    }
+  }
+
+  await db.transaction(async (tx) => {
+    await tx.delete(sessionFocuses).where(eq(sessionFocuses.sessionId, id));
+    if (focusIds.length > 0) {
+      await tx
+        .insert(sessionFocuses)
+        .values(focusIds.map((focusId) => ({ sessionId: id, focusId })));
+    }
+  });
+
+  return c.json({ focusIds });
 });
 
 // POST /sessions/:id/entries

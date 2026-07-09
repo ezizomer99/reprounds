@@ -52,6 +52,7 @@ import {
   useExerciseHistory,
 } from '../../../src/hooks/useSession';
 import { useRoutines } from '../../../src/hooks/useRoutines';
+import { useFocuses, useSetSessionFocuses } from '../../../src/hooks/useFocuses';
 import { RestTimer } from '../../../src/components/RestTimer';
 import { Skeleton } from '../../../src/components/Skeleton';
 import { RoundLogger, BOXING_WEAPONS, MUAY_THAI_WEAPONS } from '../../../src/components/RoundLogger';
@@ -1258,6 +1259,106 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
   );
 }
 
+// ─── Training focus checklist ─────────────────────────────────────────────────
+
+function FocusChecklistCard({ session, isActive }: {
+  session: SessionWithEntries;
+  isActive: boolean;
+}) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const router = useRouter();
+  const { data: focuses, isLoading } = useFocuses('active');
+  const setSessionFocuses = useSetSessionFocuses();
+
+  // Focuses tagged to a discipline in this session, plus global (untagged) ones.
+  const sessionDisciplineIds = useMemo(
+    () => new Set(session.entries.filter((e) => e.kind === 'martial_arts').map((e) => e.disciplineId)),
+    [session.entries],
+  );
+  const relevant = useMemo(
+    () => (focuses ?? []).filter(
+      (f) => f.disciplineId === null || sessionDisciplineIds.has(f.disciplineId),
+    ),
+    [focuses, sessionDisciplineIds],
+  );
+
+  // Local mirror of the ticked set for instant feedback; re-seed whenever the
+  // server value changes (the mutation invalidates and refetches the session).
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(session.focusIds ?? []));
+  useEffect(() => {
+    setSelected(new Set(session.focusIds ?? []));
+  }, [session.focusIds]);
+
+  function toggle(focusId: string) {
+    if (!isActive) return;
+    const next = new Set(selected);
+    if (next.has(focusId)) next.delete(focusId);
+    else next.add(focusId);
+    setSelected(next);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSessionFocuses.mutate(
+      { sessionId: session.id, focusIds: [...next] },
+      {
+        onError: (err) => {
+          setSelected(new Set(session.focusIds ?? []));
+          Alert.alert('Error', err.message || 'Failed to update focuses.');
+        },
+      },
+    );
+  }
+
+  if (isLoading) return null;
+
+  // On a completed session, only surface the focuses that were actually worked.
+  const rows = isActive ? relevant : relevant.filter((f) => selected.has(f.id));
+  if (rows.length === 0) {
+    if (!isActive) return null;
+    return (
+      <View style={styles.entryCard}>
+        <Text style={styles.focusCardTitle}>Training focuses</Text>
+        <Text style={styles.focusHintText}>
+          Set what you want to work on and tick it off as you train.
+        </Text>
+        <TouchableOpacity onPress={() => router.push('/focuses' as never)} activeOpacity={0.7}>
+          <Text style={styles.focusHintLink}>Add a focus →</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.entryCard}>
+      <Text style={styles.focusCardTitle}>Training focuses</Text>
+      {isActive && (
+        <Text style={styles.focusCardSub}>Tick what you worked on this session.</Text>
+      )}
+      {rows.map((focus) => {
+        const on = selected.has(focus.id);
+        return (
+          <TouchableOpacity
+            key={focus.id}
+            style={styles.focusRow}
+            onPress={() => toggle(focus.id)}
+            activeOpacity={isActive ? 0.7 : 1}
+            disabled={!isActive}
+          >
+            <View style={[styles.focusCheckbox, on && styles.focusCheckboxOn]}>
+              {on && <Ionicons name="checkmark" size={14} color={T.onPrimary} />}
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.focusRowLabel, on && styles.focusRowLabelOn]}>{focus.title}</Text>
+              {focus.disciplineName && (
+                <Text style={styles.focusRowMeta}>{focus.disciplineName}</Text>
+              )}
+            </View>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+}
+
 // ─── Time input (masked HH:MM) ───────────────────────────────────────────────
 
 function TimeInput({ value, onChange }: {
@@ -1886,6 +1987,8 @@ export default function SessionScreen() {
           </View>
         )}
 
+        {hasMartialArts && <FocusChecklistCard session={session} isActive={isActive} />}
+
         {session.entries.map((entry, i) => {
           const prev = session.entries[i - 1];
           const next = session.entries[i + 1];
@@ -2278,6 +2381,22 @@ function makeStyles(T: ThemeColors) {
     paddingVertical: 11, alignItems: 'center', marginTop: 4,
   },
   maSaveBtnText: { fontFamily: F.uiSemi, fontSize: 15, color: T.onPrimary },
+
+  // Training focus checklist
+  focusCardTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text },
+  focusCardSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: -2 },
+  focusRow: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 5 },
+  focusCheckbox: {
+    width: 24, height: 24, borderRadius: R.sm,
+    borderWidth: 1.5, borderColor: T.borderStrong, backgroundColor: T.surface2,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  focusCheckboxOn: { backgroundColor: T.primary, borderColor: T.primary },
+  focusRowLabel: { fontFamily: F.uiMed, fontSize: 14, color: T.text },
+  focusRowLabelOn: { fontFamily: F.uiSemi },
+  focusRowMeta: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim, marginTop: 1 },
+  focusHintText: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim },
+  focusHintLink: { fontFamily: F.uiSemi, fontSize: 13, color: T.primary, marginTop: 2 },
 
   // Floating overlays
   restTimerFloat: {
