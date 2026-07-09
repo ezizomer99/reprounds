@@ -23,6 +23,7 @@ export const setTypeEnum      = pgEnum('set_type',      ['warmup', 'normal', 'dr
 export const giTypeEnum       = pgEnum('gi_type',       ['gi', 'no_gi']);
 export const fightResultEnum  = pgEnum('fight_result',  ['win', 'loss', 'draw']);
 export const fightMethodEnum  = pgEnum('fight_method',  ['ko', 'tko', 'submission', 'decision', 'points', 'other']);
+export const focusStatusEnum  = pgEnum('focus_status',  ['active', 'achieved', 'archived']);
 
 export const users = pgTable('users', {
   id:           uuid('id').primaryKey().defaultRandom(),
@@ -92,6 +93,21 @@ export const partners = pgTable('partners', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   userIdIdx: index('partners_user_id_idx').on(t.userId),
+}));
+
+// Training focuses — the goals a user is working on from session to session
+// (e.g. "improve guard retention"). Each has a lifecycle status so it can move
+// between the Active / Achieved / Archived tabs. Title required, notes optional.
+export const focuses = pgTable('focuses', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  userId:    uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  title:     text('title').notNull(),
+  notes:     text('notes'),
+  status:    focusStatusEnum('status').notNull().default('active'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  userIdIdx: index('focuses_user_id_idx').on(t.userId),
 }));
 
 // A routine is a reusable workout definition (its items) that the user starts

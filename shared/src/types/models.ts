@@ -82,6 +82,20 @@ export interface Partner {
   createdAt: string;
 }
 
+// A training focus — a goal the user is working on from session to session.
+// Its status drives the Active / Achieved / Archived tabs on the Focuses screen.
+export type FocusStatus = 'active' | 'achieved' | 'archived';
+
+export interface Focus {
+  id: string;
+  userId: string;
+  title: string;
+  notes: string | null;
+  status: FocusStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // A competition / fight result, tagged to a discipline. Aggregates into the
 // user's win-loss-draw record on the discipline detail screen.
 export interface Fight {
@@ -223,6 +237,21 @@ export interface CreatePartnerRequest {
 
 export interface UpdatePartnerRequest {
   name?: string;
+}
+
+export interface FocusListResponse {
+  focuses: Focus[];
+}
+
+export interface CreateFocusRequest {
+  title: string;
+  notes?: string | null;
+}
+
+export interface UpdateFocusRequest {
+  title?: string;
+  notes?: string | null;
+  status?: FocusStatus;
 }
 
 export interface FightListResponse {
