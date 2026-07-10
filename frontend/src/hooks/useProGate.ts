@@ -2,7 +2,7 @@ import { useRouter } from 'expo-router';
 import { useSubscription } from '../context/SubscriptionContext';
 import { useCurrentUser } from './useAuth';
 
-const COMP_EMAILS = ['ezizomer1999@gmail.com', 'reprounds.test@gmail.com'];
+const COMP_EMAILS = ['ezizomer1999@gmail.com', 'reprounds.test@gmail.com', 'auradegraaf@gmail.com'];
 
 export function useProGate() {
   const { isPro, isLoading } = useSubscription();
