@@ -325,9 +325,14 @@ sessionRoutes.post('/', async (c) => {
     return c.json({ error: 'date is required' }, 400);
   }
 
+  if (body.kind !== undefined && body.kind !== 'exercise' && body.kind !== 'martial_arts') {
+    return c.json({ error: 'kind must be exercise or martial_arts' }, 400);
+  }
+
   // The routine the session is created from must belong to the caller —
   // otherwise the prefill below would read (and echo back) another user's
   // routine structure from a leaked UUID.
+  let routineSeedItems: (typeof routineItems.$inferSelect)[] = [];
   if (body.routineId) {
     const [ownedRoutine] = await db
       .select({ id: routines.id })
@@ -337,6 +342,23 @@ sessionRoutes.post('/', async (c) => {
     if (!ownedRoutine) {
       return c.json({ error: 'Not found' }, 404);
     }
+
+    const allItems = await db
+      .select()
+      .from(routineItems)
+      .where(eq(routineItems.routineId, body.routineId))
+      .orderBy(asc(routineItems.orderIndex));
+
+    // A session is either weightlifting or martial arts — never both. Routines
+    // may hold mixed-kind items, so a mixed routine is started one part at a
+    // time: the caller passes `kind` to pick which part to seed. Without a
+    // `kind`, a mixed routine is rejected rather than seeding an invalid
+    // combined session; single-kind routines seed as-is.
+    const routineKinds = [...new Set(allItems.map((i) => i.kind))];
+    if (routineKinds.length > 1 && !body.kind) {
+      return c.json({ error: 'mixed_routine_kind_required', kinds: routineKinds }, 400);
+    }
+    routineSeedItems = body.kind ? allItems.filter((i) => i.kind === body.kind) : allItems;
   }
 
   const [existing] = await db
@@ -362,14 +384,8 @@ sessionRoutes.post('/', async (c) => {
       })
       .returning();
 
-    if (body.routineId) {
-      const items = await tx
-        .select()
-        .from(routineItems)
-        .where(eq(routineItems.routineId, body.routineId))
-        .orderBy(asc(routineItems.orderIndex));
-
-      for (const item of items) {
+    if (routineSeedItems.length > 0) {
+      for (const item of routineSeedItems) {
         const [entry] = await tx
           .insert(sessionEntries)
           .values({

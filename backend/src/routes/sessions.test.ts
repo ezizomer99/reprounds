@@ -186,6 +186,64 @@ describe('POST /sessions', () => {
     expect(json.error).toBe('active_session_exists');
     expect(json.sessionId).toBe('active-sess');
   });
+
+  it('returns 400 without touching the DB when kind is invalid', async () => {
+    const res = await makeApp().request('/sessions', {
+      method: 'POST',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: '2026-07-03', kind: 'cardio' }),
+    }, env);
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe(
+      'kind must be exercise or martial_arts',
+    );
+    expect(mock.select).not.toHaveBeenCalled();
+  });
+
+  it('rejects a mixed-kind routine started without a kind (never a combined session)', async () => {
+    mock.selectQueue.push([{ id: 'routine-1' }]); // routine ownership ✓
+    mock.selectQueue.push([                        // routine items span both kinds
+      { kind: 'exercise', exerciseId: 'ex-1', disciplineId: null, orderIndex: 0, supersetGroup: null, defaultRestSeconds: null, target: null },
+      { kind: 'martial_arts', exerciseId: null, disciplineId: 'disc-1', orderIndex: 1, supersetGroup: null, defaultRestSeconds: null, target: null },
+    ]);
+
+    const res = await makeApp().request('/sessions', {
+      method: 'POST',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: '2026-07-03', routineId: 'routine-1' }),
+    }, env);
+
+    expect(res.status).toBe(400);
+    const json = await res.json() as { error: string; kinds: string[] };
+    expect(json.error).toBe('mixed_routine_kind_required');
+    expect(json.kinds.sort()).toEqual(['exercise', 'martial_arts']);
+    // Rejected before the active-session check and before any insert.
+    expect(mock.transaction).not.toHaveBeenCalled();
+  });
+
+  it('starts one part of a mixed-kind routine when a kind is given', async () => {
+    mock.insertedRow = fakeSessionRow;
+    mock.selectQueue.push([{ id: 'routine-1' }]); // routine ownership ✓
+    mock.selectQueue.push([                        // routine items span both kinds
+      { kind: 'exercise', exerciseId: 'ex-1', disciplineId: null, orderIndex: 0, supersetGroup: null, defaultRestSeconds: null, target: null },
+      { kind: 'martial_arts', exerciseId: null, disciplineId: 'disc-1', orderIndex: 1, supersetGroup: null, defaultRestSeconds: null, target: null },
+    ]);
+    mock.selectQueue.push([]);                     // no active session
+    mock.selectQueue.push([fakeSessionRow]);       // fetchSessionWithEntries: session row
+    mock.selectQueue.push([]);                     // entries (empty)
+
+    const res = await makeApp().request('/sessions', {
+      method: 'POST',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: '2026-07-03', routineId: 'routine-1', kind: 'exercise' }),
+    }, env);
+
+    expect(res.status).toBe(201);
+    expect(mock.transaction).toHaveBeenCalledTimes(1);
+    const json = await res.json() as { session: { id: string } };
+    expect(json.session.id).toBe(SESSION_ID);
+  });
 });
 
 // ---------------------------------------------------------------------------

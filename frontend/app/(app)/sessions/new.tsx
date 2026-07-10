@@ -7,7 +7,7 @@ import { useRoutines } from '../../../src/hooks/useRoutines';
 import { useCreateSession } from '../../../src/hooks/useSession';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
-import type { RoutineWithItems } from '@app/shared';
+import type { EntryKind, RoutineWithItems } from '@app/shared';
 
 export default function NewSessionScreen() {
   const router = useRouter();
@@ -34,11 +34,31 @@ export default function NewSessionScreen() {
     }
   }
 
-  async function handleStartFromRoutine(routine: RoutineWithItems) {
+  async function startRoutine(routine: RoutineWithItems, kind?: EntryKind) {
     try {
-      const session = await createSession.mutateAsync({ routineId: routine.id, date: todayISO });
+      const session = await createSession.mutateAsync({ routineId: routine.id, date: todayISO, kind });
       router.push({ pathname: '/sessions/[id]', params: { id: session.id } } as never);
     } catch (err) { handleActiveSessionConflict(err); }
+  }
+
+  function handleStartFromRoutine(routine: RoutineWithItems) {
+    const hasGym = routine.items.some((i) => i.kind === 'exercise');
+    const hasMat = routine.items.some((i) => i.kind === 'martial_arts');
+    // A session is either weightlifting or martial arts — never both. A mixed
+    // routine is run one part at a time, so ask which part to start.
+    if (hasGym && hasMat) {
+      Alert.alert(
+        'Start which part?',
+        'This routine has both gym and martial-arts items. A session tracks one at a time.',
+        [
+          { text: 'Gym', onPress: () => startRoutine(routine, 'exercise') },
+          { text: 'Martial Arts', onPress: () => startRoutine(routine, 'martial_arts') },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      );
+      return;
+    }
+    startRoutine(routine);
   }
 
   async function handleEmptySession() {
@@ -82,14 +102,20 @@ export default function NewSessionScreen() {
               <Text style={styles.eyebrow}>From routine</Text>
             </View>
           }
-          renderItem={({ item }) => (
+          renderItem={({ item }) => {
+            const hasGym = item.items.some((i) => i.kind === 'exercise');
+            const hasMat = item.items.some((i) => i.kind === 'martial_arts');
+            const isMixed = hasGym && hasMat;
+            return (
             <TouchableOpacity
               style={styles.routineRow}
               onPress={() => handleStartFromRoutine(item)}
               activeOpacity={0.7}
             >
               <View style={styles.routineIcon}>
-                {item.items.some((i) => i.kind === 'martial_arts') ? (
+                {isMixed ? (
+                  <Ionicons name="layers" size={19} color={T.primary} />
+                ) : hasMat ? (
                   <Ionicons name="flash" size={19} color={T.primary} />
                 ) : (
                   <Ionicons name="barbell" size={19} color={T.textDim} />
@@ -99,12 +125,14 @@ export default function NewSessionScreen() {
                 <Text style={styles.routineName}>{item.name}</Text>
                 <Text style={styles.routineMeta}>
                   {item.items.length} item{item.items.length !== 1 ? 's' : ''}
+                  {isMixed ? ' · Gym + Mat' : ''}
                   {item.dayLabel ? ` · ${item.dayLabel}` : ''}
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={T.muted} />
             </TouchableOpacity>
-          )}
+            );
+          }}
           ItemSeparatorComponent={() => <View style={styles.rowSep} />}
           ListEmptyComponent={
             isLoading ? (

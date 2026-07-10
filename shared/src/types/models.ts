@@ -397,6 +397,10 @@ export interface CreateSessionRequest {
   routineId?: string | null;
   date: string; // ISO date YYYY-MM-DD
   notes?: string | null;
+  // When starting from a mixed-kind routine, restricts the seeded entries to a
+  // single kind — a session is either weightlifting or martial arts, never both.
+  // Required for mixed routines; ignored for empty or single-kind sessions.
+  kind?: EntryKind;
 }
 
 export interface UpdateSessionRequest {
