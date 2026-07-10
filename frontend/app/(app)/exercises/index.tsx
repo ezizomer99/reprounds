@@ -22,7 +22,7 @@ import {
   useExercises,
 } from '../../../src/hooks/useExercises';
 import { ExerciseForm } from '../../../src/components/ExerciseForm';
-import { ExerciseFilterChips, filterByChips, EMPTY_FILTER, type ExerciseChipFilter } from '../../../src/components/ExerciseFilterChips';
+import { ExerciseFilters, filterByChips, EMPTY_FILTER, type ExerciseChipFilter } from '../../../src/components/ExerciseFilters';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
@@ -274,7 +274,7 @@ export default function ExercisesScreen() {
 
       {!isLoading && !isError && exercises && exercises.length > 0 && (
         <View style={styles.filterRow}>
-          <ExerciseFilterChips exercises={exercises} filter={filter} onChange={setFilter} />
+          <ExerciseFilters exercises={exercises} filter={filter} onChange={setFilter} dimensions={['equipment']} />
         </View>
       )}
 

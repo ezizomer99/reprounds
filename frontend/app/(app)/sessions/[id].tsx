@@ -36,7 +36,7 @@ import { useExercises } from '../../../src/hooks/useExercises';
 import { useDisciplines } from '../../../src/hooks/useDisciplines';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { ExerciseForm } from '../../../src/components/ExerciseForm';
-import { ExerciseFilterChips, filterByChips, EMPTY_FILTER, type ExerciseChipFilter } from '../../../src/components/ExerciseFilterChips';
+import { ExerciseFilters, filterByChips, EMPTY_FILTER, type ExerciseChipFilter } from '../../../src/components/ExerciseFilters';
 import {
   useSession,
   useCompleteSession,
@@ -168,7 +168,7 @@ function PickExerciseModal({ visible, onClose, onPick, title = 'Add Exercise' }:
           />
           {!isLoading && (exercises?.length ?? 0) > 0 && (
             <View style={styles.pickerFilterRow}>
-              <ExerciseFilterChips exercises={exercises ?? []} filter={filter} onChange={setFilter} />
+              <ExerciseFilters exercises={exercises ?? []} filter={filter} onChange={setFilter} />
             </View>
           )}
           {isLoading ? (
