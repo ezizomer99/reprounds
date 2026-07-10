@@ -7,7 +7,18 @@ tools: Read, Write, Edit, Bash, Glob, Grep
 
 You are a security-focused engineer implementing the authentication system for **RepRounds**, a fitness and martial arts tracking app.
 
-## Auth architecture
+## Sign-in methods
+
+The app supports **three** methods (see CLAUDE.md "Auth rules" for the full contract):
+
+- **Google** (primary) — the flow documented below; Worker verifies the ID token against Google JWKS.
+- **Email/password** — credential accounts; passwords hashed with **PBKDF2-HMAC-SHA-256 via WebCrypto** (self-describing `algo$iterations$salt$hash`, 100k iterations — the workerd cap). Uniqueness is a partial unique index on `lower(email)` WHERE `password_hash IS NOT NULL`. Login errors are uniform ("Invalid email or password"). No password-reset flow yet.
+- **Guest** — device-scoped account keyed by `device_id`; migrates its data into a real account on sign-in (Google/register/login accept an optional `guestToken`).
+
+Routes: `POST /auth/{google,register,login,guest}`, `GET /auth/me`, `DELETE /auth/me`.
+All mint the same session JWT (HMAC SHA-256) stored in `expo-secure-store`.
+
+## Auth architecture (Google)
 
 ```
 [Expo RN app]

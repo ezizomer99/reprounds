@@ -67,6 +67,9 @@ type DisciplineCat = 'grappling' | 'striking' | 'mixed';
 type SessionStatus = 'planned' | 'in_progress' | 'completed' | 'skipped';
 type SetType       = 'warmup' | 'normal' | 'drop' | 'failure' | 'amrap';
 type GiType        = 'gi' | 'no_gi';
+type FightResult   = 'win' | 'loss' | 'draw';
+type FightMethod   = 'ko' | 'tko' | 'submission' | 'decision' | 'points' | 'other';
+type FocusStatus   = 'active' | 'achieved' | 'archived';
 ```
 
 ### API response types (examples)
@@ -120,22 +123,44 @@ interface SessionEntry {
 interface Session {
   id: string;
   userId: string;
-  templateId: string | null;
-  scheduleRuleId: string | null;
-  date: string;         // ISO date "YYYY-MM-DD"
+  routineId: string | null;   // optional source routine (created on demand)
+  name: string | null;
+  date: string;               // ISO date "YYYY-MM-DD"
   status: SessionStatus;
   startedAt: string | null;
   completedAt: string | null;
   durationMinutes: number | null;
   notes: string | null;
   entries?: SessionEntry[];
+  focusIds?: string[];        // training focuses ticked for this session
 }
 
-// Calendar endpoint
-type CalendarItem =
-  | { kind: 'real';    session: Session }
-  | { kind: 'virtual'; date: string; scheduleRuleId: string; templateId: string };
+// Training Focuses (§5.5)
+interface TrainingFocus {
+  id: string;
+  userId: string;
+  disciplineId: string | null;   // null = global focus (all arts)
+  title: string;
+  notes: string | null;
+  status: FocusStatus;
+  achievedAt: string | null;
+  createdAt: string;
+}
+interface FocusWithStats extends TrainingFocus {
+  sessionCount: number;
+  lastWorkedDate: string | null;
+  disciplineName: string | null;
+}
+interface CreateFocusRequest { title: string; notes?: string | null; disciplineId?: string | null; }
+interface UpdateFocusRequest { title?: string; notes?: string | null; disciplineId?: string | null; status?: FocusStatus; }
+interface SetSessionFocusesRequest { focusIds: string[]; }   // PUT /sessions/:id/focuses
+
+// Combat-sports records also have contract types: Fight, RankPromotion, WeightLog,
+// Partner (+ their request/list shapes). See shared/src/types/models.ts.
 ```
+
+There is **no** calendar/schedule type — the `CalendarItem`, `templateId`, and
+`scheduleRuleId` types were removed with the calendar feature.
 
 ## Pure calculators
 

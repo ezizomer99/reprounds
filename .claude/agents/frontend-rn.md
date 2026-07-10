@@ -22,36 +22,29 @@ The app is an **Expo managed workflow** project written in **TypeScript**. It us
 1. `frontend` NEVER imports from `backend`. Only from `@app/shared`.
 2. JWT is read/written via `expo-secure-store` only.
 3. All network calls go through React Query (`useQuery` / `useMutation`). No raw `fetch` outside of query functions.
-4. RRULE projection is server-side only — the frontend only consumes the `/calendar` endpoint response.
-5. EAS dev builds are required for Google sign-in to work on device.
+4. There is no calendar/recurrence — routines are started on demand. Never build a calendar or consume a `/calendar` endpoint.
+5. EAS dev builds are required for Google sign-in to work on device. **Dev builds hit the dev Worker `reprounds-api`** (`EXPO_PUBLIC_API_URL` in the `development` EAS profile); preview/Play builds hit `reprounds-api-prod`.
+6. Never use `@gorhom/bottom-sheet` `BottomSheetModal` (silently no-ops in release) — use plain RN `Modal` with `presentationStyle="pageSheet"`.
 
-## MVP feature set (from BUILD_SPEC.md §6)
+## Tabs & feature set
 
-- Google auth + account
-- Exercise library (seeded defaults + custom) and discipline library
-- Dynamic discipline forms (field_config-driven; engine seeded with BJJ)
-- Templates (gym days and martial arts days)
-- Logging: strength (set types, reps/weight, RPE/RIR, rest timer, "last time", reorder, notes); conditioning; martial arts (dynamic form + gi)
-- Calendar with recurring schedule + per-instance exceptions
-- Session history
+Tabs: **Workout**, **Journal**, **Statistics**, **Martial Arts** (Mat), **Profile**.
+
+- Google + email/password + guest auth
+- Exercise library (seeded + custom) and discipline library; dynamic discipline forms (field_config-driven; seeded with BJJ, Boxing, Muay Thai, MMA, Wrestling)
+- Routines (mixed gym + martial-arts items), started on demand from a New Session picker
+- Logging: strength (set types, reps/weight, RPE/RIR, rest timer, "last time", reorder, notes, supersets, plate calculator); conditioning; martial arts (dynamic form + gi + category-aware round logger)
+- **Training Focuses** (`app/(app)/focuses/`, reached from the Mat tab) — CRUD with Active/Achieved/Archived filters; a mat session's logger has a checklist card to tick which active focuses were worked on (`useSetSessionFocuses` → `PUT /sessions/:id/focuses`)
+- Combat-sports records: partners, fights, belt promotions, body-weight log
+- History, per-exercise PRs / est. 1RM, mat + partner stats, notes timeline
 - Computed estimated 1RM + PRs per exercise
-
-## Build phases in order (§9)
-
-0. Scaffold + Expo app boots as EAS dev build on device
-1. Auth — Google sign-in → session JWT → `/auth/me`; secure-store wiring
-2. Libraries — exercise + discipline list/create/edit screens
-3. Templates — create/edit templates with mixed items
-4. Logging — strength logger first (sets, rest timer, "last time"), then conditioning, then martial arts form
-5. Calendar + recurrence — display calendar, plan sessions, edit/skip with three edit modes
-6. History + stats — session history list, per-exercise PR / est. 1RM view
 
 ## Key UI behaviour notes
 
 - "Last time" in the logger: when a user opens an exercise, show the most recent prior `session_entries` + `strength_sets` inline. Fetched via `/exercises/:id/history`.
 - Dynamic discipline form: render each field in `field_config` using the `type` → RN input map (`enum` → picker/segmented, `boolean` → switch, `number` → numeric input, `text` → text input, `textarea` → multiline). Values save into `session_entries.details` keyed by `key`.
 - Optimistic updates are expected on set completion — users should never wait for a network round-trip before seeing their set marked done.
-- Calendar shows both strength and martial arts sessions in one view, driven by a `/calendar?from=&to=` fetch.
+- Focuses hooks (`src/hooks/useFocuses.ts`): `useFocuses(status?)`, `useCreateFocus`, `useUpdateFocus`, `useDeleteFocus`, `useSetSessionFocuses`.
 
 ## Code style
 

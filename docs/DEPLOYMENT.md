@@ -76,6 +76,15 @@ backend deploy can be gated/observed; the workflow already references it.
 5. First deploy is automatic on merge to `main` via `deploy-backend.yml`. To deploy by
    hand: `pnpm --filter backend deploy:production`.
 
+> **Two Workers.** `deploy-backend.yml` deploys **both** the production Worker
+> `reprounds-api-prod` (`deploy:production` — migrate then publish) **and** the dev
+> Worker `reprounds-api` (`deploy:no-migrate` — code only). Preview/Play builds call
+> prod (`reprounds-api-prod.oemerdigital.workers.dev`); EAS **dev** builds call the
+> dev Worker (`reprounds-api.oemerdigital.workers.dev`, set via the `development` EAS
+> profile's `EXPO_PUBLIC_API_URL`). They currently share one Neon DB, which is why the
+> dev deploy skips migration. Deploying both keeps dev builds from 404-ing on routes
+> that only shipped to prod.
+
 ---
 
 ## 4. Google Cloud — OAuth for production

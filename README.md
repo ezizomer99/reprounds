@@ -1,6 +1,6 @@
 # RepRounds
 
-A mobile app for tracking gym workouts (strength + conditioning) and martial arts training in one place, with a unified calendar and recurring weekly schedule. Reps for the gym, rounds for the mat — one log. Android/Samsung is the primary target; iOS is supported.
+A mobile app for tracking gym workouts (strength + conditioning) and martial arts training in one place. Reps for the gym, rounds for the mat — one log. Log lifts with set types/RPE/rest timers and mat sessions with a data-driven round logger; reuse routines started on demand; track ongoing goals with Training Focuses; and keep combat-sports records (partners, fights, belt promotions, body weight). Android/Samsung is the primary target; iOS is supported.
 
 ---
 
@@ -84,7 +84,7 @@ Configure Google client IDs in `app.json` / `eas.json` at build time:
 reprounds/
   frontend/          Expo RN app (Expo Router, React Query, expo-secure-store)
   backend/           Cloudflare Worker (Hono) + Hyperdrive
-                     Drizzle schema, migrations, seed + RRULE projection
+                     Drizzle schema, migrations, seed
   shared/            API contract types, field_config types, pure calculators (est. 1RM)
                      imported as @app/shared
   docs/
@@ -95,7 +95,7 @@ reprounds/
   .githooks/         Pre-commit secret scanner + pre-push hook
 ```
 
-`frontend` never imports from `backend` — only from `@app/shared`. `backend` owns the database exclusively. All recurrence projection happens server-side in the `/calendar` endpoint.
+`frontend` never imports from `backend` — only from `@app/shared`. `backend` owns the database exclusively. Routines are started on demand (no calendar/recurrence).
 
 ---
 

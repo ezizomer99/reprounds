@@ -48,6 +48,7 @@ Package manager: **pnpm workspaces**. Always `pnpm install` from root. Each pack
 - `user_id = NULL` on `exercises` / `disciplines` = global seed data visible to everyone.
 - All `id` columns are `uuid DEFAULT gen_random_uuid()`.
 - All tables have `created_at timestamptz NOT NULL DEFAULT now()`.
+- **Training Focuses** (`training_focuses` + the `session_focuses` join table) are user-owned goals with a `focus_status` (active/achieved/archived); a mat session ticks which focuses it worked on. Scope every focus query by `user_id`.
 
 ---
 
@@ -73,7 +74,9 @@ pnpm --filter backend db:seed       # seed global defaults
 
 ## Deploy
 
-**CI deploys the backend automatically**: `.github/workflows/deploy-backend.yml` runs `deploy:production` (migrate, then publish `reprounds-api-prod`) on every push to `main` or `develop` that touches `backend/` or `shared/`. Preview app builds (also develop-triggered) point at the production API, so the backend is always live before a new app build reaches a tester.
+**CI deploys the backend automatically**: `.github/workflows/deploy-backend.yml` runs `deploy:production` (migrate, then publish `reprounds-api-prod`) **and then `deploy:no-migrate` to publish the dev Worker `reprounds-api`** on every push to `main` or `develop` that touches `backend/` or `shared/`. Preview app builds (also develop-triggered) point at the production API, so the backend is always live before a new app build reaches a tester.
+
+**Two Workers, one deploy.** `reprounds-api-prod` (prod, `[env.production]` in `wrangler.toml`) is what preview/Play builds call; `reprounds-api` (top-level config) is what **EAS dev builds** call (`EXPO_PUBLIC_API_URL` in the `development` profile). They currently share one Neon DB (same Hyperdrive id), so the dev Worker deploys with `deploy:no-migrate`. CI deploys **both** so a dev build never 404s on a route that shipped to prod — this exact drift once broke Training Focuses on the owner's dev build.
 
 Manual deploy still works the same way:
 
