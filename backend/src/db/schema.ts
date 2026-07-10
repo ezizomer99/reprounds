@@ -63,9 +63,6 @@ export const exercises = pgTable('exercises', {
   muscleGroup:        text('muscle_group'),
   secondaryMuscles:   text('secondary_muscles').array(),
   target:             text('target'),
-  instructions:       text('instructions'),
-  instructionSteps:   jsonb('instruction_steps'),
-  imageUrl:           text('image_url'),
   createdAt:          timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

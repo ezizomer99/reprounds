@@ -18,17 +18,12 @@ interface RawExercise {
   category?: string;
   body_part?: string;
   equipment?: string;
-  instructions?: { en?: string; [lang: string]: string | undefined };
-  instruction_steps?: { en?: string[]; [lang: string]: string[] | undefined };
   muscle_group?: string;
   secondary_muscles?: string[];
   target?: string;
-  image?: string;
 }
 
 async function seed() {
-  const R2_BASE = process.env.R2_PUBLIC_BASE_URL ?? '';
-
   // 1. Load exercises.json (lives two levels up at data/exercises.json)
   const jsonPath = join(__dirname, '..', '..', '..', 'data', 'exercises.json');
   const raw: RawExercise[] = JSON.parse(readFileSync(jsonPath, 'utf8'));
@@ -36,7 +31,6 @@ async function seed() {
   console.log(`Seeding ${raw.length} exercises...`);
 
   const rows = raw.map((ex) => {
-    const filename = ex.image ? ex.image.replace('images/', '') : null;
     return {
       sourceId:         ex.id,
       name:             ex.name,
@@ -47,9 +41,6 @@ async function seed() {
       muscleGroup:      ex.muscle_group ?? null,
       secondaryMuscles: ex.secondary_muscles ?? [],
       target:           ex.target ?? null,
-      instructions:     ex.instructions?.en ?? null,
-      instructionSteps: ex.instruction_steps?.en ?? null,
-      imageUrl:         filename && R2_BASE ? `${R2_BASE}/${filename}` : null,
     };
   });
 
@@ -70,9 +61,6 @@ async function seed() {
           muscleGroup:      sql`excluded.muscle_group`,
           secondaryMuscles: sql`excluded.secondary_muscles`,
           target:           sql`excluded.target`,
-          instructions:     sql`excluded.instructions`,
-          instructionSteps: sql`excluded.instruction_steps`,
-          imageUrl:         sql`excluded.image_url`,
         },
       });
     console.log(`  ${Math.min(i + CHUNK, rows.length)}/${rows.length}`);

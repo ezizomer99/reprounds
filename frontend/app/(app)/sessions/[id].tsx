@@ -12,7 +12,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Image } from 'react-native';
 import LottieView from 'lottie-react-native';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -180,11 +179,6 @@ function PickExerciseModal({ visible, onClose, onPick, title = 'Add Exercise' }:
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => (
                 <TouchableOpacity style={styles.pickRow} onPress={() => { onPick(item); handleClose(); }}>
-                  {item.imageUrl ? (
-                    <Image source={{ uri: item.imageUrl }} style={styles.pickThumb} resizeMode="cover" />
-                  ) : (
-                    <View style={[styles.pickThumb, styles.pickThumbPlaceholder]} />
-                  )}
                   <View style={styles.pickInfo}>
                     <Text style={styles.pickName}>{item.name}</Text>
                     <Text style={styles.pickMeta}>{item.equipment ?? item.muscleGroup ?? item.type}</Text>
@@ -2461,8 +2455,6 @@ function makeStyles(T: ThemeColors) {
   },
   pickerFilterRow: { paddingHorizontal: 16, paddingBottom: 10 },
   pickRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 12 },
-  pickThumb: { width: 44, height: 44, borderRadius: 8 },
-  pickThumbPlaceholder: { backgroundColor: T.surface2 },
   pickInfo: { flex: 1 },
   pickName: { fontFamily: F.uiMed, fontSize: 16, color: T.text },
   pickMeta: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim, marginTop: 2, textTransform: 'capitalize' },
