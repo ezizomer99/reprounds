@@ -18,5 +18,5 @@
 |---|---|
 | Logo entrance on app load | Moti |
 | Set completion feedback (scale flash, checkmark) | Moti |
-| Day-strip highlight transition (calendar/routine) | Moti |
+| Day-strip highlight transition (Workout tab day strip) | Moti |
 | Swipe-to-delete on set row | Reanimated + `react-native-gesture-handler` |

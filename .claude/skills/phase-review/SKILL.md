@@ -42,10 +42,10 @@ Tell Claude: "run phase-review" or "where are we in the build?"
    - [ ] Exercise library screen in app (list + search + add custom)
    - [ ] Discipline library screen in app
 
-5. **Phase 3 — Templates**
-   - [ ] Template CRUD endpoints
-   - [ ] Template items (mixed exercise + martial arts)
-   - [ ] Create/edit template screen in app
+5. **Phase 3 — Routines**
+   - [ ] Routine CRUD endpoints (no scheduling — routines are started on demand)
+   - [ ] Routine items (mixed exercise + martial arts), reorder
+   - [ ] Create/edit routine screen + New Session picker (start empty or from a routine)
 
 6. **Phase 4 — Logging**
    - [ ] Strength logger: set entry, set types, reps/weight, RPE/RIR
@@ -55,18 +55,17 @@ Tell Claude: "run phase-review" or "where are we in the build?"
    - [ ] Dynamic martial arts form (field_config renderer)
    - [ ] Gi field written to both `session_entries.gi` and `details`
 
-7. **Phase 5 — Calendar + recurrence**
-   - [ ] `GET /calendar?from=&to=` returns merged real + virtual items
-   - [ ] `POST /schedule-rules` creates a recurring rule
-   - [ ] Three edit modes (single/following/all) working
-   - [ ] Calendar screen in app shows both types
-   - [ ] Tapping a planned session opens the logger and materializes it
+7. *Phase 5 — Calendar + recurrence: **removed**. Routines are started on demand; there is no `/calendar` or `/schedule-rules`. Confirm no calendar/RRULE code has crept back in.*
 
 8. **Phase 6 — History + stats**
    - [ ] `GET /exercises/:id/history` returns last entry + sets
    - [ ] `GET /exercises/:id/prs` returns computed PRs and est. 1RM (Epley)
-   - [ ] Session history screen
-   - [ ] Per-exercise PR/1RM view in app
+   - [ ] Session history screen; per-exercise PR/1RM view in app
+   - [ ] Mat + partner stats (`GET /stats/mat`, `/stats/partners`); notes timeline (`GET /notes`)
+
+9. **Combat-sports records + Training Focuses** (added post-spec)
+   - [ ] Partners, fights, promotions, weights CRUD + screens
+   - [ ] Training Focuses: `GET/POST/PATCH/DELETE /focuses`, `PUT /sessions/:id/focuses`; Focuses screen (Mat tab) + session tick-off checklist; `training_focuses` + `session_focuses` tables
 
 ## Output format
 

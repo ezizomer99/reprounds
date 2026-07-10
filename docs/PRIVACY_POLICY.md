@@ -42,8 +42,8 @@ identifier so your data persists on your device until you choose to create an ac
 
 **Training data you create.** The app stores the content you enter, which may include:
 workouts and sessions, exercises and sets (reps, weight, RPE/RIR), routines, body weight
-logs, martial-arts sessions, fights/competition results, rank or belt promotions, and
-training partners you add.
+logs, martial-arts sessions, training focuses (goals), fights/competition results, rank or
+belt promotions, and training partners you add.
 
 **On-device data.** A session token is stored securely on your device (in the operating
 system's secure storage) to keep you signed in. It is not shared with third parties.

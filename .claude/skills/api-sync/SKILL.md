@@ -57,7 +57,7 @@ List any endpoint in the spec that has:
 - [file:line] field_config renderer missing case for 'textarea'
 
 ### 🔲 Not yet implemented
-- PATCH /sessions/:id — no route, no hook, no type
+- POST /sessions/:id/duplicate — no route, no hook, no type   (illustrative)
 ```
 
 Fix any drift found before reporting complete. Do not just report — fix.

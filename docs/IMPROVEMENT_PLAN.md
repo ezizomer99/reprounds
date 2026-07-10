@@ -8,6 +8,15 @@ evidence-based with file references; the roadmap at the bottom sequences them.*
 The [roadmap](#roadmap) groups them into phases sized to be one PR each (or a
 small PR series). Strike items out as they land.
 
+> **Refreshed 2026-07-10.** Since this audit the **calendar / recurrence layer was
+> removed** (routines are started on demand), so the calendar findings — **S3**,
+> **S9b**, and **T1a** (`calendar.ts` / `projectOccurrences`) — are **obsolete**:
+> that code no longer exists. Shipped since: **Training Focuses**, the combat-sports
+> layer (partners/fights/promotions/weights), and CI that deploys **both** the prod
+> and dev Workers. Any "bottom sheet" suggestion below must use a plain RN `Modal`
+> (`presentationStyle="pageSheet"`) — the `@gorhom/bottom-sheet` `BottomSheetModal`
+> is banned (see CLAUDE.md).
+
 ---
 
 ## 1. Security & correctness (fix before wider release)
@@ -30,13 +39,9 @@ held the guest session**. Anyone who learns a guest UUID can steal its data.
 **Fix:** require the guest's Bearer token at sign-in, verify it, and take the
 guest id from the verified token — never from the request body.
 
-### S3 — Calendar `from`/`to` unvalidated — silent blank calendar or 500 — **HIGH**
-`backend/src/routes/calendar.ts:101–141`, `projectOccurrences` `:43–98`
-
-Non-date input becomes `Invalid Date` → `RRule.between` silently returns
-nothing (blank calendar, no error), and the raw string hits Postgres and
-throws an uncaught 500 on the sessions query. **Fix:** regex-guard
-`^\d{4}-\d{2}-\d{2}$` on both params, 400 on mismatch.
+### ~~S3 — Calendar `from`/`to` unvalidated~~ — **OBSOLETE (calendar removed)**
+The `/calendar` endpoint and `projectOccurrences` no longer exist — routines are
+started on demand. Finding no longer applies.
 
 ### S4 — Deleting a logged exercise/discipline/routine → raw FK 500 — **HIGH (UX-facing)**
 `backend/src/routes/exercises.ts:186–206`, `disciplines.ts:210–230`,
@@ -50,7 +55,7 @@ logged sees a generic failure. **Fix:** pre-check for references and return
 
 ### S5 — No global error handler → inconsistent 500s — **MEDIUM**
 All non-auth routes (`sessions.ts`, `exercises.ts`, `disciplines.ts`,
-`routines.ts`, `fights.ts`, `weights.ts`, `calendar.ts`) run DB calls without
+`routines.ts`, `fights.ts`, `weights.ts`, `focuses.ts`) run DB calls without
 try/catch; auth routes return `{ error }` but everything else surfaces
 platform-shaped 500s. **Fix:** `app.onError` in `backend/src/index.ts`
 returning `{ error: 'Internal error' }` + logging; remove per-route catches
@@ -85,9 +90,8 @@ pre-filled from any `routineId` without checking `routines.userId`, exposing a
 victim's routine structure (exercises, targets, rest) to anyone holding the
 UUID. Fix: ownership check before the transaction, 404 on mismatch.
 
-**S9b — `/calendar` had no range cap — MEDIUM (fixed in Phase B)**
-Unbounded RRULE expansion (e.g. a 100-year window × 10 routines ≈ 36k dates)
-could exhaust the Worker CPU budget. Fix: 366-day maximum window.
+**~~S9b — `/calendar` had no range cap~~ — OBSOLETE (calendar removed)**
+The `/calendar` endpoint no longer exists; no range to cap.
 
 **S9c — Exercise search wildcards unescaped — LOW (fixed in Phase B)**
 `%`/`_` in the search string acted as LIKE wildcards (parameterized, so no
@@ -213,19 +217,19 @@ AsyncStorage.
 
 ## 4. Testing & tooling (the multiplier)
 
-### T1 — Route handlers are entirely untested — **HIGH**
-Backend tests cover auth/JWT/password only. Highest-risk untested unit:
-`projectOccurrences` (`calendar.ts:43–98`) — RRULE projection, dedup keys,
-DST/UTC edges — and it's a pure function, trivially unit-testable. Then:
-sessions entries/sets CRUD (most complex handlers), routines edit modes.
-**Fix order:** calendar projection unit tests → sessions route tests →
-routines. (S3's date-validation fix should land with the calendar tests.)
+### T1 — Route handlers need broader tests — **HIGH (partly addressed)**
+Backend now has route tests for auth, routines, sessions (reorder), notes, and
+focuses. Still thin: the most complex handlers — sessions entries/sets CRUD, and
+the stats aggregates (`/stats/mat`, `/stats/partners`). **Fix order:** sessions
+entries/sets route tests → stats aggregate tests. *(The former T1a "calendar
+projection" tests are obsolete — that code was removed.)*
 
 ### T2 — Frontend pure logic untested — **HIGH**
 Only `config.test.ts` exists. `kgToUnit`/`unitToKg`/`fmtWeight` (every logged
-set flows through these), `syncSessionReminders` (cap, filters, past-guard),
-`computeWeekStreak` + stats helpers (currently trapped inside screen files —
-extract first). **Fix:** extract into `src/`, add Jest suites, coverage gate.
+set flows through these), `computeWeekStreak` + stats helpers (currently trapped
+inside screen files — extract first). **Fix:** extract into `src/`, add Jest
+suites, coverage gate. *(The former `syncSessionReminders` is gone — session
+reminders were removed with the calendar.)*
 
 ### T3 — No linting anywhere — **HIGH**
 No ESLint/Prettier config in the repo; CI runs typecheck+test only. **Fix:**

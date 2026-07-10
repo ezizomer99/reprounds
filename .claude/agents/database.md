@@ -20,7 +20,10 @@ backend/src/db/
   index.ts        # Creates the Drizzle client using Hyperdrive connectionString
 ```
 
-## Canonical schema (from BUILD_SPEC.md §4)
+## Schema
+
+`backend/src/db/schema.ts` is the single source of truth. Latest migration is `0020`.
+Summary of the current shape:
 
 ### Enums
 ```sql
@@ -30,21 +33,29 @@ discipline_cat  ENUM ('grappling', 'striking', 'mixed')
 session_status  ENUM ('planned', 'in_progress', 'completed', 'skipped')
 set_type        ENUM ('warmup', 'normal', 'drop', 'failure', 'amrap')
 gi_type         ENUM ('gi', 'no_gi')
+fight_result    ENUM ('win', 'loss', 'draw')
+fight_method    ENUM ('ko', 'tko', 'submission', 'decision', 'points', 'other')
+focus_status    ENUM ('active', 'achieved', 'archived')
 ```
 
 ### Tables
-- **users** — `id`, `google_sub` (UNIQUE), `email`, `name`, `avatar_url`, `created_at`. No password column.
-- **exercises** — `id`, `user_id` (NULL = global), `name`, `type` (activity_type, only 'strength'|'conditioning'), `created_at` (+ seed metadata: `source_id`, `category`, `body_part`, `equipment`, `muscle_group`, `secondary_muscles`, `target`, `instructions`, `instruction_steps`, `image_url`)
+- **users** — `id`, `google_sub` (UNIQUE, nullable), `device_id` (UNIQUE, nullable), `is_guest` (bool), `email` (nullable), `password_hash` (nullable), `name`, `avatar_url`, `created_at`. Partial unique index on `lower(email)` WHERE `password_hash IS NOT NULL` (credential accounts only).
+- **exercises** — `id`, `user_id` (NULL = global), `name`, `type` (activity_type, 'strength'|'conditioning'), `created_at` (+ seed metadata: `source_id`, `category`, `body_part`, `equipment`, `muscle_group`, `secondary_muscles`, `target`, `instructions`, `instruction_steps`, `image_url`)
 - **disciplines** — `id`, `user_id` (NULL = global), `name`, `category` (discipline_cat), `field_config` (jsonb, default '[]'), `created_at`
-- **templates** — `id`, `user_id` NOT NULL, `name`, `day_label`, `notes`, `created_at`
-- **template_items** — `id`, `template_id`, `kind` (entry_kind), `exercise_id` (nullable), `discipline_id` (nullable), `order_index`, `superset_group`, `default_rest_seconds`, `target` (jsonb), + CHECK constraint
-- **schedule_rules** — `id`, `user_id`, `template_id`, `rrule` (text, RFC 5545), `start_date` (date), `end_date` (date, nullable), `time_of_day` (time), `created_at`
-- **sessions** — `id`, `user_id`, `template_id` (nullable), `schedule_rule_id` (nullable), `date` (date), `status` (session_status, default 'planned'), `started_at`, `completed_at`, `duration_minutes`, `notes`, `created_at`
+- **partners** — `id`, `user_id` NOT NULL, `name`, `created_at`
+- **routines** — `id`, `user_id` NOT NULL, `name`, `day_label`, `notes`, `created_at` (no recurrence columns — routines are started on demand)
+- **routine_items** — `id`, `routine_id`, `kind` (entry_kind), `exercise_id` (nullable), `discipline_id` (nullable), `order_index`, `superset_group`, `default_rest_seconds`, `target` (jsonb), + CHECK constraint
+- **sessions** — `id`, `user_id`, `routine_id` (nullable), `name`, `date`, `status` (session_status, default 'planned'), `started_at`, `completed_at`, `duration_minutes`, `notes`, `created_at`
 - **session_entries** — `id`, `session_id`, `kind` (entry_kind), `exercise_id` (nullable), `discipline_id` (nullable), `gi` (gi_type, nullable), `order_index`, `superset_group`, `rest_seconds`, `details` (jsonb), `notes`, + CHECK constraint
-- **strength_sets** — `id`, `session_entry_id`, `set_number`, `set_type` (default 'normal'), `reps`, `weight` (numeric), `rpe` (numeric), `rir`, `completed` (boolean, default false)
+- **strength_sets** — `id`, `session_entry_id`, `set_number`, `set_type` (default 'normal'), `reps`, `weight` (numeric), `rpe` (numeric), `rir`, `completed` (bool, default false), `notes`
+- **fights** — `id`, `user_id`, `discipline_id` (restrict), `date`, `opponent`, `result` (fight_result), `method` (fight_method, nullable), `round`, `notes`, `created_at`
+- **rank_promotions** — `id`, `user_id`, `discipline_id` (restrict), `rank`, `stripes`, `date`, `notes`, `created_at`
+- **weight_logs** — `id`, `user_id`, `date`, `weight_kg` (numeric), `notes`, `created_at`
+- **training_focuses** — `id`, `user_id` NOT NULL, `discipline_id` (SET NULL, nullable = global focus), `title`, `notes`, `status` (focus_status, default 'active'), `achieved_at`, `created_at`
+- **session_focuses** — `session_id`, `focus_id`, composite PK `(session_id, focus_id)` — which focuses a session ticked off
 
 ### CHECK constraints (enforce in Drizzle via `.check()`)
-`template_items` and `session_entries` both have:
+`routine_items` and `session_entries` both have:
 ```sql
 CHECK ( (kind='exercise'    AND exercise_id   IS NOT NULL AND discipline_id IS NULL)
      OR (kind='martial_arts' AND discipline_id IS NOT NULL AND exercise_id   IS NULL) )
@@ -53,10 +64,12 @@ CHECK ( (kind='exercise'    AND exercise_id   IS NOT NULL AND discipline_id IS N
 ### Required indexes
 ```sql
 CREATE INDEX ON sessions(user_id, date);
+CREATE INDEX ON sessions(user_id, status);
 CREATE INDEX ON session_entries(session_id);
 CREATE INDEX ON strength_sets(session_entry_id);
-CREATE INDEX ON session_entries(exercise_id);   -- "last time" + history lookups
-CREATE INDEX ON schedule_rules(user_id);
+CREATE INDEX ON session_entries(exercise_id);       -- "last time" + history lookups
+CREATE INDEX ON training_focuses(user_id, status);
+CREATE INDEX ON session_focuses(focus_id);
 ```
 
 ## Global defaults (seed data)
