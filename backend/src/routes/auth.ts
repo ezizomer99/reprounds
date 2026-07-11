@@ -5,6 +5,7 @@ import { users, exercises, disciplines, fights, partners, rankPromotions, routin
 import { verifyGoogleIdToken } from '../lib/googleAuth';
 import { signJwt, verifyJwt } from '../lib/jwt';
 import { hashPassword, verifyPassword } from '../lib/password';
+import { isCompedEmail } from '../lib/entitlements';
 import { authMiddleware } from '../middleware/auth';
 import type { User } from '@app/shared';
 
@@ -46,6 +47,7 @@ function toUserShape(dbUser: { id: string; email: string | null; name: string | 
     name: dbUser.name ?? null,
     avatarUrl: dbUser.avatarUrl ?? null,
     isGuest: dbUser.isGuest,
+    isComped: isCompedEmail(dbUser.email),
   };
 }
 

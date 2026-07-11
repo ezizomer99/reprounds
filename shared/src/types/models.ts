@@ -8,6 +8,10 @@ export interface User {
   name: string | null;
   avatarUrl: string | null;
   isGuest: boolean;
+  // Server-computed Pro comp: true when the account is on the owner's complimentary
+  // allowlist. The single source of truth lives server-side (backend/src/lib/
+  // entitlements.ts) so the list is never shipped in the client bundle.
+  isComped: boolean;
 }
 
 export interface GuestAuthRequest {

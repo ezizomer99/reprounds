@@ -18,7 +18,6 @@ import { F, R, D, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { withAlpha } from '../../src/lib/color';
 
-const COMP_EMAILS = ['ezizomer1999@gmail.com'];
 const PLAY_STORE_SUBS_URL =
   'https://play.google.com/store/account/subscriptions?package=com.reprounds.app';
 
@@ -45,7 +44,7 @@ export default function SubscriptionScreen() {
   const { data: user } = useCurrentUser();
   const [restoring, setRestoring] = useState(false);
 
-  const isComped = user?.email ? COMP_EMAILS.includes(user.email) : false;
+  const isComped = user?.isComped ?? false;
   const proEntitlement = customerInfo?.entitlements.active['pro'];
   const planId = proEntitlement?.productIdentifier ?? null;
   const planLabel = planId ? (PRODUCT_NAMES[planId] ?? planId) : null;
