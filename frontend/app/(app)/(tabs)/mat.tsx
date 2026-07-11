@@ -20,7 +20,8 @@ import {
   useDeleteDiscipline,
   useDisciplines,
 } from '../../../src/hooks/useDisciplines';
-import { fightRecord, useFights } from '../../../src/hooks/useFights';
+import { useFightRecords } from '../../../src/hooks/useFights';
+import type { FightRecord } from '@app/shared';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
@@ -53,14 +54,12 @@ function categoryColor(cat: DisciplineCat, T: ThemeColors): string {
   return T.gold;
 }
 
-function FightRecordBadge({ disciplineId }: { disciplineId: string }) {
+function FightRecordBadge({ record }: { record: FightRecord | undefined }) {
   const { T } = useTheme();
-  const { data: fights } = useFights(disciplineId);
-  if (!fights || fights.length === 0) return null;
-  const { wins, losses, draws } = fightRecord(fights);
+  if (!record || record.wins + record.losses + record.draws === 0) return null;
   return (
     <Text style={{ fontFamily: F.uiMed, fontSize: 11, color: T.textDim }}>
-      {wins}W–{losses}L–{draws}D
+      {record.wins}W–{record.losses}L–{record.draws}D
     </Text>
   );
 }
@@ -69,11 +68,12 @@ interface DisciplineRowProps {
   discipline: Discipline;
   isOwned: boolean;
   isPro: boolean;
+  record: FightRecord | undefined;
   onDelete: (id: string) => void;
   onPress: (id: string, name: string) => void;
 }
 
-function DisciplineRow({ discipline, isOwned, isPro, onDelete, onPress }: DisciplineRowProps) {
+function DisciplineRow({ discipline, isOwned, isPro, record, onDelete, onPress }: DisciplineRowProps) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const catColor = categoryColor(discipline.category, T);
@@ -105,7 +105,7 @@ function DisciplineRow({ discipline, isOwned, isPro, onDelete, onPress }: Discip
           <Text style={[styles.rowCat, { color: catColor }]}>
             {CATEGORY_LABEL[discipline.category]}
           </Text>
-          {isPro && <FightRecordBadge disciplineId={discipline.id} />}
+          {isPro && <FightRecordBadge record={record} />}
         </View>
       </View>
       {isOwned && (
@@ -238,6 +238,7 @@ export default function MatTab() {
   const [showAdd, setShowAdd] = useState(false);
 
   const { data: disciplines, isLoading, isError, error } = useDisciplines();
+  const { data: fightRecords } = useFightRecords();
   const deleteDiscipline = useDeleteDiscipline();
 
   function handleDelete(id: string) {
@@ -338,6 +339,7 @@ export default function MatTab() {
               discipline={item}
               isOwned={item.userId === currentUser?.id}
               isPro={isPro}
+              record={fightRecords?.get(item.id)}
               onDelete={handleDelete}
               onPress={handlePress}
             />

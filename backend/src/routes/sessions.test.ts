@@ -503,6 +503,92 @@ describe('PATCH /sessions/:id/entries/:entryId — exerciseId swap', () => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /sessions/:id/entries — ownership (IDOR) guards
+// ---------------------------------------------------------------------------
+describe('POST /sessions/:id/entries', () => {
+  it("returns 404 when the exerciseId is not visible to the caller (IDOR guard)", async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]); // session owned ✓
+    mock.selectQueue.push([]);                   // exercise not visible
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/entries`,
+      {
+        method: 'POST',
+        headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'exercise', exerciseId: 'ex-other-user' }),
+      },
+      env,
+    );
+
+    expect(res.status).toBe(404);
+    expect((await res.json() as { error: string }).error).toBe('Exercise not found');
+    expect(mock.insert).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when the disciplineId is not visible to the caller (IDOR guard)", async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]); // session owned ✓
+    mock.selectQueue.push([]);                   // discipline not visible
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/entries`,
+      {
+        method: 'POST',
+        headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'martial_arts', disciplineId: 'disc-other-user' }),
+      },
+      env,
+    );
+
+    expect(res.status).toBe(404);
+    expect((await res.json() as { error: string }).error).toBe('Discipline not found');
+    expect(mock.insert).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /sessions/:id/entries/:entryId/sets — input validation
+// ---------------------------------------------------------------------------
+describe('POST /sessions/:id/entries/:entryId/sets', () => {
+  it('returns 400 for an invalid setType instead of a 500', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]); // session owned ✓
+    mock.selectQueue.push([{ id: ENTRY_ID }]);   // entry found ✓
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/entries/${ENTRY_ID}/sets`,
+      {
+        method: 'POST',
+        headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setNumber: 1, setType: 'superset' }),
+      },
+      env,
+    );
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('Invalid setType');
+    expect(mock.insert).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for an out-of-range rpe', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]); // session owned ✓
+    mock.selectQueue.push([{ id: ENTRY_ID }]);   // entry found ✓
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/entries/${ENTRY_ID}/sets`,
+      {
+        method: 'POST',
+        headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setNumber: 1, rpe: 99 }),
+      },
+      env,
+    );
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('Invalid rpe');
+    expect(mock.insert).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // PUT /sessions/:id/focuses
 // ---------------------------------------------------------------------------
 describe('PUT /sessions/:id/focuses', () => {

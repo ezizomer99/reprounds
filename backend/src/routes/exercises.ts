@@ -3,30 +3,24 @@ import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, or, sql } from '
 import { createDb } from '../db';
 import { disciplines, exercises, sessionEntries, sessions, strengthSets } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import type { AppEnv } from '../env';
 import { estimatedOneRepMax } from '@app/shared';
+import { epleyE1rmSql } from '../lib/e1rm';
 import type {
   CreateExerciseRequest,
   Exercise,
   ExerciseHistoryEntry,
   ExerciseHistoryResponse,
   ExercisePRsResponse,
+  ExerciseProgressionPoint,
+  ExerciseProgressionResponse,
   ExerciseListResponse,
   SessionEntryWithSets,
   StrengthSet,
   UpdateExerciseRequest,
 } from '@app/shared';
 
-type Env = {
-  Bindings: {
-    HYPERDRIVE?: Hyperdrive;
-    DATABASE_URL?: string;
-    JWT_SECRET: string;
-    GOOGLE_CLIENT_ID: string;
-  };
-  Variables: {
-    userId: string;
-  };
-};
+type Env = AppEnv;
 
 const exerciseRoutes = new Hono<Env>();
 
@@ -116,6 +110,10 @@ exerciseRoutes.post('/', async (c) => {
   if (!body.name || !body.type) {
     return c.json({ error: 'name and type are required' }, 400);
   }
+  // Exercises are strength or conditioning only — martial_arts is a discipline.
+  if (body.type !== 'strength' && body.type !== 'conditioning') {
+    return c.json({ error: 'type must be "strength" or "conditioning"' }, 400);
+  }
 
   const [row] = await db
     .insert(exercises)
@@ -170,6 +168,10 @@ exerciseRoutes.patch('/:id', async (c) => {
     body = await c.req.json();
   } catch {
     return c.json({ error: 'Invalid request body' }, 400);
+  }
+
+  if (body.type !== undefined && body.type !== 'strength' && body.type !== 'conditioning') {
+    return c.json({ error: 'type must be "strength" or "conditioning"' }, 400);
   }
 
   const updates: Partial<typeof exercises.$inferInsert> = {};
@@ -331,7 +333,7 @@ exerciseRoutes.get('/:id/prs', async (c) => {
   // The PR is a max — compute it in the database instead of shipping every
   // completed set ever logged into the Worker (grows unboundedly with
   // training history). Mirrors estimatedOneRepMax: Epley, reps=1 → weight.
-  const e1rmExpr = sql`CASE WHEN ${strengthSets.reps} = 1 THEN ${strengthSets.weight} ELSE ${strengthSets.weight} * (1 + ${strengthSets.reps} / 30.0) END`;
+  const e1rmExpr = epleyE1rmSql(sql`${strengthSets.weight}`, sql`${strengthSets.reps}`);
 
   const baseJoin = () =>
     db
@@ -389,6 +391,59 @@ exerciseRoutes.get('/:id/prs', async (c) => {
     totalSessions: countRow?.totalSessions ?? 0,
   };
 
+  return c.json(result);
+});
+
+// GET /exercises/:id/progression?since=YYYY-MM-DD
+// One point per completed session (oldest-first) with the best Epley e1RM, top
+// weight, and total volume for this exercise that session — the long-run trend
+// the 5-entry /history endpoint can't provide. Aggregated in the DB so a power
+// user's full history isn't shipped into the Worker; bounded to a window and a
+// point cap. The CASE mirrors the shared estimatedOneRepMax calculator (Epley).
+exerciseRoutes.get('/:id/progression', async (c) => {
+  const userId = c.get('userId');
+  const exerciseId = c.req.param('id');
+  const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+
+  const sinceParam = c.req.query('since');
+  const since =
+    sinceParam && /^\d{4}-\d{2}-\d{2}$/.test(sinceParam)
+      ? sinceParam
+      : new Date(Date.now() - 2 * 365.25 * 86_400_000).toISOString().slice(0, 10);
+
+  const rows = await db.execute(sql`
+    SELECT s.date AS date,
+           MAX(${epleyE1rmSql(sql`ss.weight::numeric`, sql`ss.reps::numeric`)})::float AS best_e1rm,
+           MAX(ss.weight)::float AS top_weight,
+           SUM(ss.weight::numeric * ss.reps::numeric)::float AS total_volume
+    FROM strength_sets ss
+    JOIN session_entries se ON ss.session_entry_id = se.id
+    JOIN sessions s         ON se.session_id = s.id
+    WHERE se.exercise_id = ${exerciseId}
+      AND s.user_id      = ${userId}
+      AND s.status       = 'completed'
+      AND s.date         >= ${since}
+      AND ss.completed   = TRUE
+      AND ss.weight      IS NOT NULL
+      AND ss.reps        IS NOT NULL
+    GROUP BY s.id, s.date
+    ORDER BY s.date ASC
+    LIMIT 200
+  `);
+
+  const points: ExerciseProgressionPoint[] = (rows as unknown as Array<{
+    date: string;
+    best_e1rm: number;
+    top_weight: number;
+    total_volume: number;
+  }>).map((r) => ({
+    date: r.date,
+    bestEstimatedOneRepMax: r.best_e1rm,
+    topWeight: r.top_weight,
+    totalVolume: r.total_volume,
+  }));
+
+  const result: ExerciseProgressionResponse = { points };
   return c.json(result);
 });
 

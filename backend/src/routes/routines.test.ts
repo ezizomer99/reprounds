@@ -159,6 +159,41 @@ describe('PATCH /routines/:id', () => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /routines/:id/items — ownership (IDOR) guard
+// ---------------------------------------------------------------------------
+describe('POST /routines/:id/items', () => {
+  it("returns 404 when the exerciseId is not visible to the caller (IDOR guard)", async () => {
+    mock.selectQueue.push([{ id: ROUTINE_ID }]); // owner check ✓
+    mock.selectQueue.push([]);                   // exercise not visible
+
+    const res = await makeApp().request(`/routines/${ROUTINE_ID}/items`, {
+      method: 'POST',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'exercise', exerciseId: 'ex-other-user' }),
+    }, env);
+
+    expect(res.status).toBe(404);
+    expect((await res.json() as { error: string }).error).toBe('Exercise not found');
+    expect(mock.insert).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when the disciplineId is not visible to the caller (IDOR guard)", async () => {
+    mock.selectQueue.push([{ id: ROUTINE_ID }]); // owner check ✓
+    mock.selectQueue.push([]);                   // discipline not visible
+
+    const res = await makeApp().request(`/routines/${ROUTINE_ID}/items`, {
+      method: 'POST',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'martial_arts', disciplineId: 'disc-other-user' }),
+    }, env);
+
+    expect(res.status).toBe(404);
+    expect((await res.json() as { error: string }).error).toBe('Discipline not found');
+    expect(mock.insert).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // PUT /routines/:id/items/order
 // ---------------------------------------------------------------------------
 describe('PUT /routines/:id/items/order', () => {

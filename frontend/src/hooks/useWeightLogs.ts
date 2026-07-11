@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   CreateWeightLogRequest,
+  UpdateWeightLogRequest,
   WeightLog,
   WeightLogListResponse,
 } from '@app/shared';
-import { apiDelete, apiGet, apiPost } from '../lib/api';
+import { apiDelete, apiGet, apiPatch, apiPost } from '../lib/api';
 
 export function useWeightLogs() {
   return useQuery<WeightLog[], Error>({
@@ -21,6 +22,17 @@ export function useCreateWeightLog() {
   return useMutation<WeightLog, Error, CreateWeightLogRequest>({
     mutationFn: (body) =>
       apiPost<{ weight: WeightLog }>('/weights', body).then((r) => r.weight),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['weights'] });
+    },
+  });
+}
+
+export function useUpdateWeightLog() {
+  const queryClient = useQueryClient();
+  return useMutation<WeightLog, Error, { id: string } & UpdateWeightLogRequest>({
+    mutationFn: ({ id, ...body }) =>
+      apiPatch<{ weight: WeightLog }>(`/weights/${id}`, body).then((r) => r.weight),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['weights'] });
     },

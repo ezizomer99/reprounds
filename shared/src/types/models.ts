@@ -8,6 +8,13 @@ export interface User {
   name: string | null;
   avatarUrl: string | null;
   isGuest: boolean;
+  // Server-computed Pro comp: true when the account is on the owner's complimentary
+  // allowlist. The single source of truth lives server-side (backend/src/lib/
+  // entitlements.ts) so the list is never shipped in the client bundle.
+  isComped: boolean;
+  // True for email/password (credential) accounts. Lets the client show a
+  // "Change password" action only where it applies (not Google/guest accounts).
+  hasPassword: boolean;
 }
 
 export interface GuestAuthRequest {
@@ -270,6 +277,20 @@ export interface FightListResponse {
   fights: Fight[];
 }
 
+// Per-discipline win-loss-draw tally, aggregated server-side so the mat tab can
+// show a record badge per discipline in one request instead of fetching every
+// discipline's full fight list (an N+1).
+export interface FightRecord {
+  disciplineId: string;
+  wins: number;
+  losses: number;
+  draws: number;
+}
+
+export interface FightRecordsResponse {
+  records: FightRecord[];
+}
+
 export interface CreateFightRequest {
   disciplineId: string;
   date: string;
@@ -308,6 +329,20 @@ export interface WeightLogListResponse {
 export interface CreateWeightLogRequest {
   date: string;
   weightKg: number;
+  notes?: string | null;
+}
+
+export interface UpdateWeightLogRequest {
+  date?: string;
+  weightKg?: number;
+  notes?: string | null;
+}
+
+export interface UpdateRankPromotionRequest {
+  disciplineId?: string;
+  rank?: string;
+  stripes?: number | null;
+  date?: string;
   notes?: string | null;
 }
 
@@ -487,6 +522,20 @@ export interface ExercisePRsResponse {
   estimatedOneRepMax: number | null;
   bestSet: StrengthSet | null;
   totalSessions: number;
+}
+
+// One point per completed session that included the exercise, oldest-first, for
+// charting a lift's trend over time. All weights are in kg (the storage unit);
+// the client converts to the user's display unit.
+export interface ExerciseProgressionPoint {
+  date: string; // YYYY-MM-DD
+  bestEstimatedOneRepMax: number; // best Epley e1RM across the session's completed sets
+  topWeight: number; // heaviest completed set that session
+  totalVolume: number; // sum of weight*reps over completed sets that session
+}
+
+export interface ExerciseProgressionResponse {
+  points: ExerciseProgressionPoint[];
 }
 
 // ---- Stats ----

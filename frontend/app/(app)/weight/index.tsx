@@ -3,6 +3,7 @@ import {
   Alert,
   FlatList,
   Modal,
+  RefreshControl,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -23,6 +24,8 @@ import {
 import { useUnit } from '../../../src/units/UnitContext';
 import { fmtWeight, kgToUnit, unitToKg } from '../../../src/units/units';
 import { Sparkline } from '../../../src/components/Sparkline';
+import { InlineError } from '../../../src/components/InlineError';
+import { CalendarPicker } from '../../../src/components/CalendarPicker';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 
@@ -43,7 +46,7 @@ export default function WeightScreen() {
   const styles = useMemo(() => makeStyles(T), [T]);
 
   const { unit } = useUnit();
-  const { data, isLoading } = useWeightLogs();
+  const { data, isLoading, isError, refetch, isRefetching } = useWeightLogs();
   const deleteWeight = useDeleteWeightLog();
   const [showAdd, setShowAdd] = useState(false);
 
@@ -51,6 +54,12 @@ export default function WeightScreen() {
   const latest = weights[0] ?? null;
   const previous = weights[1] ?? null;
   const delta = latest && previous ? latest.weightKg - previous.weightKg : null;
+  // 7-entry moving average smooths daily water-weight noise for a truer trend.
+  const movingAvgKg = useMemo(() => {
+    const recent = weights.slice(0, 7);
+    if (recent.length < 2) return null;
+    return recent.reduce((sum, w) => sum + w.weightKg, 0) / recent.length;
+  }, [weights]);
   // Sparkline needs chronological order and numeric values in display unit
   const sparkValues = useMemo(
     () => [...weights].reverse().slice(-20).map((w) => kgToUnit(w.weightKg, unit)),
@@ -60,11 +69,21 @@ export default function WeightScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Body weight</Text>
-        <TouchableOpacity style={styles.backBtn} onPress={() => setShowAdd(true)}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => setShowAdd(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Add weigh-in"
+        >
           <Ionicons name="add" size={24} color={T.primary} />
         </TouchableOpacity>
       </View>
@@ -72,6 +91,13 @@ export default function WeightScreen() {
       <FlatList
         data={weights}
         keyExtractor={(item) => item.id}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => void refetch()}
+            tintColor={T.textDim}
+          />
+        }
         ListHeaderComponent={
           <View style={styles.summaryCard}>
             <View style={styles.summaryTop}>
@@ -91,6 +117,11 @@ export default function WeightScreen() {
                       {kgToUnit(Math.abs(delta), unit).toFixed(1)} {unit} since last
                     </Text>
                   </View>
+                )}
+                {movingAvgKg !== null && (
+                  <Text style={styles.avgText}>
+                    {fmtWeight(movingAvgKg, unit)} {unit} avg (last {Math.min(weights.length, 7)})
+                  </Text>
                 )}
               </View>
               {sparkValues.length >= 2 && (
@@ -125,6 +156,10 @@ export default function WeightScreen() {
           isLoading ? (
             <View style={styles.centered}>
               <ActivityIndicator size="large" color={T.primary} />
+            </View>
+          ) : isError ? (
+            <View style={styles.centered}>
+              <InlineError message="Couldn't load your weigh-ins." onRetry={() => void refetch()} />
             </View>
           ) : (
             <View style={styles.centered}>
@@ -193,14 +228,7 @@ function AddWeightModal({ onClose }: { onClose: () => void }) {
           />
 
           <Text style={styles.sheetLabel}>Date</Text>
-          <TextInput
-            style={styles.sheetInput}
-            value={date}
-            onChangeText={setDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={T.muted}
-            autoCapitalize="none"
-          />
+          <CalendarPicker value={date} onChange={setDate} />
 
           <Text style={styles.sheetLabel}>Notes</Text>
           <TextInput
@@ -251,6 +279,7 @@ function makeStyles(T: ThemeColors) {
     summaryKey: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.5 },
     deltaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
     deltaText: { fontFamily: F.uiSemi, fontSize: 13 },
+    avgText: { fontFamily: F.uiMed, fontSize: 12, color: T.muted, marginTop: 4 },
 
     row: {
       flexDirection: 'row', alignItems: 'center', gap: 12,

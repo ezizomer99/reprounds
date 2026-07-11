@@ -16,6 +16,7 @@ import type { RoutineWithItems } from '@app/shared';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useSessions } from '../../../src/hooks/useSession';
 import { useRoutines } from '../../../src/hooks/useRoutines';
+import { InlineError } from '../../../src/components/InlineError';
 import { mondayOf, weekKey, computeWeekStreak } from '../../../src/lib/statsHelpers';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
@@ -100,8 +101,13 @@ export default function WorkoutTab() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { data: user } = useCurrentUser();
-  const { data: sessions } = useSessions('completed');
-  const { data: routines } = useRoutines();
+  const {
+    data: sessions,
+    isError: sessionsError,
+    refetch: refetchSessions,
+  } = useSessions('completed');
+  const { data: routines, isError: routinesError, refetch: refetchRoutines } = useRoutines();
+  const hasError = sessionsError || routinesError;
 
   const weekDays = useMemo(getWeekDays, []);
   const sessionDates = useMemo(
@@ -130,6 +136,16 @@ export default function WorkoutTab() {
         contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 20 }]}
         showsVerticalScrollIndicator={false}
       >
+        {hasError && (
+          <InlineError
+            message="Couldn't refresh your recent workouts. Showing what we have."
+            onRetry={() => {
+              if (sessionsError) void refetchSessions();
+              if (routinesError) void refetchRoutines();
+            }}
+          />
+        )}
+
         {/* Quick Start */}
         <View style={styles.card}>
           <View style={styles.quickStartRow}>

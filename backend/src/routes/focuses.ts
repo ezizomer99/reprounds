@@ -1,27 +1,19 @@
 import { Hono } from 'hono';
-import { and, count, desc, eq, inArray, isNull, max, or } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, max } from 'drizzle-orm';
 import { createDb } from '../db';
 import { disciplines, sessionFocuses, sessions, trainingFocuses } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import type { AppEnv } from '../env';
+import { disciplineVisible } from '../lib/ownership';
+import { isFocusStatus } from '@app/shared';
 import type {
   CreateFocusRequest,
   FocusListResponse,
-  FocusStatus,
   FocusWithStats,
   UpdateFocusRequest,
 } from '@app/shared';
 
-type Env = {
-  Bindings: {
-    HYPERDRIVE?: Hyperdrive;
-    DATABASE_URL?: string;
-    JWT_SECRET: string;
-    GOOGLE_CLIENT_ID: string;
-  };
-  Variables: {
-    userId: string;
-  };
-};
+type Env = AppEnv;
 
 const focusRoutes = new Hono<Env>();
 
@@ -29,33 +21,6 @@ focusRoutes.use('*', authMiddleware);
 
 function getDb(env: Env['Bindings']) {
   return createDb(env.HYPERDRIVE?.connectionString ?? env.DATABASE_URL!);
-}
-
-const FOCUS_STATUSES: FocusStatus[] = ['active', 'achieved', 'archived'];
-
-function isFocusStatus(v: unknown): v is FocusStatus {
-  return typeof v === 'string' && (FOCUS_STATUSES as string[]).includes(v);
-}
-
-// A discipline is usable if it's a global seed (user_id null) or owned by the
-// caller. Returns true when disciplineId is null/undefined (no tag).
-async function disciplineVisible(
-  db: ReturnType<typeof createDb>,
-  disciplineId: string | null | undefined,
-  userId: string,
-): Promise<boolean> {
-  if (!disciplineId) return true;
-  const [row] = await db
-    .select({ id: disciplines.id })
-    .from(disciplines)
-    .where(
-      and(
-        eq(disciplines.id, disciplineId),
-        or(isNull(disciplines.userId), eq(disciplines.userId, userId)),
-      ),
-    )
-    .limit(1);
-  return !!row;
 }
 
 // GET /focuses[?status=active]

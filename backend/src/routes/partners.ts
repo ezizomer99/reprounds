@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { createDb } from '../db';
 import { partners } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import type { AppEnv } from '../env';
 import type {
   CreatePartnerRequest,
   Partner,
@@ -10,17 +11,7 @@ import type {
   UpdatePartnerRequest,
 } from '@app/shared';
 
-type Env = {
-  Bindings: {
-    HYPERDRIVE?: Hyperdrive;
-    DATABASE_URL?: string;
-    JWT_SECRET: string;
-    GOOGLE_CLIENT_ID: string;
-  };
-  Variables: {
-    userId: string;
-  };
-};
+type Env = AppEnv;
 
 const partnerRoutes = new Hono<Env>();
 

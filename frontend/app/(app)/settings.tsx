@@ -2,6 +2,8 @@ import {
   ActivityIndicator,
   Alert,
   Linking,
+  Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Switch,
@@ -15,7 +17,7 @@ import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useCurrentUser, useSignOut, useDeleteAccount } from '../../src/hooks/useAuth';
+import { useCurrentUser, useSignOut, useDeleteAccount, useChangePassword } from '../../src/hooks/useAuth';
 import { F, R, D, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useUnit } from '../../src/units/UnitContext';
@@ -60,6 +62,7 @@ export default function SettingsScreen() {
   const { signOut } = useSignOut();
   const { deleteAccount } = useDeleteAccount();
   const [deleting, setDeleting] = useState(false);
+  const [showChangePw, setShowChangePw] = useState(false);
   const [customRest, setCustomRest] = useState(() =>
     REST_PRESET_VALUES.includes(restTimerDefault as 30 | 60 | 90 | 120 | 180)
       ? ''
@@ -133,7 +136,12 @@ export default function SettingsScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Settings</Text>
@@ -166,6 +174,19 @@ export default function SettingsScreen() {
               )}
             </View>
           </View>
+          {user?.hasPassword && (
+            <TouchableOpacity
+              style={styles.accountActionRow}
+              onPress={() => setShowChangePw(true)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Change password"
+            >
+              <Ionicons name="key-outline" size={17} color={T.textDim} />
+              <Text style={styles.rowLabel}>Change password</Text>
+              <Ionicons name="chevron-forward" size={16} color={T.muted} style={{ marginLeft: 'auto' }} />
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Appearance */}
@@ -315,7 +336,91 @@ export default function SettingsScreen() {
           )}
         </TouchableOpacity>
       </ScrollView>
+
+      {showChangePw && <ChangePasswordModal onClose={() => setShowChangePw(false)} />}
     </View>
+  );
+}
+
+function ChangePasswordModal({ onClose }: { onClose: () => void }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const changePassword = useChangePassword();
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+
+  async function handleSave() {
+    if (next.length < 8) {
+      Alert.alert('Password too short', 'Your new password must be at least 8 characters.');
+      return;
+    }
+    if (next !== confirm) {
+      Alert.alert('Passwords do not match', 'The new password and confirmation must match.');
+      return;
+    }
+    try {
+      await changePassword.mutateAsync({ currentPassword: current, newPassword: next });
+      Alert.alert('Password changed', 'Your password has been updated.');
+      onClose();
+    } catch (err) {
+      const msg = (err as Error & { body?: { error?: string } })?.body?.error
+        ?? (err as Error).message
+        ?? 'Could not change your password.';
+      Alert.alert('Change failed', msg);
+    }
+  }
+
+  return (
+    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+      <Pressable style={styles.pwBackdrop} onPress={onClose} />
+      <View style={styles.pwSheet}>
+        <View style={styles.pwHandle} />
+        <Text style={styles.pwTitle}>Change password</Text>
+
+        <TextInput
+          style={styles.pwInput}
+          value={current}
+          onChangeText={setCurrent}
+          placeholder="Current password"
+          placeholderTextColor={T.muted}
+          secureTextEntry
+          autoCapitalize="none"
+        />
+        <TextInput
+          style={styles.pwInput}
+          value={next}
+          onChangeText={setNext}
+          placeholder="New password (min 8 chars)"
+          placeholderTextColor={T.muted}
+          secureTextEntry
+          autoCapitalize="none"
+        />
+        <TextInput
+          style={styles.pwInput}
+          value={confirm}
+          onChangeText={setConfirm}
+          placeholder="Confirm new password"
+          placeholderTextColor={T.muted}
+          secureTextEntry
+          autoCapitalize="none"
+        />
+
+        <TouchableOpacity
+          style={[styles.pwSaveBtn, changePassword.isPending && { opacity: 0.6 }]}
+          onPress={handleSave}
+          disabled={changePassword.isPending}
+          accessibilityRole="button"
+          accessibilityLabel="Save new password"
+        >
+          {changePassword.isPending ? (
+            <ActivityIndicator size="small" color={T.onPrimary} />
+          ) : (
+            <Text style={styles.pwSaveText}>Update password</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </Modal>
   );
 }
 
@@ -394,6 +499,11 @@ function makeStyles(T: ThemeColors) {
     },
     accountName: { fontFamily: F.uiSemi, fontSize: 16, color: T.text },
     accountSub: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim, marginTop: 2 },
+    accountActionRow: {
+      flexDirection: 'row', alignItems: 'center', gap: 12,
+      paddingTop: 14, marginTop: 14,
+      borderTopWidth: 1, borderTopColor: T.border,
+    },
     // Notifications
     switchRow: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -415,5 +525,28 @@ function makeStyles(T: ThemeColors) {
       paddingVertical: 12, marginTop: 2,
     },
     deleteText: { fontFamily: F.uiMed, fontSize: 13, color: T.muted },
+    // Change-password modal
+    pwBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
+    pwSheet: {
+      position: 'absolute', left: 0, right: 0, bottom: 0,
+      backgroundColor: T.bg,
+      borderTopLeftRadius: R.card, borderTopRightRadius: R.card,
+      padding: D.pad, paddingBottom: 40, gap: 12,
+    },
+    pwHandle: {
+      alignSelf: 'center', width: 40, height: 4, borderRadius: 2,
+      backgroundColor: T.border, marginBottom: 6,
+    },
+    pwTitle: { fontFamily: F.uiBold, fontSize: 18, color: T.text, marginBottom: 4 },
+    pwInput: {
+      fontFamily: F.uiMed, fontSize: 15, color: T.text,
+      borderWidth: 1, borderColor: T.border, borderRadius: R.sm,
+      paddingHorizontal: 14, paddingVertical: 12,
+    },
+    pwSaveBtn: {
+      backgroundColor: T.primary, borderRadius: R.card,
+      paddingVertical: 14, alignItems: 'center', marginTop: 4,
+    },
+    pwSaveText: { fontFamily: F.uiBold, fontSize: 15, color: T.onPrimary },
   });
 }

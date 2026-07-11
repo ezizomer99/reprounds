@@ -30,7 +30,7 @@ export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const { purchasePro, restorePurchases } = useSubscription();
+  const { purchasePro, restorePurchases, prices } = useSubscription();
   const [loading, setLoading] = useState<'monthly' | 'annual' | 'restore' | null>(null);
 
   async function handlePurchase(plan: 'reprounds_pro_monthly' | 'reprounds_pro_annual') {
@@ -116,7 +116,7 @@ export default function PaywallScreen() {
             <>
               <Text style={[styles.planBtnTitle, { color: T.onPrimary }]}>Annual Plan</Text>
               <Text style={[styles.planBtnPrice, { color: T.onPrimary }]}>
-                Set price in Play Console
+                {prices.annual ? `${prices.annual} / year` : 'Loading price…'}
               </Text>
               <Text style={[styles.planBtnSub, { color: withAlpha(T.onPrimary, 0.75) }]}>
                 ~40% off monthly · 7-day free trial
@@ -136,7 +136,9 @@ export default function PaywallScreen() {
           ) : (
             <>
               <Text style={styles.planBtnTitle}>Monthly Plan</Text>
-              <Text style={styles.planBtnPrice}>Set price in Play Console</Text>
+              <Text style={styles.planBtnPrice}>
+                {prices.monthly ? `${prices.monthly} / month` : 'Loading price…'}
+              </Text>
               <Text style={styles.planBtnSub}>7-day free trial</Text>
             </>
           )}

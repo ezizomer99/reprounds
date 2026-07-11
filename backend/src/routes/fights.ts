@@ -1,26 +1,20 @@
 import { Hono } from 'hono';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { createDb } from '../db';
 import { fights } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import type { AppEnv } from '../env';
+import { disciplineVisible } from '../lib/ownership';
+import { isFightMethod, isFightResult, isNumberInRange } from '@app/shared';
 import type {
   CreateFightRequest,
   Fight,
   FightListResponse,
+  FightRecordsResponse,
   UpdateFightRequest,
 } from '@app/shared';
 
-type Env = {
-  Bindings: {
-    HYPERDRIVE?: Hyperdrive;
-    DATABASE_URL?: string;
-    JWT_SECRET: string;
-    GOOGLE_CLIENT_ID: string;
-  };
-  Variables: {
-    userId: string;
-  };
-};
+type Env = AppEnv;
 
 const fightRoutes = new Hono<Env>();
 
@@ -57,6 +51,35 @@ fightRoutes.get('/', async (c) => {
   return c.json(result);
 });
 
+// GET /fights/records — per-discipline W-L-D tally for the caller, aggregated in
+// the DB. Replaces the mat tab fetching every discipline's fight list just to
+// count results (an N+1). Registered before any '/:id' route (there is none).
+fightRoutes.get('/records', async (c) => {
+  const userId = c.get('userId');
+  const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+
+  const rows = await db
+    .select({
+      disciplineId: fights.disciplineId,
+      wins: sql<number>`COUNT(*) FILTER (WHERE ${fights.result} = 'win')::int`,
+      losses: sql<number>`COUNT(*) FILTER (WHERE ${fights.result} = 'loss')::int`,
+      draws: sql<number>`COUNT(*) FILTER (WHERE ${fights.result} = 'draw')::int`,
+    })
+    .from(fights)
+    .where(eq(fights.userId, userId))
+    .groupBy(fights.disciplineId);
+
+  const result: FightRecordsResponse = {
+    records: rows.map((r) => ({
+      disciplineId: r.disciplineId,
+      wins: Number(r.wins),
+      losses: Number(r.losses),
+      draws: Number(r.draws),
+    })),
+  };
+  return c.json(result);
+});
+
 fightRoutes.post('/', async (c) => {
   const userId = c.get('userId');
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
@@ -70,6 +93,20 @@ fightRoutes.post('/', async (c) => {
 
   if (!body.disciplineId || !body.date || !body.result) {
     return c.json({ error: 'disciplineId, date, and result are required' }, 400);
+  }
+  if (!isFightResult(body.result)) {
+    return c.json({ error: 'Invalid result' }, 400);
+  }
+  if (body.method != null && !isFightMethod(body.method)) {
+    return c.json({ error: 'Invalid method' }, 400);
+  }
+  if (body.round != null && !isNumberInRange(body.round, 1, 100)) {
+    return c.json({ error: 'Invalid round' }, 400);
+  }
+
+  // Guard against tagging a fight to another user's private discipline (IDOR).
+  if (!(await disciplineVisible(db, body.disciplineId, userId))) {
+    return c.json({ error: 'Discipline not found' }, 404);
   }
 
   const [row] = await db
@@ -99,6 +136,16 @@ fightRoutes.patch('/:id', async (c) => {
     body = await c.req.json();
   } catch {
     return c.json({ error: 'Invalid request body' }, 400);
+  }
+
+  if (body.result !== undefined && !isFightResult(body.result)) {
+    return c.json({ error: 'Invalid result' }, 400);
+  }
+  if (body.method != null && !isFightMethod(body.method)) {
+    return c.json({ error: 'Invalid method' }, 400);
+  }
+  if (body.round != null && !isNumberInRange(body.round, 1, 100)) {
+    return c.json({ error: 'Invalid round' }, 400);
   }
 
   const updates: Partial<typeof fights.$inferInsert> = {};

@@ -21,6 +21,7 @@ import { useDisciplineHistory, useDisciplines } from '../../../src/hooks/useDisc
 import { fightRecord, useCreateFight, useDeleteFight, useFights } from '../../../src/hooks/useFights';
 import { useCreatePromotion, useDeletePromotion, usePromotions } from '../../../src/hooks/usePromotions';
 import { useProGate } from '../../../src/hooks/useProGate';
+import { CalendarPicker } from '../../../src/components/CalendarPicker';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -79,7 +80,12 @@ export default function DisciplineDetailScreen() {
     return (
       <View style={[styles.screen, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
             <Ionicons name="chevron-back" size={22} color={T.text} />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
@@ -106,7 +112,12 @@ export default function DisciplineDetailScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
@@ -396,14 +407,7 @@ function AddFightModal({ disciplineId, onClose }: { disciplineId: string; onClos
           />
 
           <Text style={styles.sheetLabel}>Date</Text>
-          <TextInput
-            style={styles.sheetInput}
-            value={date}
-            onChangeText={setDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={T.muted}
-            autoCapitalize="none"
-          />
+          <CalendarPicker value={date} onChange={setDate} />
 
           <Text style={styles.sheetLabel}>Method</Text>
           <View style={styles.chipRow}>
@@ -564,14 +568,7 @@ function AddPromotionModal({ disciplineId, onClose }: { disciplineId: string; on
           </View>
 
           <Text style={styles.sheetLabel}>Date</Text>
-          <TextInput
-            style={styles.sheetInput}
-            value={date}
-            onChangeText={setDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={T.muted}
-            autoCapitalize="none"
-          />
+          <CalendarPicker value={date} onChange={setDate} />
 
           <Text style={styles.sheetLabel}>Notes</Text>
           <TextInput

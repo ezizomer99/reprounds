@@ -18,7 +18,6 @@ import { F, R, D, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { withAlpha } from '../../src/lib/color';
 
-const COMP_EMAILS = ['ezizomer1999@gmail.com'];
 const PLAY_STORE_SUBS_URL =
   'https://play.google.com/store/account/subscriptions?package=com.reprounds.app';
 
@@ -41,11 +40,11 @@ export default function SubscriptionScreen() {
   const styles = useMemo(() => makeStyles(T), [T]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { isPro: isRcPro, customerInfo, restorePurchases } = useSubscription();
+  const { isPro: isRcPro, isLoading: subLoading, customerInfo, restorePurchases } = useSubscription();
   const { data: user } = useCurrentUser();
   const [restoring, setRestoring] = useState(false);
 
-  const isComped = user?.email ? COMP_EMAILS.includes(user.email) : false;
+  const isComped = user?.isComped ?? false;
   const proEntitlement = customerInfo?.entitlements.active['pro'];
   const planId = proEntitlement?.productIdentifier ?? null;
   const planLabel = planId ? (PRODUCT_NAMES[planId] ?? planId) : null;
@@ -90,7 +89,13 @@ export default function SubscriptionScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.back()}
+          activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Subscription</Text>
@@ -103,7 +108,11 @@ export default function SubscriptionScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* ── Status card ── */}
-        {isComped ? (
+        {subLoading && !isComped ? (
+          <View style={styles.statusLoading}>
+            <ActivityIndicator color={T.primary} />
+          </View>
+        ) : isComped ? (
           <CompedCard styles={styles} T={T} />
         ) : isRcPro ? (
           <ActiveCard
@@ -318,6 +327,8 @@ function makeStyles(T: ThemeColors) {
 
     scroll: { flex: 1 },
     body: { padding: D.pad, gap: D.stack },
+
+    statusLoading: { paddingVertical: 40, alignItems: 'center', justifyContent: 'center' },
 
     // Status card
     statusCard: {

@@ -3,6 +3,8 @@ import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import { createDb } from '../db';
 import { disciplines, fights, rankPromotions, sessionEntries, sessions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import type { AppEnv } from '../env';
+import { isDisciplineCat } from '@app/shared';
 import type {
   CreateDisciplineRequest,
   UpdateDisciplineRequest,
@@ -14,17 +16,7 @@ import type {
 } from '@app/shared';
 import type { FieldConfig } from '@app/shared';
 
-type Env = {
-  Bindings: {
-    HYPERDRIVE?: Hyperdrive;
-    DATABASE_URL?: string;
-    JWT_SECRET: string;
-    GOOGLE_CLIENT_ID: string;
-  };
-  Variables: {
-    userId: string;
-  };
-};
+type Env = AppEnv;
 
 const disciplineRoutes = new Hono<Env>();
 
@@ -67,6 +59,9 @@ disciplineRoutes.post('/', async (c) => {
 
   if (!body.name || !body.category) {
     return c.json({ error: 'name and category are required' }, 400);
+  }
+  if (!isDisciplineCat(body.category)) {
+    return c.json({ error: 'Invalid category' }, 400);
   }
 
   const [row] = await db
@@ -111,6 +106,10 @@ disciplineRoutes.patch('/:id', async (c) => {
     body = await c.req.json();
   } catch {
     return c.json({ error: 'Invalid request body' }, 400);
+  }
+
+  if (body.category !== undefined && !isDisciplineCat(body.category)) {
+    return c.json({ error: 'Invalid category' }, 400);
   }
 
   const updates: Partial<typeof disciplines.$inferInsert> = {};

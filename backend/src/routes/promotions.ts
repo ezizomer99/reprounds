@@ -3,23 +3,17 @@ import { and, desc, eq } from 'drizzle-orm';
 import { createDb } from '../db';
 import { rankPromotions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import type { AppEnv } from '../env';
+import { disciplineVisible } from '../lib/ownership';
+import { isNumberInRange } from '@app/shared';
 import type {
   CreateRankPromotionRequest,
   RankPromotion,
   RankPromotionListResponse,
+  UpdateRankPromotionRequest,
 } from '@app/shared';
 
-type Env = {
-  Bindings: {
-    HYPERDRIVE?: Hyperdrive;
-    DATABASE_URL?: string;
-    JWT_SECRET: string;
-    GOOGLE_CLIENT_ID: string;
-  };
-  Variables: {
-    userId: string;
-  };
-};
+type Env = AppEnv;
 
 const promotionRoutes = new Hono<Env>();
 
@@ -69,6 +63,14 @@ promotionRoutes.post('/', async (c) => {
   if (!body.disciplineId || !body.date || !rank) {
     return c.json({ error: 'disciplineId, date, and rank are required' }, 400);
   }
+  if (body.stripes != null && !isNumberInRange(body.stripes, 0, 20)) {
+    return c.json({ error: 'Invalid stripes' }, 400);
+  }
+
+  // Guard against tagging a promotion to another user's private discipline (IDOR).
+  if (!(await disciplineVisible(db, body.disciplineId, userId))) {
+    return c.json({ error: 'Discipline not found' }, 404);
+  }
 
   const [row] = await db
     .insert(rankPromotions)
@@ -83,6 +85,52 @@ promotionRoutes.post('/', async (c) => {
     .returning();
 
   return c.json({ promotion: mapPromotion(row) }, 201);
+});
+
+promotionRoutes.patch('/:id', async (c) => {
+  const userId = c.get('userId');
+  const id = c.req.param('id');
+  const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+
+  let body: UpdateRankPromotionRequest;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid request body' }, 400);
+  }
+
+  if (body.stripes != null && !isNumberInRange(body.stripes, 0, 20)) {
+    return c.json({ error: 'Invalid stripes' }, 400);
+  }
+  if (body.disciplineId !== undefined && !(await disciplineVisible(db, body.disciplineId, userId))) {
+    return c.json({ error: 'Discipline not found' }, 404);
+  }
+  if (body.rank !== undefined && !body.rank.trim()) {
+    return c.json({ error: 'rank cannot be empty' }, 400);
+  }
+
+  const updates: Partial<typeof rankPromotions.$inferInsert> = {};
+  if (body.disciplineId !== undefined) updates.disciplineId = body.disciplineId;
+  if (body.rank !== undefined) updates.rank = body.rank.trim();
+  if ('stripes' in body) updates.stripes = body.stripes ?? null;
+  if (body.date !== undefined) updates.date = body.date;
+  if ('notes' in body) updates.notes = body.notes?.trim() || null;
+
+  if (Object.keys(updates).length === 0) {
+    return c.json({ error: 'No fields to update' }, 400);
+  }
+
+  const [row] = await db
+    .update(rankPromotions)
+    .set(updates)
+    .where(and(eq(rankPromotions.id, id), eq(rankPromotions.userId, userId)))
+    .returning();
+
+  if (!row) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  return c.json({ promotion: mapPromotion(row) });
 });
 
 promotionRoutes.delete('/:id', async (c) => {

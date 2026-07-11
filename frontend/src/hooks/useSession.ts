@@ -6,6 +6,7 @@ import type {
   CreateStrengthSetRequest,
   ExerciseHistoryResponse,
   ExercisePRsResponse,
+  ExerciseProgressionResponse,
   Session,
   SessionEntryWithSets,
   SessionListResponse,
@@ -64,6 +65,14 @@ export function useExercisePRs(exerciseId: string | null) {
   return useQuery<ExercisePRsResponse, Error>({
     queryKey: ['exercise-prs', exerciseId],
     queryFn: () => apiGet<ExercisePRsResponse>(`/exercises/${exerciseId}/prs`),
+    enabled: exerciseId !== null,
+  });
+}
+
+export function useExerciseProgression(exerciseId: string | null) {
+  return useQuery<ExerciseProgressionResponse, Error>({
+    queryKey: ['exercise-progression', exerciseId],
+    queryFn: () => apiGet<ExerciseProgressionResponse>(`/exercises/${exerciseId}/progression`),
     enabled: exerciseId !== null,
   });
 }
