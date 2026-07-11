@@ -1,5 +1,10 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import Purchases, { CustomerInfo, LOG_LEVEL } from 'react-native-purchases';
+import Purchases, {
+  CustomerInfo,
+  LOG_LEVEL,
+  PurchasesOffering,
+  PurchasesPackage,
+} from 'react-native-purchases';
 import { Platform } from 'react-native';
 import { useCurrentUser } from '../hooks/useAuth';
 
@@ -7,11 +12,28 @@ const ANDROID_KEY = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY ?? '';
 const IOS_KEY = process.env.EXPO_PUBLIC_REVENUECAT_IOS_KEY ?? '';
 export const PRO_ENTITLEMENT = 'pro';
 
+export type ProPackageId = 'reprounds_pro_monthly' | 'reprounds_pro_annual';
+
+// Google subscription identifiers come back as "productId:basePlanId", so match
+// on the product id prefix as well as the exact id. Shared by price display and
+// the purchase flow so the two never disagree on which package is which.
+function findPackage(
+  offering: PurchasesOffering | null | undefined,
+  packageId: ProPackageId,
+): PurchasesPackage | undefined {
+  return offering?.availablePackages.find(
+    (p) => p.product.identifier === packageId || p.product.identifier.startsWith(`${packageId}:`),
+  );
+}
+
 type SubscriptionContextValue = {
   isPro: boolean;
   isLoading: boolean;
   customerInfo: CustomerInfo | null;
-  purchasePro: (packageId: 'reprounds_pro_monthly' | 'reprounds_pro_annual') => Promise<void>;
+  // Localized store price strings (e.g. "$39.99"), or null until offerings load
+  // or if the package isn't configured. The paywall shows a fallback when null.
+  prices: { monthly: string | null; annual: string | null };
+  purchasePro: (packageId: ProPackageId) => Promise<void>;
   restorePurchases: () => Promise<void>;
 };
 
@@ -19,6 +41,7 @@ const SubscriptionContext = createContext<SubscriptionContextValue>({
   isPro: false,
   isLoading: true,
   customerInfo: null,
+  prices: { monthly: null, annual: null },
   purchasePro: async () => {},
   restorePurchases: async () => {},
 });
@@ -31,6 +54,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   const [isPro, setIsPro] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
+  const [offering, setOffering] = useState<PurchasesOffering | null>(null);
   const [configured, setConfigured] = useState(false);
   const { data: user } = useCurrentUser();
 
@@ -54,6 +78,12 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
       .then(applyInfo)
       .catch(() => {})
       .finally(() => setIsLoading(false));
+
+    // Prefetch offerings so the paywall can show real localized prices without a
+    // spinner. Best-effort — the paywall falls back gracefully when null.
+    Purchases.getOfferings()
+      .then((o) => setOffering(o.current))
+      .catch(() => {});
 
     Purchases.addCustomerInfoUpdateListener(applyInfo);
 
@@ -91,15 +121,14 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [configured, user?.id]);
 
-  async function purchasePro(packageId: 'reprounds_pro_monthly' | 'reprounds_pro_annual') {
+  async function purchasePro(packageId: ProPackageId) {
+    // Always fetch fresh offerings at purchase time; the prefetched copy is only
+    // for display and may be stale.
     const offerings = await Purchases.getOfferings();
     const current = offerings.current;
     if (!current) throw new Error('No offerings available.');
-    // Google subscription identifiers come back as "productId:basePlanId",
-    // so match on the product id prefix as well as the exact id.
-    const pkg = current.availablePackages.find(
-      (p) => p.product.identifier === packageId || p.product.identifier.startsWith(`${packageId}:`),
-    );
+    if (current !== offering) setOffering(current);
+    const pkg = findPackage(current, packageId);
     if (!pkg) throw new Error('Package not found.');
     const { customerInfo: info } = await Purchases.purchasePackage(pkg);
     applyInfo(info);
@@ -110,8 +139,15 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     applyInfo(info);
   }
 
+  const prices = {
+    monthly: findPackage(offering, 'reprounds_pro_monthly')?.product.priceString ?? null,
+    annual: findPackage(offering, 'reprounds_pro_annual')?.product.priceString ?? null,
+  };
+
   return (
-    <SubscriptionContext.Provider value={{ isPro, isLoading, customerInfo, purchasePro, restorePurchases }}>
+    <SubscriptionContext.Provider
+      value={{ isPro, isLoading, customerInfo, prices, purchasePro, restorePurchases }}
+    >
       {children}
     </SubscriptionContext.Provider>
   );
