@@ -54,6 +54,12 @@ export default function WeightScreen() {
   const latest = weights[0] ?? null;
   const previous = weights[1] ?? null;
   const delta = latest && previous ? latest.weightKg - previous.weightKg : null;
+  // 7-entry moving average smooths daily water-weight noise for a truer trend.
+  const movingAvgKg = useMemo(() => {
+    const recent = weights.slice(0, 7);
+    if (recent.length < 2) return null;
+    return recent.reduce((sum, w) => sum + w.weightKg, 0) / recent.length;
+  }, [weights]);
   // Sparkline needs chronological order and numeric values in display unit
   const sparkValues = useMemo(
     () => [...weights].reverse().slice(-20).map((w) => kgToUnit(w.weightKg, unit)),
@@ -111,6 +117,11 @@ export default function WeightScreen() {
                       {kgToUnit(Math.abs(delta), unit).toFixed(1)} {unit} since last
                     </Text>
                   </View>
+                )}
+                {movingAvgKg !== null && (
+                  <Text style={styles.avgText}>
+                    {fmtWeight(movingAvgKg, unit)} {unit} avg (last {Math.min(weights.length, 7)})
+                  </Text>
                 )}
               </View>
               {sparkValues.length >= 2 && (
@@ -268,6 +279,7 @@ function makeStyles(T: ThemeColors) {
     summaryKey: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.5 },
     deltaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
     deltaText: { fontFamily: F.uiSemi, fontSize: 13 },
+    avgText: { fontFamily: F.uiMed, fontSize: 12, color: T.muted, marginTop: 4 },
 
     row: {
       flexDirection: 'row', alignItems: 'center', gap: 12,
