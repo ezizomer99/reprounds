@@ -27,6 +27,7 @@ import { UnitProvider } from '../src/units/UnitContext';
 import { RestTimerProvider } from '../src/restTimer/RestTimerContext';
 import { NotificationsProvider } from '../src/notifications/NotificationsContext';
 import { SubscriptionProvider } from '../src/context/SubscriptionContext';
+import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { GOOGLE_WEB_CLIENT_ID } from '../src/lib/config';
 
 GoogleSignin.configure({
@@ -110,15 +111,17 @@ export default function RootLayout() {
 
   const tree = (
     <ThemeProvider>
-      <UnitProvider>
-        <RestTimerProvider>
-          <NotificationsProvider>
-            <SubscriptionProvider>
-              <AppShell />
-            </SubscriptionProvider>
-          </NotificationsProvider>
-        </RestTimerProvider>
-      </UnitProvider>
+      <ErrorBoundary>
+        <UnitProvider>
+          <RestTimerProvider>
+            <NotificationsProvider>
+              <SubscriptionProvider>
+                <AppShell />
+              </SubscriptionProvider>
+            </NotificationsProvider>
+          </RestTimerProvider>
+        </UnitProvider>
+      </ErrorBoundary>
     </ThemeProvider>
   );
 

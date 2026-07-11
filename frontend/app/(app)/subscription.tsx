@@ -40,7 +40,7 @@ export default function SubscriptionScreen() {
   const styles = useMemo(() => makeStyles(T), [T]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { isPro: isRcPro, customerInfo, restorePurchases } = useSubscription();
+  const { isPro: isRcPro, isLoading: subLoading, customerInfo, restorePurchases } = useSubscription();
   const { data: user } = useCurrentUser();
   const [restoring, setRestoring] = useState(false);
 
@@ -102,7 +102,11 @@ export default function SubscriptionScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* ── Status card ── */}
-        {isComped ? (
+        {subLoading && !isComped ? (
+          <View style={styles.statusLoading}>
+            <ActivityIndicator color={T.primary} />
+          </View>
+        ) : isComped ? (
           <CompedCard styles={styles} T={T} />
         ) : isRcPro ? (
           <ActiveCard
@@ -317,6 +321,8 @@ function makeStyles(T: ThemeColors) {
 
     scroll: { flex: 1 },
     body: { padding: D.pad, gap: D.stack },
+
+    statusLoading: { paddingVertical: 40, alignItems: 'center', justifyContent: 'center' },
 
     // Status card
     statusCard: {

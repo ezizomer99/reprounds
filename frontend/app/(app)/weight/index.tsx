@@ -23,6 +23,7 @@ import {
 import { useUnit } from '../../../src/units/UnitContext';
 import { fmtWeight, kgToUnit, unitToKg } from '../../../src/units/units';
 import { Sparkline } from '../../../src/components/Sparkline';
+import { InlineError } from '../../../src/components/InlineError';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 
@@ -43,7 +44,7 @@ export default function WeightScreen() {
   const styles = useMemo(() => makeStyles(T), [T]);
 
   const { unit } = useUnit();
-  const { data, isLoading } = useWeightLogs();
+  const { data, isLoading, isError, refetch } = useWeightLogs();
   const deleteWeight = useDeleteWeightLog();
   const [showAdd, setShowAdd] = useState(false);
 
@@ -125,6 +126,10 @@ export default function WeightScreen() {
           isLoading ? (
             <View style={styles.centered}>
               <ActivityIndicator size="large" color={T.primary} />
+            </View>
+          ) : isError ? (
+            <View style={styles.centered}>
+              <InlineError message="Couldn't load your weigh-ins." onRetry={() => void refetch()} />
             </View>
           ) : (
             <View style={styles.centered}>

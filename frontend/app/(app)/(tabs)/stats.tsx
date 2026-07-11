@@ -20,6 +20,7 @@ import { aggregateMuscles } from '../../../src/lib/muscleSlugMap';
 import { useUnit } from '../../../src/units/UnitContext';
 import { fmtWeight } from '../../../src/units/units';
 import { Skeleton } from '../../../src/components/Skeleton';
+import { InlineError } from '../../../src/components/InlineError';
 import { MatStatsView } from '../../../src/components/stats/MatStatsView';
 import { RecentNotesCard } from '../../../src/components/stats/RecentNotesCard';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
@@ -36,7 +37,7 @@ export default function StatsTab() {
   const [muscleView, setMuscleView] = useState<'front' | 'back'>('front');
   const [statsView, setStatsView] = useState<'gym' | 'mat'>('gym');
 
-  const { data: sessions, isLoading } = useSessions('completed');
+  const { data: sessions, isLoading, isError, refetch } = useSessions('completed');
 
   const thisWeekMonday = useMemo(() => mondayOf(new Date()).toISOString().slice(0, 10), []);
   const { data: muscleData } = useMuscleSummary(thisWeekMonday);
@@ -95,6 +96,8 @@ export default function StatsTab() {
 
         {statsView === 'mat' ? (
           <MatStatsView />
+        ) : isError ? (
+          <InlineError message="Couldn't load your gym stats." onRetry={() => void refetch()} />
         ) : (
           <>
         {/* ── Highlights ── */}
