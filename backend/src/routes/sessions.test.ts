@@ -503,6 +503,49 @@ describe('PATCH /sessions/:id/entries/:entryId — exerciseId swap', () => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /sessions/:id/entries — ownership (IDOR) guards
+// ---------------------------------------------------------------------------
+describe('POST /sessions/:id/entries', () => {
+  it("returns 404 when the exerciseId is not visible to the caller (IDOR guard)", async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]); // session owned ✓
+    mock.selectQueue.push([]);                   // exercise not visible
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/entries`,
+      {
+        method: 'POST',
+        headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'exercise', exerciseId: 'ex-other-user' }),
+      },
+      env,
+    );
+
+    expect(res.status).toBe(404);
+    expect((await res.json() as { error: string }).error).toBe('Exercise not found');
+    expect(mock.insert).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when the disciplineId is not visible to the caller (IDOR guard)", async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]); // session owned ✓
+    mock.selectQueue.push([]);                   // discipline not visible
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/entries`,
+      {
+        method: 'POST',
+        headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'martial_arts', disciplineId: 'disc-other-user' }),
+      },
+      env,
+    );
+
+    expect(res.status).toBe(404);
+    expect((await res.json() as { error: string }).error).toBe('Discipline not found');
+    expect(mock.insert).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // PUT /sessions/:id/focuses
 // ---------------------------------------------------------------------------
 describe('PUT /sessions/:id/focuses', () => {

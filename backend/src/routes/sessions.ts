@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, asc, desc, eq, inArray, isNull, max, or } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, max } from 'drizzle-orm';
 import { createDb } from '../db';
 import {
   disciplines,
@@ -13,6 +13,7 @@ import {
   trainingFocuses,
 } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import { disciplineVisible, exerciseVisible } from '../lib/ownership';
 import type {
   CompleteSessionRequest,
   CreateSessionEntryRequest,
@@ -606,6 +607,14 @@ sessionRoutes.post('/:id/entries', async (c) => {
   const kindErr = validateEntryKind(body);
   if (kindErr) return c.json({ error: kindErr }, 400);
 
+  // Guard against attaching another user's private exercise/discipline (IDOR).
+  if (!(await exerciseVisible(db, body.exerciseId, userId))) {
+    return c.json({ error: 'Exercise not found' }, 404);
+  }
+  if (!(await disciplineVisible(db, body.disciplineId, userId))) {
+    return c.json({ error: 'Discipline not found' }, 404);
+  }
+
   // A session is either weightlifting or martial arts — never both. Reject an
   // entry whose kind disagrees with entries already in the session.
   const [existingKind] = await db
@@ -741,17 +750,9 @@ sessionRoutes.patch('/:id/entries/:entryId', async (c) => {
       return c.json({ error: 'exerciseId can only be updated on exercise entries' }, 400);
     }
     // Validate the exercise is visible to this user (global seed or user-owned).
-    const [exRow] = await db
-      .select({ id: exercises.id })
-      .from(exercises)
-      .where(
-        and(
-          eq(exercises.id, body.exerciseId),
-          or(isNull(exercises.userId), eq(exercises.userId, userId))!,
-        ),
-      )
-      .limit(1);
-    if (!exRow) return c.json({ error: 'Exercise not found' }, 404);
+    if (!(await exerciseVisible(db, body.exerciseId, userId))) {
+      return c.json({ error: 'Exercise not found' }, 404);
+    }
     updates.exerciseId = body.exerciseId;
   }
 

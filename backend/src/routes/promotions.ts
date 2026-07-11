@@ -3,6 +3,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { createDb } from '../db';
 import { rankPromotions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import { disciplineVisible } from '../lib/ownership';
 import type {
   CreateRankPromotionRequest,
   RankPromotion,
@@ -68,6 +69,11 @@ promotionRoutes.post('/', async (c) => {
   const rank = body.rank?.trim();
   if (!body.disciplineId || !body.date || !rank) {
     return c.json({ error: 'disciplineId, date, and rank are required' }, 400);
+  }
+
+  // Guard against tagging a promotion to another user's private discipline (IDOR).
+  if (!(await disciplineVisible(db, body.disciplineId, userId))) {
+    return c.json({ error: 'Discipline not found' }, 404);
   }
 
   const [row] = await db

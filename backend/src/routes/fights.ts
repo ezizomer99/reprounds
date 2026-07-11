@@ -3,6 +3,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { createDb } from '../db';
 import { fights } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import { disciplineVisible } from '../lib/ownership';
 import type {
   CreateFightRequest,
   Fight,
@@ -70,6 +71,11 @@ fightRoutes.post('/', async (c) => {
 
   if (!body.disciplineId || !body.date || !body.result) {
     return c.json({ error: 'disciplineId, date, and result are required' }, 400);
+  }
+
+  // Guard against tagging a fight to another user's private discipline (IDOR).
+  if (!(await disciplineVisible(db, body.disciplineId, userId))) {
+    return c.json({ error: 'Discipline not found' }, 404);
   }
 
   const [row] = await db

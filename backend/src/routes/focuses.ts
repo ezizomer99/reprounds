@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
-import { and, count, desc, eq, inArray, isNull, max, or } from 'drizzle-orm';
+import { and, count, desc, eq, inArray, max } from 'drizzle-orm';
 import { createDb } from '../db';
 import { disciplines, sessionFocuses, sessions, trainingFocuses } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import { disciplineVisible } from '../lib/ownership';
 import type {
   CreateFocusRequest,
   FocusListResponse,
@@ -35,27 +36,6 @@ const FOCUS_STATUSES: FocusStatus[] = ['active', 'achieved', 'archived'];
 
 function isFocusStatus(v: unknown): v is FocusStatus {
   return typeof v === 'string' && (FOCUS_STATUSES as string[]).includes(v);
-}
-
-// A discipline is usable if it's a global seed (user_id null) or owned by the
-// caller. Returns true when disciplineId is null/undefined (no tag).
-async function disciplineVisible(
-  db: ReturnType<typeof createDb>,
-  disciplineId: string | null | undefined,
-  userId: string,
-): Promise<boolean> {
-  if (!disciplineId) return true;
-  const [row] = await db
-    .select({ id: disciplines.id })
-    .from(disciplines)
-    .where(
-      and(
-        eq(disciplines.id, disciplineId),
-        or(isNull(disciplines.userId), eq(disciplines.userId, userId)),
-      ),
-    )
-    .limit(1);
-  return !!row;
 }
 
 // GET /focuses[?status=active]

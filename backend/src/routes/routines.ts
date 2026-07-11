@@ -3,6 +3,7 @@ import { and, asc, desc, eq, inArray, max } from 'drizzle-orm';
 import { createDb } from '../db';
 import { disciplines, exercises, routineItems, routines, sessions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import { disciplineVisible, exerciseVisible } from '../lib/ownership';
 import type {
   AddRoutineItemRequest,
   CreateRoutineRequest,
@@ -185,6 +186,13 @@ routineRoutes.post('/', async (c) => {
     for (const item of body.items) {
       const err = validateItemKind(item);
       if (err) return c.json({ error: err }, 400);
+      // Guard against referencing another user's private exercise/discipline (IDOR).
+      if (!(await exerciseVisible(db, item.exerciseId, userId))) {
+        return c.json({ error: 'Exercise not found' }, 404);
+      }
+      if (!(await disciplineVisible(db, item.disciplineId, userId))) {
+        return c.json({ error: 'Discipline not found' }, 404);
+      }
     }
   }
 
@@ -313,6 +321,14 @@ routineRoutes.post('/:id/items', async (c) => {
 
   const err = validateItemKind(body);
   if (err) return c.json({ error: err }, 400);
+
+  // Guard against referencing another user's private exercise/discipline (IDOR).
+  if (!(await exerciseVisible(db, body.exerciseId, userId))) {
+    return c.json({ error: 'Exercise not found' }, 404);
+  }
+  if (!(await disciplineVisible(db, body.disciplineId, userId))) {
+    return c.json({ error: 'Discipline not found' }, 404);
+  }
 
   const [maxRow] = await db
     .select({ maxOrder: max(routineItems.orderIndex) })
