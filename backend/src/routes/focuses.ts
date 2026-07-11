@@ -4,10 +4,10 @@ import { createDb } from '../db';
 import { disciplines, sessionFocuses, sessions, trainingFocuses } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import { disciplineVisible } from '../lib/ownership';
+import { isFocusStatus } from '@app/shared';
 import type {
   CreateFocusRequest,
   FocusListResponse,
-  FocusStatus,
   FocusWithStats,
   UpdateFocusRequest,
 } from '@app/shared';
@@ -30,12 +30,6 @@ focusRoutes.use('*', authMiddleware);
 
 function getDb(env: Env['Bindings']) {
   return createDb(env.HYPERDRIVE?.connectionString ?? env.DATABASE_URL!);
-}
-
-const FOCUS_STATUSES: FocusStatus[] = ['active', 'achieved', 'archived'];
-
-function isFocusStatus(v: unknown): v is FocusStatus {
-  return typeof v === 'string' && (FOCUS_STATUSES as string[]).includes(v);
 }
 
 // GET /focuses[?status=active]

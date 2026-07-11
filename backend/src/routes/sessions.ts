@@ -14,6 +14,7 @@ import {
 } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import { disciplineVisible, exerciseVisible } from '../lib/ownership';
+import { isEntryKind, isGiType, isNumberInRange, isSetType } from '@app/shared';
 import type {
   CompleteSessionRequest,
   CreateSessionEntryRequest,
@@ -235,12 +236,31 @@ function validateEntryKind(body: {
   exerciseId?: string | null;
   disciplineId?: string | null;
 }): string | null {
+  if (!isEntryKind(body.kind)) {
+    return 'kind must be "exercise" or "martial_arts"';
+  }
   if (body.kind === 'exercise' && !body.exerciseId) {
     return 'exerciseId is required when kind is exercise';
   }
   if (body.kind === 'martial_arts' && !body.disciplineId) {
     return 'disciplineId is required when kind is martial_arts';
   }
+  return null;
+}
+
+// Validates the enum + numeric fields on a strength-set create/update body so bad
+// input is a 400 rather than a DB constraint error (500). Only checks fields that
+// are present; presence/required checks live in the handlers.
+function validateSetFields(body: {
+  setType?: unknown;
+  reps?: unknown;
+  rpe?: unknown;
+  rir?: unknown;
+}): string | null {
+  if (body.setType !== undefined && !isSetType(body.setType)) return 'Invalid setType';
+  if (body.reps != null && !isNumberInRange(body.reps, 0, 10_000)) return 'Invalid reps';
+  if (body.rpe != null && !isNumberInRange(body.rpe, 0, 10)) return 'Invalid rpe';
+  if (body.rir != null && !isNumberInRange(body.rir, 0, 100)) return 'Invalid rir';
   return null;
 }
 
@@ -606,6 +626,9 @@ sessionRoutes.post('/:id/entries', async (c) => {
 
   const kindErr = validateEntryKind(body);
   if (kindErr) return c.json({ error: kindErr }, 400);
+  if (body.gi != null && !isGiType(body.gi)) {
+    return c.json({ error: 'Invalid gi' }, 400);
+  }
 
   // Guard against attaching another user's private exercise/discipline (IDOR).
   if (!(await exerciseVisible(db, body.exerciseId, userId))) {
@@ -831,6 +854,8 @@ sessionRoutes.post('/:id/entries/:entryId/sets', async (c) => {
   if (body.setNumber === undefined || body.setNumber === null) {
     return c.json({ error: 'setNumber is required' }, 400);
   }
+  const setErr = validateSetFields(body);
+  if (setErr) return c.json({ error: setErr }, 400);
 
   const [inserted] = await db
     .insert(strengthSets)
@@ -888,6 +913,9 @@ sessionRoutes.patch('/:id/entries/:entryId/sets/:setId', async (c) => {
   } catch {
     return c.json({ error: 'Invalid request body' }, 400);
   }
+
+  const setErr = validateSetFields(body);
+  if (setErr) return c.json({ error: setErr }, 400);
 
   const updates: Partial<typeof strengthSets.$inferInsert> = {};
   if (body.setType !== undefined) updates.setType = body.setType;

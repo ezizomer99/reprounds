@@ -4,5 +4,6 @@ export * from './types/rounds';
 export * from './types/models';
 export * from './calculators/oneRepMax';
 export * from './calculators/volume';
+export * from './validators';
 
 export const FREE_CUSTOM_EXERCISE_LIMIT = 3;

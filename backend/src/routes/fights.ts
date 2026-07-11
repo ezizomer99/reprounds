@@ -4,6 +4,7 @@ import { createDb } from '../db';
 import { fights } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import { disciplineVisible } from '../lib/ownership';
+import { isFightMethod, isFightResult, isNumberInRange } from '@app/shared';
 import type {
   CreateFightRequest,
   Fight,
@@ -72,6 +73,15 @@ fightRoutes.post('/', async (c) => {
   if (!body.disciplineId || !body.date || !body.result) {
     return c.json({ error: 'disciplineId, date, and result are required' }, 400);
   }
+  if (!isFightResult(body.result)) {
+    return c.json({ error: 'Invalid result' }, 400);
+  }
+  if (body.method != null && !isFightMethod(body.method)) {
+    return c.json({ error: 'Invalid method' }, 400);
+  }
+  if (body.round != null && !isNumberInRange(body.round, 1, 100)) {
+    return c.json({ error: 'Invalid round' }, 400);
+  }
 
   // Guard against tagging a fight to another user's private discipline (IDOR).
   if (!(await disciplineVisible(db, body.disciplineId, userId))) {
@@ -105,6 +115,16 @@ fightRoutes.patch('/:id', async (c) => {
     body = await c.req.json();
   } catch {
     return c.json({ error: 'Invalid request body' }, 400);
+  }
+
+  if (body.result !== undefined && !isFightResult(body.result)) {
+    return c.json({ error: 'Invalid result' }, 400);
+  }
+  if (body.method != null && !isFightMethod(body.method)) {
+    return c.json({ error: 'Invalid method' }, 400);
+  }
+  if (body.round != null && !isNumberInRange(body.round, 1, 100)) {
+    return c.json({ error: 'Invalid round' }, 400);
   }
 
   const updates: Partial<typeof fights.$inferInsert> = {};

@@ -3,6 +3,7 @@ import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import { createDb } from '../db';
 import { disciplines, fights, rankPromotions, sessionEntries, sessions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import { isDisciplineCat } from '@app/shared';
 import type {
   CreateDisciplineRequest,
   UpdateDisciplineRequest,
@@ -68,6 +69,9 @@ disciplineRoutes.post('/', async (c) => {
   if (!body.name || !body.category) {
     return c.json({ error: 'name and category are required' }, 400);
   }
+  if (!isDisciplineCat(body.category)) {
+    return c.json({ error: 'Invalid category' }, 400);
+  }
 
   const [row] = await db
     .insert(disciplines)
@@ -111,6 +115,10 @@ disciplineRoutes.patch('/:id', async (c) => {
     body = await c.req.json();
   } catch {
     return c.json({ error: 'Invalid request body' }, 400);
+  }
+
+  if (body.category !== undefined && !isDisciplineCat(body.category)) {
+    return c.json({ error: 'Invalid category' }, 400);
   }
 
   const updates: Partial<typeof disciplines.$inferInsert> = {};

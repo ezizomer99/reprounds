@@ -4,6 +4,7 @@ import { createDb } from '../db';
 import { rankPromotions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import { disciplineVisible } from '../lib/ownership';
+import { isNumberInRange } from '@app/shared';
 import type {
   CreateRankPromotionRequest,
   RankPromotion,
@@ -69,6 +70,9 @@ promotionRoutes.post('/', async (c) => {
   const rank = body.rank?.trim();
   if (!body.disciplineId || !body.date || !rank) {
     return c.json({ error: 'disciplineId, date, and rank are required' }, 400);
+  }
+  if (body.stripes != null && !isNumberInRange(body.stripes, 0, 20)) {
+    return c.json({ error: 'Invalid stripes' }, 400);
   }
 
   // Guard against tagging a promotion to another user's private discipline (IDOR).

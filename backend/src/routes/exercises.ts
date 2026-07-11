@@ -116,6 +116,10 @@ exerciseRoutes.post('/', async (c) => {
   if (!body.name || !body.type) {
     return c.json({ error: 'name and type are required' }, 400);
   }
+  // Exercises are strength or conditioning only — martial_arts is a discipline.
+  if (body.type !== 'strength' && body.type !== 'conditioning') {
+    return c.json({ error: 'type must be "strength" or "conditioning"' }, 400);
+  }
 
   const [row] = await db
     .insert(exercises)
@@ -170,6 +174,10 @@ exerciseRoutes.patch('/:id', async (c) => {
     body = await c.req.json();
   } catch {
     return c.json({ error: 'Invalid request body' }, 400);
+  }
+
+  if (body.type !== undefined && body.type !== 'strength' && body.type !== 'conditioning') {
+    return c.json({ error: 'type must be "strength" or "conditioning"' }, 400);
   }
 
   const updates: Partial<typeof exercises.$inferInsert> = {};

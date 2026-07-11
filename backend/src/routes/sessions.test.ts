@@ -546,6 +546,49 @@ describe('POST /sessions/:id/entries', () => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /sessions/:id/entries/:entryId/sets — input validation
+// ---------------------------------------------------------------------------
+describe('POST /sessions/:id/entries/:entryId/sets', () => {
+  it('returns 400 for an invalid setType instead of a 500', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]); // session owned ✓
+    mock.selectQueue.push([{ id: ENTRY_ID }]);   // entry found ✓
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/entries/${ENTRY_ID}/sets`,
+      {
+        method: 'POST',
+        headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setNumber: 1, setType: 'superset' }),
+      },
+      env,
+    );
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('Invalid setType');
+    expect(mock.insert).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for an out-of-range rpe', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]); // session owned ✓
+    mock.selectQueue.push([{ id: ENTRY_ID }]);   // entry found ✓
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/entries/${ENTRY_ID}/sets`,
+      {
+        method: 'POST',
+        headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setNumber: 1, rpe: 99 }),
+      },
+      env,
+    );
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('Invalid rpe');
+    expect(mock.insert).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // PUT /sessions/:id/focuses
 // ---------------------------------------------------------------------------
 describe('PUT /sessions/:id/focuses', () => {
