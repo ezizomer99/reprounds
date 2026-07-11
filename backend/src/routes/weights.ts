@@ -3,8 +3,10 @@ import { and, desc, eq } from 'drizzle-orm';
 import { createDb } from '../db';
 import { weightLogs } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import { isNumberInRange } from '@app/shared';
 import type {
   CreateWeightLogRequest,
+  UpdateWeightLogRequest,
   WeightLog,
   WeightLogListResponse,
 } from '@app/shared';
@@ -61,8 +63,25 @@ weightRoutes.post('/', async (c) => {
     return c.json({ error: 'Invalid request body' }, 400);
   }
 
-  if (!body.date || typeof body.weightKg !== 'number' || !Number.isFinite(body.weightKg)) {
-    return c.json({ error: 'date and a numeric weightKg are required' }, 400);
+  if (!body.date || !isNumberInRange(body.weightKg, 0, 1000)) {
+    return c.json({ error: 'date and a weightKg between 0 and 1000 are required' }, 400);
+  }
+
+  // One weigh-in per day: if this date already has an entry, update it rather
+  // than accumulating duplicates (there is no DB unique constraint on the pair).
+  const [existing] = await db
+    .select({ id: weightLogs.id })
+    .from(weightLogs)
+    .where(and(eq(weightLogs.userId, userId), eq(weightLogs.date, body.date)))
+    .limit(1);
+
+  if (existing) {
+    const [updated] = await db
+      .update(weightLogs)
+      .set({ weightKg: String(body.weightKg), notes: body.notes?.trim() || null })
+      .where(and(eq(weightLogs.id, existing.id), eq(weightLogs.userId, userId)))
+      .returning();
+    return c.json({ weight: mapWeight(updated) });
   }
 
   const [row] = await db
@@ -76,6 +95,44 @@ weightRoutes.post('/', async (c) => {
     .returning();
 
   return c.json({ weight: mapWeight(row) }, 201);
+});
+
+weightRoutes.patch('/:id', async (c) => {
+  const userId = c.get('userId');
+  const id = c.req.param('id');
+  const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+
+  let body: UpdateWeightLogRequest;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid request body' }, 400);
+  }
+
+  if (body.weightKg !== undefined && !isNumberInRange(body.weightKg, 0, 1000)) {
+    return c.json({ error: 'weightKg must be between 0 and 1000' }, 400);
+  }
+
+  const updates: Partial<typeof weightLogs.$inferInsert> = {};
+  if (body.date !== undefined) updates.date = body.date;
+  if (body.weightKg !== undefined) updates.weightKg = String(body.weightKg);
+  if ('notes' in body) updates.notes = body.notes?.trim() || null;
+
+  if (Object.keys(updates).length === 0) {
+    return c.json({ error: 'No fields to update' }, 400);
+  }
+
+  const [row] = await db
+    .update(weightLogs)
+    .set(updates)
+    .where(and(eq(weightLogs.id, id), eq(weightLogs.userId, userId)))
+    .returning();
+
+  if (!row) {
+    return c.json({ error: 'Not found' }, 404);
+  }
+
+  return c.json({ weight: mapWeight(row) });
 });
 
 weightRoutes.delete('/:id', async (c) => {

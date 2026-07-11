@@ -1,7 +1,7 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import type { User } from '@app/shared';
-import { apiGet, apiPost, apiDelete } from '../lib/api';
+import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api';
 import {
   clearSessionToken,
   setSessionToken,
@@ -132,4 +132,10 @@ export function useDeleteAccount() {
   }
 
   return { deleteAccount };
+}
+
+export function useChangePassword() {
+  return useMutation<void, Error, { currentPassword: string; newPassword: string }>({
+    mutationFn: (body) => apiPatch<void>('/auth/password', body),
+  });
 }

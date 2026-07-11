@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Body from 'react-native-body-highlighter';
 import type { ExerciseHistoryEntry, StrengthSet } from '@app/shared';
 import { totalVolume } from '@app/shared';
-import { useExerciseHistory, useExercisePRs } from '../../../../src/hooks/useSession';
+import { useExerciseHistory, useExercisePRs, useExerciseProgression } from '../../../../src/hooks/useSession';
 import { useExercise } from '../../../../src/hooks/useExercises';
 import { useUnit } from '../../../../src/units/UnitContext';
 import { fmtWeight, kgToUnit, type WeightUnit } from '../../../../src/units/units';
@@ -86,6 +86,7 @@ export default function ExerciseHistoryScreen() {
   const [muscleView, setMuscleView] = useState<'front' | 'back'>('front');
   const { data: prsData, isLoading: prsLoading } = useExercisePRs(id ?? null);
   const { data: historyData, isLoading: histLoading, isError, error } = useExerciseHistory(id ?? null);
+  const { data: progressionData } = useExerciseProgression(id ?? null);
   const { data: exerciseDetail } = useExercise(id ?? null);
 
   const history = historyData?.history ?? [];
@@ -127,20 +128,22 @@ export default function ExerciseHistoryScreen() {
     );
   }
 
-  const topWeights = history
-    .map((e) => topWeight(e.entry.sets))
-    .filter((v): v is number => v !== null)
-    .reverse();
+  // Trend charts use the server-aggregated progression series (up to ~2 years,
+  // oldest-first) rather than the 5-entry history so a lift's long-run trajectory
+  // is visible. Falls back to nothing (charts hidden) until it loads.
+  const progression = progressionData?.points ?? [];
 
+  const topWeights = progression.map((p) => p.topWeight).filter((v) => v > 0);
   const sparkMin = topWeights.length ? Math.min(...topWeights) : 0;
   const sparkMax = topWeights.length ? Math.max(...topWeights) : 0;
 
-  const volumes = history
-    .map((e) => totalVolume(e.entry.sets))
-    .filter((v) => v > 0)
-    .reverse();
+  const volumes = progression.map((p) => p.totalVolume).filter((v) => v > 0);
   const volMin = volumes.length ? Math.round(Math.min(...volumes)) : 0;
   const volMax = volumes.length ? Math.round(Math.max(...volumes)) : 0;
+
+  const e1rms = progression.map((p) => p.bestEstimatedOneRepMax).filter((v) => v > 0);
+  const e1rmMin = e1rms.length ? Math.min(...e1rms) : 0;
+  const e1rmMax = e1rms.length ? Math.max(...e1rms) : 0;
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -228,10 +231,20 @@ export default function ExerciseHistoryScreen() {
             </View>
           )}
 
+          {e1rms.length >= 2 && (
+            <View style={styles.card}>
+              <View style={styles.sparklineHeader}>
+                <Text style={styles.eyebrow}>Est. 1RM trend · {e1rms.length} sessions</Text>
+                <Text style={styles.sparklineRange}>{fmtWeight(e1rmMin, unit)}–{fmtWeight(e1rmMax, unit)} {unit}</Text>
+              </View>
+              <Sparkline values={e1rms} width={320} height={60} color={T.gold} />
+            </View>
+          )}
+
           {topWeights.length >= 2 && (
             <View style={styles.card}>
               <View style={styles.sparklineHeader}>
-                <Text style={styles.eyebrow}>Top set · last {topWeights.length}</Text>
+                <Text style={styles.eyebrow}>Top set · {topWeights.length} sessions</Text>
                 <Text style={styles.sparklineRange}>{fmtWeight(sparkMin, unit)}–{fmtWeight(sparkMax, unit)} {unit}</Text>
               </View>
               <Sparkline values={topWeights} width={320} height={60} color={T.primary} />
@@ -241,7 +254,7 @@ export default function ExerciseHistoryScreen() {
           {volumes.length >= 2 && (
             <View style={styles.card}>
               <View style={styles.sparklineHeader}>
-                <Text style={styles.eyebrow}>Volume · last {volumes.length}</Text>
+                <Text style={styles.eyebrow}>Volume · {volumes.length} sessions</Text>
                 <Text style={styles.sparklineRange}>
                   {Math.round(kgToUnit(volMin, unit)).toLocaleString()}–{Math.round(kgToUnit(volMax, unit)).toLocaleString()} {unit}
                 </Text>

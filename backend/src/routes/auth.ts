@@ -40,7 +40,14 @@ async function rateLimited(
   return c.json({ error: 'Too many attempts — try again in a minute' }, 429);
 }
 
-function toUserShape(dbUser: { id: string; email: string | null; name: string | null; avatarUrl: string | null; isGuest: boolean }): User {
+function toUserShape(dbUser: {
+  id: string;
+  email: string | null;
+  name: string | null;
+  avatarUrl: string | null;
+  isGuest: boolean;
+  passwordHash?: string | null;
+}): User {
   return {
     id: dbUser.id,
     email: dbUser.email,
@@ -48,6 +55,7 @@ function toUserShape(dbUser: { id: string; email: string | null; name: string | 
     avatarUrl: dbUser.avatarUrl ?? null,
     isGuest: dbUser.isGuest,
     isComped: isCompedEmail(dbUser.email),
+    hasPassword: !!dbUser.passwordHash,
   };
 }
 
@@ -382,6 +390,51 @@ authRoutes.get('/me', authMiddleware, async (c) => {
   }
 });
 
+
+// ── Change password (credential accounts) ──────────────────────────────────
+// Authenticated change for email/password accounts: verify the current password,
+// then store a fresh PBKDF2 hash. Distinct from a *reset* flow (still blocked on
+// transactional email). Google/guest accounts have no password to change.
+authRoutes.patch('/password', authMiddleware, async (c) => {
+  const userId = c.get('userId');
+
+  let body: { currentPassword?: string; newPassword?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid request body' }, 400);
+  }
+
+  const currentPassword = typeof body.currentPassword === 'string' ? body.currentPassword : '';
+  const newPassword = typeof body.newPassword === 'string' ? body.newPassword : '';
+
+  if (newPassword.length < MIN_PASSWORD_LENGTH) {
+    return c.json({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` }, 400);
+  }
+
+  try {
+    const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+
+    const dbUser = await db.query.users.findFirst({ where: eq(users.id, userId) });
+    if (!dbUser?.passwordHash) {
+      // Google/guest accounts, or a deleted user — no credential to change.
+      return c.json({ error: 'This account has no password to change' }, 400);
+    }
+
+    const ok = await verifyPassword(currentPassword, dbUser.passwordHash);
+    if (!ok) {
+      return c.json({ error: 'Current password is incorrect' }, 401);
+    }
+
+    const newHash = await hashPassword(newPassword);
+    await db.update(users).set({ passwordHash: newHash }).where(eq(users.id, userId));
+
+    return c.json({ success: true });
+  } catch (e) {
+    console.error('[auth/password PATCH]', e);
+    return c.json({ error: 'Internal error' }, 500);
+  }
+});
 
 // ── Delete account (and all associated data) ───────────────────────────────
 // Required by Google Play for apps with account creation. Every user-owned table
