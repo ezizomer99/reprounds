@@ -3,6 +3,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { createDb } from '../db';
 import { rankPromotions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import type { AppEnv } from '../env';
 import { disciplineVisible } from '../lib/ownership';
 import { isNumberInRange } from '@app/shared';
 import type {
@@ -12,17 +13,7 @@ import type {
   UpdateRankPromotionRequest,
 } from '@app/shared';
 
-type Env = {
-  Bindings: {
-    HYPERDRIVE?: Hyperdrive;
-    DATABASE_URL?: string;
-    JWT_SECRET: string;
-    GOOGLE_CLIENT_ID: string;
-  };
-  Variables: {
-    userId: string;
-  };
-};
+type Env = AppEnv;
 
 const promotionRoutes = new Hono<Env>();
 

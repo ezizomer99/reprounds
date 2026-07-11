@@ -7,20 +7,10 @@ import { signJwt, verifyJwt } from '../lib/jwt';
 import { hashPassword, verifyPassword } from '../lib/password';
 import { isCompedEmail } from '../lib/entitlements';
 import { authMiddleware } from '../middleware/auth';
+import type { AuthEnv } from '../env';
 import type { User } from '@app/shared';
 
-type Env = {
-  Bindings: {
-    HYPERDRIVE?: Hyperdrive;
-    DATABASE_URL?: string;
-    JWT_SECRET: string;
-    GOOGLE_CLIENT_ID: string;
-    AUTH_RATE_LIMITER?: RateLimit;
-  };
-  Variables: {
-    userId: string;
-  };
-};
+type Env = AuthEnv;
 
 const SESSION_EXPIRY_SECONDS = 7 * 24 * 60 * 60;
 

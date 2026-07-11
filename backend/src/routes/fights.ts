@@ -3,6 +3,7 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import { createDb } from '../db';
 import { fights } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import type { AppEnv } from '../env';
 import { disciplineVisible } from '../lib/ownership';
 import { isFightMethod, isFightResult, isNumberInRange } from '@app/shared';
 import type {
@@ -13,17 +14,7 @@ import type {
   UpdateFightRequest,
 } from '@app/shared';
 
-type Env = {
-  Bindings: {
-    HYPERDRIVE?: Hyperdrive;
-    DATABASE_URL?: string;
-    JWT_SECRET: string;
-    GOOGLE_CLIENT_ID: string;
-  };
-  Variables: {
-    userId: string;
-  };
-};
+type Env = AppEnv;
 
 const fightRoutes = new Hono<Env>();
 

@@ -3,7 +3,9 @@ import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, or, sql } from '
 import { createDb } from '../db';
 import { disciplines, exercises, sessionEntries, sessions, strengthSets } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import type { AppEnv } from '../env';
 import { estimatedOneRepMax } from '@app/shared';
+import { epleyE1rmSql } from '../lib/e1rm';
 import type {
   CreateExerciseRequest,
   Exercise,
@@ -18,17 +20,7 @@ import type {
   UpdateExerciseRequest,
 } from '@app/shared';
 
-type Env = {
-  Bindings: {
-    HYPERDRIVE?: Hyperdrive;
-    DATABASE_URL?: string;
-    JWT_SECRET: string;
-    GOOGLE_CLIENT_ID: string;
-  };
-  Variables: {
-    userId: string;
-  };
-};
+type Env = AppEnv;
 
 const exerciseRoutes = new Hono<Env>();
 
@@ -341,7 +333,7 @@ exerciseRoutes.get('/:id/prs', async (c) => {
   // The PR is a max — compute it in the database instead of shipping every
   // completed set ever logged into the Worker (grows unboundedly with
   // training history). Mirrors estimatedOneRepMax: Epley, reps=1 → weight.
-  const e1rmExpr = sql`CASE WHEN ${strengthSets.reps} = 1 THEN ${strengthSets.weight} ELSE ${strengthSets.weight} * (1 + ${strengthSets.reps} / 30.0) END`;
+  const e1rmExpr = epleyE1rmSql(sql`${strengthSets.weight}`, sql`${strengthSets.reps}`);
 
   const baseJoin = () =>
     db
@@ -421,8 +413,7 @@ exerciseRoutes.get('/:id/progression', async (c) => {
 
   const rows = await db.execute(sql`
     SELECT s.date AS date,
-           MAX(CASE WHEN ss.reps = 1 THEN ss.weight::numeric
-                    ELSE ss.weight::numeric * (1.0 + ss.reps::numeric / 30.0) END)::float AS best_e1rm,
+           MAX(${epleyE1rmSql(sql`ss.weight::numeric`, sql`ss.reps::numeric`)})::float AS best_e1rm,
            MAX(ss.weight)::float AS top_weight,
            SUM(ss.weight::numeric * ss.reps::numeric)::float AS total_volume
     FROM strength_sets ss

@@ -3,6 +3,7 @@ import { and, count, desc, eq, inArray, max } from 'drizzle-orm';
 import { createDb } from '../db';
 import { disciplines, sessionFocuses, sessions, trainingFocuses } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import type { AppEnv } from '../env';
 import { disciplineVisible } from '../lib/ownership';
 import { isFocusStatus } from '@app/shared';
 import type {
@@ -12,17 +13,7 @@ import type {
   UpdateFocusRequest,
 } from '@app/shared';
 
-type Env = {
-  Bindings: {
-    HYPERDRIVE?: Hyperdrive;
-    DATABASE_URL?: string;
-    JWT_SECRET: string;
-    GOOGLE_CLIENT_ID: string;
-  };
-  Variables: {
-    userId: string;
-  };
-};
+type Env = AppEnv;
 
 const focusRoutes = new Hono<Env>();
 

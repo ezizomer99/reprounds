@@ -3,21 +3,13 @@ import { and, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
 import { createDb } from '../db';
 import { exercises, partners, sessionEntries, sessions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import type { AppEnv } from '../env';
 import { aggregateMatStats, type MatEntryRow } from '../lib/matStats';
 import { aggregatePartnerStats } from '../lib/partnerStats';
+import { epleyE1rmSql } from '../lib/e1rm';
 import type { MuscleSummaryResponse, PartnerStatsResponse, TopLiftsResponse } from '@app/shared';
 
-type Env = {
-  Bindings: {
-    HYPERDRIVE?: Hyperdrive;
-    DATABASE_URL?: string;
-    JWT_SECRET: string;
-    GOOGLE_CLIENT_ID: string;
-  };
-  Variables: {
-    userId: string;
-  };
-};
+type Env = AppEnv;
 
 const statsRoutes = new Hono<Env>();
 
@@ -81,6 +73,7 @@ statsRoutes.get('/top-lifts', async (c) => {
   // DISTINCT ON picks the best set per exercise (highest estimated 1RM), then we
   // sort across exercises and take the top 10. The CASE mirrors the shared
   // estimatedOneRepMax calculator (Epley, reps=1 → weight).
+  const e1rm = epleyE1rmSql(sql`ss.weight::numeric`, sql`ss.reps::numeric`);
   const rows = await db.execute(sql`
     SELECT x.exercise_id, x.exercise_name, x.weight::float AS weight, x.reps,
            x.estimated_1rm::float AS estimated_1rm
@@ -90,8 +83,7 @@ statsRoutes.get('/top-lifts', async (c) => {
         e.name        AS exercise_name,
         ss.weight::numeric AS weight,
         ss.reps,
-        CASE WHEN ss.reps = 1 THEN ss.weight::numeric
-             ELSE ss.weight::numeric * (1.0 + ss.reps::numeric / 30.0) END AS estimated_1rm
+        ${e1rm} AS estimated_1rm
       FROM strength_sets ss
       JOIN session_entries se ON ss.session_entry_id = se.id
       JOIN sessions s         ON se.session_id = s.id
@@ -102,8 +94,7 @@ statsRoutes.get('/top-lifts', async (c) => {
         AND ss.completed = TRUE
         AND ss.weight    IS NOT NULL
         AND ss.reps      IS NOT NULL
-      ORDER BY e.id, (CASE WHEN ss.reps = 1 THEN ss.weight::numeric
-                           ELSE ss.weight::numeric * (1.0 + ss.reps::numeric / 30.0) END) DESC
+      ORDER BY e.id, (${e1rm}) DESC
     ) x
     ORDER BY x.estimated_1rm DESC
     LIMIT 10

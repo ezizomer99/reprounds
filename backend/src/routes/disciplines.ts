@@ -3,6 +3,7 @@ import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import { createDb } from '../db';
 import { disciplines, fights, rankPromotions, sessionEntries, sessions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import type { AppEnv } from '../env';
 import { isDisciplineCat } from '@app/shared';
 import type {
   CreateDisciplineRequest,
@@ -15,17 +16,7 @@ import type {
 } from '@app/shared';
 import type { FieldConfig } from '@app/shared';
 
-type Env = {
-  Bindings: {
-    HYPERDRIVE?: Hyperdrive;
-    DATABASE_URL?: string;
-    JWT_SECRET: string;
-    GOOGLE_CLIENT_ID: string;
-  };
-  Variables: {
-    userId: string;
-  };
-};
+type Env = AppEnv;
 
 const disciplineRoutes = new Hono<Env>();
 

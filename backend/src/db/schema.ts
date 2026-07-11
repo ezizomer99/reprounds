@@ -117,6 +117,7 @@ export const routineItems = pgTable('routine_items', {
   supersetGroup:      integer('superset_group'),
   defaultRestSeconds: integer('default_rest_seconds'),
   target:             jsonb('target'),
+  createdAt:          timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   kindCheck: check(
     'routine_items_kind_check',

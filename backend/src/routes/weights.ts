@@ -3,6 +3,7 @@ import { and, desc, eq } from 'drizzle-orm';
 import { createDb } from '../db';
 import { weightLogs } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import type { AppEnv } from '../env';
 import { isNumberInRange } from '@app/shared';
 import type {
   CreateWeightLogRequest,
@@ -11,17 +12,7 @@ import type {
   WeightLogListResponse,
 } from '@app/shared';
 
-type Env = {
-  Bindings: {
-    HYPERDRIVE?: Hyperdrive;
-    DATABASE_URL?: string;
-    JWT_SECRET: string;
-    GOOGLE_CLIENT_ID: string;
-  };
-  Variables: {
-    userId: string;
-  };
-};
+type Env = AppEnv;
 
 const weightRoutes = new Hono<Env>();
 

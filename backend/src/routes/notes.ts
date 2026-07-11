@@ -3,20 +3,11 @@ import { asc, eq, inArray, sql } from 'drizzle-orm';
 import { createDb } from '../db';
 import { disciplines, exercises, sessionEntries } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import type { AppEnv } from '../env';
 import { isRoundsSession } from '@app/shared';
 import type { EntryKind, NoteItem, NotesSessionGroup, NotesTimelineResponse, TagListResponse } from '@app/shared';
 
-type Env = {
-  Bindings: {
-    HYPERDRIVE?: Hyperdrive;
-    DATABASE_URL?: string;
-    JWT_SECRET: string;
-    GOOGLE_CLIENT_ID: string;
-  };
-  Variables: {
-    userId: string;
-  };
-};
+type Env = AppEnv;
 
 const notesRoutes = new Hono<Env>();
 

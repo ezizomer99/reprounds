@@ -13,6 +13,7 @@ import {
   trainingFocuses,
 } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
+import type { AppEnv } from '../env';
 import { disciplineVisible, exerciseVisible } from '../lib/ownership';
 import { isEntryKind, isGiType, isNumberInRange, isSetType } from '@app/shared';
 import type {
@@ -30,17 +31,7 @@ import type {
   UpdateStrengthSetRequest,
 } from '@app/shared';
 
-type Env = {
-  Bindings: {
-    HYPERDRIVE?: Hyperdrive;
-    DATABASE_URL?: string;
-    JWT_SECRET: string;
-    GOOGLE_CLIENT_ID: string;
-  };
-  Variables: {
-    userId: string;
-  };
-};
+type Env = AppEnv;
 
 const sessionRoutes = new Hono<Env>();
 
