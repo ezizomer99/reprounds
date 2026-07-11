@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { createDb } from '../db';
 import { fights } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
@@ -9,6 +9,7 @@ import type {
   CreateFightRequest,
   Fight,
   FightListResponse,
+  FightRecordsResponse,
   UpdateFightRequest,
 } from '@app/shared';
 
@@ -56,6 +57,35 @@ fightRoutes.get('/', async (c) => {
   const rows = await db.select().from(fights).where(where).orderBy(desc(fights.date));
 
   const result: FightListResponse = { fights: rows.map(mapFight) };
+  return c.json(result);
+});
+
+// GET /fights/records — per-discipline W-L-D tally for the caller, aggregated in
+// the DB. Replaces the mat tab fetching every discipline's fight list just to
+// count results (an N+1). Registered before any '/:id' route (there is none).
+fightRoutes.get('/records', async (c) => {
+  const userId = c.get('userId');
+  const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+
+  const rows = await db
+    .select({
+      disciplineId: fights.disciplineId,
+      wins: sql<number>`COUNT(*) FILTER (WHERE ${fights.result} = 'win')::int`,
+      losses: sql<number>`COUNT(*) FILTER (WHERE ${fights.result} = 'loss')::int`,
+      draws: sql<number>`COUNT(*) FILTER (WHERE ${fights.result} = 'draw')::int`,
+    })
+    .from(fights)
+    .where(eq(fights.userId, userId))
+    .groupBy(fights.disciplineId);
+
+  const result: FightRecordsResponse = {
+    records: rows.map((r) => ({
+      disciplineId: r.disciplineId,
+      wins: Number(r.wins),
+      losses: Number(r.losses),
+      draws: Number(r.draws),
+    })),
+  };
   return c.json(result);
 });
 

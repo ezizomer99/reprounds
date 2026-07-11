@@ -3,6 +3,8 @@ import type {
   CreateFightRequest,
   Fight,
   FightListResponse,
+  FightRecord,
+  FightRecordsResponse,
 } from '@app/shared';
 import { apiDelete, apiGet, apiPost } from '../lib/api';
 
@@ -17,23 +19,37 @@ export function useFights(disciplineId: string | null) {
   });
 }
 
+// One request for every discipline's W-L-D, keyed by disciplineId — avoids the
+// mat tab firing a separate /fights query per discipline card (an N+1).
+export function useFightRecords() {
+  return useQuery<Map<string, FightRecord>, Error>({
+    queryKey: ['fights', 'records'],
+    queryFn: async () => {
+      const data = await apiGet<FightRecordsResponse>('/fights/records');
+      return new Map(data.records.map((r) => [r.disciplineId, r]));
+    },
+  });
+}
+
 export function useCreateFight() {
   const queryClient = useQueryClient();
   return useMutation<Fight, Error, CreateFightRequest>({
     mutationFn: (body) =>
       apiPost<{ fight: Fight }>('/fights', body).then((r) => r.fight),
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['fights', variables.disciplineId] });
+    onSuccess: () => {
+      // Prefix-invalidate so both the per-discipline list and the records
+      // aggregate (['fights', 'records']) refresh.
+      queryClient.invalidateQueries({ queryKey: ['fights'] });
     },
   });
 }
 
-export function useDeleteFight(disciplineId: string | null) {
+export function useDeleteFight(_disciplineId: string | null) {
   const queryClient = useQueryClient();
   return useMutation<void, Error, string>({
     mutationFn: (id) => apiDelete(`/fights/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['fights', disciplineId] });
+      queryClient.invalidateQueries({ queryKey: ['fights'] });
     },
   });
 }

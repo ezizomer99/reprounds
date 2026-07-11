@@ -277,6 +277,20 @@ export interface FightListResponse {
   fights: Fight[];
 }
 
+// Per-discipline win-loss-draw tally, aggregated server-side so the mat tab can
+// show a record badge per discipline in one request instead of fetching every
+// discipline's full fight list (an N+1).
+export interface FightRecord {
+  disciplineId: string;
+  wins: number;
+  losses: number;
+  draws: number;
+}
+
+export interface FightRecordsResponse {
+  records: FightRecord[];
+}
+
 export interface CreateFightRequest {
   disciplineId: string;
   date: string;
