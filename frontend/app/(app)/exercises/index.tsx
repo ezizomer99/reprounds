@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Image } from 'react-native';
 import { useState, useMemo, useRef } from 'react';
 import { Swipeable, RectButton } from 'react-native-gesture-handler';
 import { useRouter } from 'expo-router';
@@ -22,7 +21,7 @@ import {
   useExercises,
 } from '../../../src/hooks/useExercises';
 import { ExerciseForm } from '../../../src/components/ExerciseForm';
-import { ExerciseFilterChips, filterByChips, EMPTY_FILTER, type ExerciseChipFilter } from '../../../src/components/ExerciseFilterChips';
+import { ExerciseFilters, filterByChips, EMPTY_FILTER, type ExerciseChipFilter } from '../../../src/components/ExerciseFilters';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
@@ -44,25 +43,10 @@ function titleForTarget(target: string): string {
 }
 
 
-function ExerciseThumbnail({ uri, styles }: { uri: string | null; styles: ReturnType<typeof makeStyles> }) {
-  if (uri) {
-    return (
-      <View style={styles.thumbnailContainer}>
-        <Image
-          source={{ uri }}
-          style={styles.thumbnail}
-          resizeMode="contain"
-        />
-      </View>
-    );
-  }
-  return <View style={[styles.thumbnailContainer, styles.thumbnailPlaceholder]} />;
-}
-
 interface ExerciseRowProps {
   exercise: Exercise;
   isOwned: boolean;
-  onPress: (id: string) => void;
+  onPress: (exercise: Exercise) => void;
   onDelete: (id: string) => void;
   styles: ReturnType<typeof makeStyles>;
   T: ThemeColors;
@@ -100,10 +84,9 @@ function ExerciseRow({ exercise, isOwned, onPress, onDelete, styles }: ExerciseR
     >
       <TouchableOpacity
         style={styles.row}
-        onPress={() => onPress(exercise.id)}
+        onPress={() => onPress(exercise)}
         activeOpacity={0.7}
       >
-        <ExerciseThumbnail uri={exercise.imageUrl} styles={styles} />
         <View style={styles.rowContent}>
           <Text style={styles.rowName} numberOfLines={1}>{exercise.name}</Text>
           {meta ? (
@@ -227,8 +210,11 @@ export default function ExercisesScreen() {
     });
   }
 
-  function handleRowPress(id: string) {
-    router.push({ pathname: '/exercises/[id]', params: { id } } as never);
+  function handleRowPress(exercise: Exercise) {
+    router.push({
+      pathname: '/history/exercise/[id]',
+      params: { id: exercise.id, name: exercise.name },
+    } as never);
   }
 
   function handleAddPress() {
@@ -274,7 +260,7 @@ export default function ExercisesScreen() {
 
       {!isLoading && !isError && exercises && exercises.length > 0 && (
         <View style={styles.filterRow}>
-          <ExerciseFilterChips exercises={exercises} filter={filter} onChange={setFilter} />
+          <ExerciseFilters exercises={exercises} filter={filter} onChange={setFilter} dimensions={['equipment']} />
         </View>
       )}
 
@@ -287,7 +273,6 @@ export default function ExercisesScreen() {
               </View>
               {Array.from({ length: 4 }).map((_, ri) => (
                 <View key={ri} style={styles.skeletonRow}>
-                  <Skeleton width={38} height={38} radius={R.sm} />
                   <View style={{ flex: 1, gap: 7 }}>
                     <Skeleton width="55%" height={14} />
                     <Skeleton width="33%" height={11} />
@@ -426,25 +411,8 @@ function makeStyles(T: ThemeColors) {
       flexDirection: 'row',
       alignItems: 'center',
       paddingHorizontal: D.pad,
-      paddingVertical: 10,
-      gap: 12,
+      paddingVertical: 12,
       backgroundColor: T.bg,
-    },
-    thumbnailContainer: {
-      width: 52,
-      height: 52,
-      borderRadius: R.sm,
-      backgroundColor: '#FFFFFF',
-      overflow: 'hidden',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    thumbnail: {
-      width: 52,
-      height: 52,
-    },
-    thumbnailPlaceholder: {
-      backgroundColor: T.surface2 ?? T.surface,
     },
     rowContent: { flex: 1, gap: 3 },
     rowName: { fontFamily: F.uiMed, fontSize: 15, color: T.text },
@@ -456,7 +424,7 @@ function makeStyles(T: ThemeColors) {
       width: 72,
     },
 
-    separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad + 52 + 12 },
+    separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad },
     centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
     skeletonSectionHeader: { paddingHorizontal: D.pad, paddingVertical: 10 },
     skeletonRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: D.pad, paddingVertical: 12, gap: 12 },

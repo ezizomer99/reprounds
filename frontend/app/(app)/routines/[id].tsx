@@ -10,7 +10,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Image } from 'react-native';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import type { RenderItemParams } from 'react-native-draggable-flatlist';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -421,11 +420,6 @@ function PickExerciseModal({ visible, onClose, onPick }: PickExerciseModalProps)
                 onPress={() => { onPick(item); handleClose(); }}
                 activeOpacity={0.7}
               >
-                {item.imageUrl ? (
-                  <Image source={{ uri: item.imageUrl }} style={styles.pickThumb} resizeMode="cover" />
-                ) : (
-                  <View style={[styles.pickThumb, styles.pickThumbPlaceholder]} />
-                )}
                 <View style={styles.pickRowInfo}>
                   <Text style={styles.pickRowName}>{item.name}</Text>
                   <Text style={styles.pickRowType}>{item.equipment ?? item.muscleGroup ?? item.type}</Text>
@@ -976,8 +970,6 @@ function makeStyles(T: ThemeColors) {
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: D.pad, paddingVertical: 10, gap: 12,
   },
-  pickThumb: { width: 44, height: 44, borderRadius: R.sm },
-  pickThumbPlaceholder: { backgroundColor: T.surface2 },
   pickRowInfo: { flex: 1 },
   pickRowName: { fontFamily: F.uiMed, fontSize: 15, color: T.text },
   pickRowType: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 2, textTransform: 'capitalize' },

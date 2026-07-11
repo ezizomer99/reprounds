@@ -58,10 +58,6 @@ export interface Exercise {
   muscleGroup: string | null;
   secondaryMuscles: string[] | null;
   target: string | null;
-  imageUrl: string | null;
-  // Heavy fields — only populated by GET /exercises/:id, null in list responses
-  instructions: string | null;
-  instructionSteps: string[] | null;
 }
 
 export interface Discipline {

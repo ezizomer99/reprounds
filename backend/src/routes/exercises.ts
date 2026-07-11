@@ -22,8 +22,6 @@ type Env = {
     DATABASE_URL?: string;
     JWT_SECRET: string;
     GOOGLE_CLIENT_ID: string;
-    EXERCISES_BUCKET: R2Bucket;
-    R2_PUBLIC_BASE_URL: string;
   };
   Variables: {
     userId: string;
@@ -36,7 +34,7 @@ exerciseRoutes.use('*', authMiddleware);
 
 type ExerciseRow = typeof exercises.$inferSelect;
 
-function mapExercise(r: ExerciseRow, includeHeavy = false): Exercise {
+function mapExercise(r: ExerciseRow): Exercise {
   return {
     id: r.id,
     userId: r.userId,
@@ -49,9 +47,6 @@ function mapExercise(r: ExerciseRow, includeHeavy = false): Exercise {
     muscleGroup: r.muscleGroup,
     secondaryMuscles: r.secondaryMuscles,
     target: r.target,
-    imageUrl: r.imageUrl,
-    instructions: includeHeavy ? r.instructions : null,
-    instructionSteps: includeHeavy ? (r.instructionSteps as string[] | null) : null,
   };
 }
 
@@ -100,7 +95,7 @@ exerciseRoutes.get('/', async (c) => {
     .offset(offset);
 
   const result: ExerciseListResponse = {
-    exercises: rows.map((r) => mapExercise(r, false)),
+    exercises: rows.map((r) => mapExercise(r)),
   };
 
   return c.json(result);
@@ -137,7 +132,7 @@ exerciseRoutes.post('/', async (c) => {
   return c.json({ exercise: mapExercise(row) }, 201);
 });
 
-// GET /exercises/:id  — full detail including instructions
+// GET /exercises/:id  — single exercise with its metadata
 exerciseRoutes.get('/:id', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
@@ -151,7 +146,7 @@ exerciseRoutes.get('/:id', async (c) => {
 
   if (!row) return c.json({ error: 'Not found' }, 404);
 
-  return c.json({ exercise: mapExercise(row, true) });
+  return c.json({ exercise: mapExercise(row) });
 });
 
 // PATCH /exercises/:id

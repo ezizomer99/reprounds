@@ -12,7 +12,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Image } from 'react-native';
 import LottieView from 'lottie-react-native';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -36,7 +35,7 @@ import { useExercises } from '../../../src/hooks/useExercises';
 import { useDisciplines } from '../../../src/hooks/useDisciplines';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { ExerciseForm } from '../../../src/components/ExerciseForm';
-import { ExerciseFilterChips, filterByChips, EMPTY_FILTER, type ExerciseChipFilter } from '../../../src/components/ExerciseFilterChips';
+import { ExerciseFilters, filterByChips, EMPTY_FILTER, type ExerciseChipFilter } from '../../../src/components/ExerciseFilters';
 import {
   useSession,
   useCompleteSession,
@@ -168,7 +167,7 @@ function PickExerciseModal({ visible, onClose, onPick, title = 'Add Exercise' }:
           />
           {!isLoading && (exercises?.length ?? 0) > 0 && (
             <View style={styles.pickerFilterRow}>
-              <ExerciseFilterChips exercises={exercises ?? []} filter={filter} onChange={setFilter} />
+              <ExerciseFilters exercises={exercises ?? []} filter={filter} onChange={setFilter} />
             </View>
           )}
           {isLoading ? (
@@ -180,11 +179,6 @@ function PickExerciseModal({ visible, onClose, onPick, title = 'Add Exercise' }:
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => (
                 <TouchableOpacity style={styles.pickRow} onPress={() => { onPick(item); handleClose(); }}>
-                  {item.imageUrl ? (
-                    <Image source={{ uri: item.imageUrl }} style={styles.pickThumb} resizeMode="cover" />
-                  ) : (
-                    <View style={[styles.pickThumb, styles.pickThumbPlaceholder]} />
-                  )}
                   <View style={styles.pickInfo}>
                     <Text style={styles.pickName}>{item.name}</Text>
                     <Text style={styles.pickMeta}>{item.equipment ?? item.muscleGroup ?? item.type}</Text>
@@ -2461,8 +2455,6 @@ function makeStyles(T: ThemeColors) {
   },
   pickerFilterRow: { paddingHorizontal: 16, paddingBottom: 10 },
   pickRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 12 },
-  pickThumb: { width: 44, height: 44, borderRadius: 8 },
-  pickThumbPlaceholder: { backgroundColor: T.surface2 },
   pickInfo: { flex: 1 },
   pickName: { fontFamily: F.uiMed, fontSize: 16, color: T.text },
   pickMeta: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim, marginTop: 2, textTransform: 'capitalize' },
