@@ -3,6 +3,7 @@ import {
   Alert,
   FlatList,
   Modal,
+  RefreshControl,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -24,6 +25,7 @@ import { useUnit } from '../../../src/units/UnitContext';
 import { fmtWeight, kgToUnit, unitToKg } from '../../../src/units/units';
 import { Sparkline } from '../../../src/components/Sparkline';
 import { InlineError } from '../../../src/components/InlineError';
+import { CalendarPicker } from '../../../src/components/CalendarPicker';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 
@@ -44,7 +46,7 @@ export default function WeightScreen() {
   const styles = useMemo(() => makeStyles(T), [T]);
 
   const { unit } = useUnit();
-  const { data, isLoading, isError, refetch } = useWeightLogs();
+  const { data, isLoading, isError, refetch, isRefetching } = useWeightLogs();
   const deleteWeight = useDeleteWeightLog();
   const [showAdd, setShowAdd] = useState(false);
 
@@ -61,11 +63,21 @@ export default function WeightScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Body weight</Text>
-        <TouchableOpacity style={styles.backBtn} onPress={() => setShowAdd(true)}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => setShowAdd(true)}
+          accessibilityRole="button"
+          accessibilityLabel="Add weigh-in"
+        >
           <Ionicons name="add" size={24} color={T.primary} />
         </TouchableOpacity>
       </View>
@@ -73,6 +85,13 @@ export default function WeightScreen() {
       <FlatList
         data={weights}
         keyExtractor={(item) => item.id}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefetching}
+            onRefresh={() => void refetch()}
+            tintColor={T.textDim}
+          />
+        }
         ListHeaderComponent={
           <View style={styles.summaryCard}>
             <View style={styles.summaryTop}>
@@ -198,14 +217,7 @@ function AddWeightModal({ onClose }: { onClose: () => void }) {
           />
 
           <Text style={styles.sheetLabel}>Date</Text>
-          <TextInput
-            style={styles.sheetInput}
-            value={date}
-            onChangeText={setDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={T.muted}
-            autoCapitalize="none"
-          />
+          <CalendarPicker value={date} onChange={setDate} />
 
           <Text style={styles.sheetLabel}>Notes</Text>
           <TextInput

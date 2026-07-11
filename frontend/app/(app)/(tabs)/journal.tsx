@@ -1,4 +1,4 @@
-import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
@@ -29,7 +29,7 @@ export default function JournalTab() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { isPro, showPaywall } = useProGate();
-  const { data: sessions, isLoading, isError, error } = useSessions('completed');
+  const { data: sessions, isLoading, isError, error, refetch, isRefetching } = useSessions('completed');
   const { data: routines } = useRoutines();
   const deleteSession = useDeleteSession();
   const [filter, setFilter] = useState<Filter>('all');
@@ -120,6 +120,13 @@ export default function JournalTab() {
         <FlatList
           data={list}
           keyExtractor={(item) => item.id}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={() => void refetch()}
+              tintColor={T.textDim}
+            />
+          }
           renderItem={({ item }) => {
             const routineName = item.routineId ? (routineMap.get(item.routineId) ?? null) : null;
             const displayName = item.name ?? routineName ?? 'Session';

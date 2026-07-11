@@ -334,7 +334,13 @@ export default function FocusesScreen() {
   return (
     <Animated.View style={styles.screen} entering={FadeInDown.duration(280).springify()}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={8} style={styles.backBtn}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          hitSlop={8}
+          style={styles.backBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>

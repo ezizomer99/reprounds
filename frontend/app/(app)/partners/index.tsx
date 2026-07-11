@@ -2,6 +2,7 @@ import {
   Alert,
   FlatList,
   Modal,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
@@ -37,7 +38,7 @@ export default function PartnersScreen() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
 
-  const { data, isLoading } = usePartnerStats();
+  const { data, isLoading, refetch, isRefetching } = usePartnerStats();
   const updatePartner = useUpdatePartner();
   const deletePartner = useDeletePartner();
 
@@ -121,7 +122,12 @@ export default function PartnersScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
+        >
           <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Training Partners</Text>
@@ -148,6 +154,13 @@ export default function PartnersScreen() {
           renderItem={renderItem}
           contentContainerStyle={{ padding: D.pad, gap: D.stack, paddingBottom: insets.bottom + 32 }}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefetching}
+              onRefresh={() => void refetch()}
+              tintColor={T.textDim}
+            />
+          }
           ListHeaderComponent={
             <Text style={styles.hint}>Tap a partner to rename · long-press to delete</Text>
           }

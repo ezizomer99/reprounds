@@ -113,6 +113,8 @@ export default function TabLayout() {
           style={styles.resumeBtn}
           onPress={() => router.push({ pathname: '/sessions/[id]', params: { id: activeSession.id } } as never)}
           activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Resume active session"
         >
           <Ionicons name="chevron-up" size={18} color={T.onPrimary} />
           <Text style={styles.resumeBtnText}>Resume Session</Text>
