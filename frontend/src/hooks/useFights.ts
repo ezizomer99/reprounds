@@ -21,13 +21,18 @@ export function useFights(disciplineId: string | null) {
 
 // One request for every discipline's W-L-D, keyed by disciplineId — avoids the
 // mat tab firing a separate /fights query per discipline card (an N+1).
+//
+// The queryFn returns the raw (JSON-serializable) response and `select` builds
+// the Map. A Map must NOT be the cached query data: the offline persister
+// JSON-stringifies the cache, and `JSON.stringify(new Map())` is `"{}"`, so a
+// persisted-then-rehydrated Map comes back as a plain object and `.get(...)`
+// throws, crashing the mat tab into the ErrorBoundary. `select` runs on the
+// serializable cached data and is never persisted, so the Map is rebuilt fresh.
 export function useFightRecords() {
-  return useQuery<Map<string, FightRecord>, Error>({
+  return useQuery<FightRecordsResponse, Error, Map<string, FightRecord>>({
     queryKey: ['fights', 'records'],
-    queryFn: async () => {
-      const data = await apiGet<FightRecordsResponse>('/fights/records');
-      return new Map(data.records.map((r) => [r.disciplineId, r]));
-    },
+    queryFn: () => apiGet<FightRecordsResponse>('/fights/records'),
+    select: (data) => new Map(data.records.map((r) => [r.disciplineId, r])),
   });
 }
 
