@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { BarChart } from 'react-native-gifted-charts';
 import type { StrikeWeapon, StrikingRoundType } from '@app/shared';
+import { grapplingPositionLabel, submissionLabel } from '@app/shared';
 import { useMatStats } from '../../hooks/useStats';
 import { useProGate } from '../../hooks/useProGate';
 import { weeksAgoMonday } from '../../lib/statsHelpers';
@@ -33,6 +34,14 @@ const WEAPON_LABELS: Record<StrikeWeapon, string> = {
   knee: 'Knee',
   elbow: 'Elbow',
 };
+
+/** Sort a { key: count } map into the highest-count entries, capped at `limit`. */
+function topEntries(map: Record<string, number> | undefined, limit: number): [string, number][] {
+  return Object.entries(map ?? {})
+    .filter(([, n]) => n > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit);
+}
 
 function fmtMatTime(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
@@ -82,7 +91,13 @@ export function MatStatsView() {
   const grap = data?.grappling;
   const strik = data?.striking;
   const hasGrappling =
-    !!grap && (grap.rounds > 0 || grap.submissionsFor > 0 || grap.submissionsAgainst > 0 || grap.sweeps > 0 || grap.takedowns > 0);
+    !!grap &&
+    (grap.rounds > 0 ||
+      grap.submissionsFor > 0 ||
+      grap.submissionsAgainst > 0 ||
+      grap.sweeps > 0 ||
+      grap.takedowns > 0 ||
+      Object.keys(grap.positions ?? {}).length > 0);
   const hasStriking = !!strik && (strik.rounds > 0 || strik.totalStrikes > 0);
   const isEmpty = !isLoading && (data?.totals.sessions ?? 0) === 0;
 
@@ -285,6 +300,51 @@ export function MatStatsView() {
                           <Text style={styles.numberLabel}>Takedowns</Text>
                         </View>
                       </View>
+
+                      {topEntries(grap.positions, 5).length > 0 && (
+                        <View style={styles.subBlock}>
+                          <Text style={styles.subBlockLabel}>Top positions</Text>
+                          <View style={styles.chipRow}>
+                            {topEntries(grap.positions, 5).map(([pos, n]) => (
+                              <View key={pos} style={styles.chip}>
+                                <Text style={styles.chipText}>
+                                  {grapplingPositionLabel(pos)} · {n}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      )}
+
+                      {topEntries(grap.submissionsForByType, 4).length > 0 && (
+                        <View style={styles.subBlock}>
+                          <Text style={styles.subBlockLabel}>Most landed</Text>
+                          <View style={styles.chipRow}>
+                            {topEntries(grap.submissionsForByType, 4).map(([sub, n]) => (
+                              <View key={sub} style={styles.chip}>
+                                <Text style={styles.chipText}>
+                                  {submissionLabel(sub)} · {n}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      )}
+
+                      {topEntries(grap.submissionsAgainstByType, 4).length > 0 && (
+                        <View style={styles.subBlock}>
+                          <Text style={styles.subBlockLabel}>Most tapped to</Text>
+                          <View style={styles.chipRow}>
+                            {topEntries(grap.submissionsAgainstByType, 4).map(([sub, n]) => (
+                              <View key={sub} style={styles.chip}>
+                                <Text style={styles.chipText}>
+                                  {submissionLabel(sub)} · {n}
+                                </Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      )}
                     </View>
                   )}
 
@@ -431,6 +491,8 @@ function makeStyles(T: ThemeColors) {
     proBlurText: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, textAlign: 'center', paddingHorizontal: 16 },
 
     blockLabel: { fontFamily: F.uiSemi, fontSize: 13, color: T.textDim, marginBottom: 8 },
+    subBlock: { marginTop: 12 },
+    subBlockLabel: { fontFamily: F.uiMed, fontSize: 11, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
     numberGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     numberCell: {
       flexBasis: '47%',

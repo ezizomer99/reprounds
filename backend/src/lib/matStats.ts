@@ -56,7 +56,16 @@ export function aggregateMatStats(
     weeks: buckets,
     totals: { sessions: 0, rounds: 0, minutes: 0 },
     intensity: { light: 0, medium: 0, hard: 0, unspecified: 0 },
-    grappling: { rounds: 0, submissionsFor: 0, submissionsAgainst: 0, sweeps: 0, takedowns: 0 },
+    grappling: {
+      rounds: 0,
+      submissionsFor: 0,
+      submissionsAgainst: 0,
+      submissionsForByType: {},
+      submissionsAgainstByType: {},
+      sweeps: 0,
+      takedowns: 0,
+      positions: {},
+    },
     striking: { rounds: 0, roundsByType: {}, strikes: {}, totalStrikes: 0 },
   };
 
@@ -73,6 +82,15 @@ export function aggregateMatStats(
       if (!Number.isFinite(n) || n <= 0) continue;
       result.striking.strikes[weapon] = (result.striking.strikes[weapon] ?? 0) + n;
       result.striking.totalStrikes += n;
+    }
+  };
+
+  // Fold a { key: count } breakdown map into a running total map, skipping
+  // non-positive/NaN counts (defensive against malformed stored data).
+  const foldCounts = (target: Record<string, number>, src: Record<string, number> | undefined) => {
+    for (const [key, n] of Object.entries(src ?? {})) {
+      if (!Number.isFinite(n) || n <= 0) continue;
+      target[key] = (target[key] ?? 0) + n;
     }
   };
 
@@ -105,8 +123,13 @@ export function aggregateMatStats(
           for (const round of details.rounds) {
             result.grappling.submissionsFor += round.submissionsFor ?? 0;
             result.grappling.submissionsAgainst += round.submissionsAgainst ?? 0;
+            foldCounts(result.grappling.submissionsForByType, round.submissionsForTypes);
+            foldCounts(result.grappling.submissionsAgainstByType, round.submissionsAgainstTypes);
             result.grappling.sweeps += round.sweeps ?? 0;
             result.grappling.takedowns += round.takedowns ?? 0;
+            for (const pos of round.positions ?? []) {
+              result.grappling.positions[pos] = (result.grappling.positions[pos] ?? 0) + 1;
+            }
           }
           break;
         case 'striking':

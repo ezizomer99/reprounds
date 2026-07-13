@@ -61,6 +61,15 @@ export interface GrapplingRound extends BaseRound {
   gi?: GiType | null;
   submissionsFor?: number;
   submissionsAgainst?: number;
+  /**
+   * Optional breakdown of which submissions were landed, keyed by submission
+   * type (e.g. { armbar: 2, rnc: 1 }). The sum is always <= submissionsFor:
+   * the gap is untyped taps or legacy rounds. `submissionsFor` remains the
+   * authoritative total.
+   */
+  submissionsForTypes?: Record<string, number>;
+  /** Same breakdown for submissions conceded; sum is always <= submissionsAgainst. */
+  submissionsAgainstTypes?: Record<string, number>;
   sweeps?: number;
   takedowns?: number;
   /** Positions worked, e.g. ['mount', 'back', 'half_guard']. */
@@ -126,4 +135,74 @@ export function isRoundsSession(details: unknown): details is RoundsSessionDetai
     details !== null &&
     (details as { schema?: unknown }).schema === ROUNDS_SCHEMA
   );
+}
+
+/** Title-case a raw snake_case key for display fallback, e.g. 'knee_on_belly' -> 'Knee On Belly'. */
+function titleCaseKey(key: string): string {
+  return key
+    .split('_')
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(' ');
+}
+
+// ---- Grappling positions ----
+
+/**
+ * Curated positions a grappling round can be logged as working. Stored as a
+ * free-form string[] on the round (`GrapplingRound.positions`) so legacy or
+ * unknown keys still render via the label fallback.
+ */
+export const GRAPPLING_POSITIONS: { value: string; label: string }[] = [
+  { value: 'mount', label: 'Mount' },
+  { value: 'back', label: 'Back' },
+  { value: 'side_control', label: 'Side control' },
+  { value: 'north_south', label: 'North-south' },
+  { value: 'knee_on_belly', label: 'Knee on belly' },
+  { value: 'closed_guard', label: 'Closed guard' },
+  { value: 'open_guard', label: 'Open guard' },
+  { value: 'half_guard', label: 'Half guard' },
+  { value: 'turtle', label: 'Turtle' },
+  { value: 'standing', label: 'Standing' },
+  { value: 'guard_passing', label: 'Guard passing' },
+];
+
+const GRAPPLING_POSITION_LABELS: Record<string, string> = Object.fromEntries(
+  GRAPPLING_POSITIONS.map((p) => [p.value, p.label]),
+);
+
+/** Display label for a position key, falling back to a title-cased raw key. */
+export function grapplingPositionLabel(key: string): string {
+  return GRAPPLING_POSITION_LABELS[key] ?? titleCaseKey(key);
+}
+
+// ---- Grappling submissions ----
+
+/**
+ * Curated submission types for the per-submission breakdown
+ * (`GrapplingRound.submissionsForTypes` / `submissionsAgainstTypes`). 'other'
+ * is the escape hatch; unknown/legacy keys render via the label fallback.
+ */
+export const GRAPPLING_SUBMISSIONS: { value: string; label: string }[] = [
+  { value: 'armbar', label: 'Armbar' },
+  { value: 'triangle', label: 'Triangle' },
+  { value: 'rnc', label: 'RNC' },
+  { value: 'guillotine', label: 'Guillotine' },
+  { value: 'kimura', label: 'Kimura' },
+  { value: 'americana', label: 'Americana' },
+  { value: 'omoplata', label: 'Omoplata' },
+  { value: 'ankle_lock', label: 'Ankle lock' },
+  { value: 'heel_hook', label: 'Heel hook' },
+  { value: 'kneebar', label: 'Kneebar' },
+  { value: 'ezekiel', label: 'Ezekiel' },
+  { value: 'collar_choke', label: 'Collar choke' },
+  { value: 'other', label: 'Other' },
+];
+
+const SUBMISSION_LABELS: Record<string, string> = Object.fromEntries(
+  GRAPPLING_SUBMISSIONS.map((s) => [s.value, s.label]),
+);
+
+/** Display label for a submission key, falling back to a title-cased raw key. */
+export function submissionLabel(key: string): string {
+  return SUBMISSION_LABELS[key] ?? titleCaseKey(key);
 }
