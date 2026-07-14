@@ -13,6 +13,7 @@ import type {
   GiType,
   SessionStatus,
   SetType,
+  TechniqueKind,
 } from './types/enums';
 
 export const ACTIVITY_TYPES: readonly ActivityType[] = ['strength', 'conditioning', 'martial_arts'];
@@ -36,6 +37,7 @@ export const FIGHT_METHODS: readonly FightMethod[] = [
   'other',
 ];
 export const FOCUS_STATUSES: readonly FocusStatus[] = ['active', 'achieved', 'archived'];
+export const TECHNIQUE_KINDS: readonly TechniqueKind[] = ['position', 'submission'];
 
 const isMember = <T extends string>(arr: readonly T[], v: unknown): v is T =>
   typeof v === 'string' && (arr as readonly string[]).includes(v);
@@ -49,6 +51,7 @@ export const isGiType = (v: unknown): v is GiType => isMember(GI_TYPES, v);
 export const isFightResult = (v: unknown): v is FightResult => isMember(FIGHT_RESULTS, v);
 export const isFightMethod = (v: unknown): v is FightMethod => isMember(FIGHT_METHODS, v);
 export const isFocusStatus = (v: unknown): v is FocusStatus => isMember(FOCUS_STATUSES, v);
+export const isTechniqueKind = (v: unknown): v is TechniqueKind => isMember(TECHNIQUE_KINDS, v);
 
 // A finite number within an optional inclusive range. Used for reps/rpe/rir/round/
 // stripes/durationMinutes so out-of-range or non-numeric input is a 400, not a 500.

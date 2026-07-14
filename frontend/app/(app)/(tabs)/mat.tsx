@@ -332,6 +332,20 @@ export default function MatTab() {
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={T.muted} />
               </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.quickCard}
+                onPress={() => router.push('/library/techniques' as never)}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.quickIconBox, { backgroundColor: withAlpha(T.grappling, 0.14) }]}>
+                  <Ionicons name="body-outline" size={18} color={T.grappling} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.quickTitle}>Positions & submissions</Text>
+                  <Text style={styles.quickSub}>Manage the chips you tap while logging</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={T.muted} />
+              </TouchableOpacity>
             </>
           }
           renderItem={({ item }) => (

@@ -8,3 +8,4 @@ export type GiType         = 'gi' | 'no_gi';
 export type FightResult    = 'win' | 'loss' | 'draw';
 export type FightMethod    = 'ko' | 'tko' | 'submission' | 'decision' | 'points' | 'other';
 export type FocusStatus    = 'active' | 'achieved' | 'archived';
+export type TechniqueKind  = 'position' | 'submission';
