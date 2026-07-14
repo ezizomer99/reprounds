@@ -1,7 +1,11 @@
 import { useMemo, useState } from 'react';
-import { ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useTechniqueTags } from '../hooks/useNotes';
+import { useTechniques, useCreateTechnique } from '../hooks/useTechniques';
+import { useCurrentUser } from '../hooks/useAuth';
+import { useProGate } from '../hooks/useProGate';
 import type {
   ClassType,
   DisciplineCat,
@@ -13,11 +17,14 @@ import type {
   StrikeWeapon,
   StrikingRound,
   StrikingRoundType,
+  Technique,
+  TechniqueKind,
 } from '@app/shared';
 import {
   ROUNDS_SCHEMA,
   GRAPPLING_POSITIONS,
   GRAPPLING_SUBMISSIONS,
+  FREE_CUSTOM_TECHNIQUE_LIMIT,
   submissionLabel,
 } from '@app/shared';
 import { PartnerPicker } from './PartnerPicker';
@@ -26,6 +33,37 @@ import { Stepper } from './ui/Stepper';
 import { useTheme } from '../theme/ThemeContext';
 import { F, R, ThemeColors } from '../theme/colors';
 import { withAlpha } from '../lib/color';
+
+type TechniqueOption = { value: string; label: string };
+
+// Submissions minus the 'other' escape hatch — 'other' is a client-only chip,
+// never a bank row (it isn't seeded and can't be created as a custom).
+const SUBMISSION_FALLBACK: TechniqueOption[] = GRAPPLING_SUBMISSIONS.filter(
+  (s) => s.value !== 'other',
+);
+
+// Merge the server technique bank (global seeds + this user's customs) over the
+// hardcoded constants, keeping the curated order and appending customs after.
+// The constants are the offline / first-render fallback (and the seed source).
+function mergeTechniqueOptions(
+  fetched: Technique[] | undefined,
+  fallback: readonly TechniqueOption[],
+): TechniqueOption[] {
+  const list = fetched ?? [];
+  const labelByValue = new Map(list.map((t) => [t.value, t.label]));
+  const seen = new Set<string>();
+  const out: TechniqueOption[] = [];
+  for (const c of fallback) {
+    out.push({ value: c.value, label: labelByValue.get(c.value) ?? c.label });
+    seen.add(c.value);
+  }
+  for (const t of list) {
+    if (seen.has(t.value)) continue;
+    out.push({ value: t.value, label: t.label });
+    seen.add(t.value);
+  }
+  return out;
+}
 
 // A structural superset of every round type so the editor can hold all possible
 // fields; the active card only renders the ones relevant to its category.
@@ -111,6 +149,55 @@ export function RoundLogger({
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+
+  // Grappling technique bank — global seeds + this user's customs, merged over
+  // the constants. Only grappling surfaces positions / submission types.
+  const isGrappling = category === 'grappling';
+  const positionsQuery = useTechniques({ kind: 'position', category: 'grappling', enabled: isGrappling });
+  const submissionsQuery = useTechniques({ kind: 'submission', enabled: isGrappling });
+  const positionOptions = useMemo(
+    () => mergeTechniqueOptions(positionsQuery.data, GRAPPLING_POSITIONS),
+    [positionsQuery.data],
+  );
+  const submissionOptions = useMemo(
+    () => mergeTechniqueOptions(submissionsQuery.data, SUBMISSION_FALLBACK),
+    [submissionsQuery.data],
+  );
+
+  const createTechnique = useCreateTechnique();
+  const { data: currentUser } = useCurrentUser();
+  const { isPro, showPaywall } = useProGate();
+
+  // Create a custom position/submission, honoring the free-tier cap (counted
+  // across both kinds). Returns the created (or existing) row, or null if the
+  // create was blocked or failed. Callers apply the result to the round.
+  const handleCreateTechnique = async (
+    kind: TechniqueKind,
+    label: string,
+  ): Promise<Technique | null> => {
+    const trimmed = label.trim();
+    if (!trimmed) return null;
+    const customCount = [...(positionsQuery.data ?? []), ...(submissionsQuery.data ?? [])].filter(
+      (t) => t.userId === currentUser?.id,
+    ).length;
+    if (!isPro && customCount >= FREE_CUSTOM_TECHNIQUE_LIMIT) {
+      Alert.alert(
+        'Limit reached',
+        `Free accounts can create up to ${FREE_CUSTOM_TECHNIQUE_LIMIT} custom positions & submissions. Upgrade to RepRounds Pro for unlimited.`,
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Upgrade', onPress: showPaywall },
+        ],
+      );
+      return null;
+    }
+    try {
+      return await createTechnique.mutateAsync({ kind, label: trimmed });
+    } catch (err) {
+      Alert.alert('Error', (err as Error).message ?? 'Failed to add.');
+      return null;
+    }
+  };
 
   const data = (value ?? { schema: ROUNDS_SCHEMA, category, rounds: [] }) as unknown as EditableSession;
   const rounds = data.rounds ?? [];
@@ -227,7 +314,13 @@ export function RoundLogger({
           </View>
 
           {category === 'grappling' && (
-            <GrapplingCounters round={round} onChange={(patch) => updateRound(round.id, patch)} />
+            <GrapplingCounters
+              round={round}
+              positions={positionOptions}
+              submissions={submissionOptions}
+              onCreateTechnique={handleCreateTechnique}
+              onChange={(patch) => updateRound(round.id, patch)}
+            />
           )}
 
           {category === 'striking' && (
@@ -363,13 +456,20 @@ function TagEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string
 
 function GrapplingCounters({
   round,
+  positions,
+  submissions,
+  onCreateTechnique,
   onChange,
 }: {
   round: EditableRound;
+  positions: TechniqueOption[];
+  submissions: TechniqueOption[];
+  onCreateTechnique: (kind: TechniqueKind, label: string) => Promise<Technique | null>;
   onChange: (patch: Partial<EditableRound>) => void;
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+  const [addingPosition, setAddingPosition] = useState(false);
 
   const togglePosition = (pos: string) => {
     const current = round.positions ?? [];
@@ -378,6 +478,11 @@ function GrapplingCounters({
         ? current.filter((p) => p !== pos)
         : [...current, pos],
     });
+  };
+
+  const addPosition = (pos: string) => {
+    const current = round.positions ?? [];
+    if (!current.includes(pos)) onChange({ positions: [...current, pos] });
   };
 
   return (
@@ -392,8 +497,20 @@ function GrapplingCounters({
         />
       </View>
 
-      <SubmissionSection side="for" round={round} onChange={onChange} />
-      <SubmissionSection side="against" round={round} onChange={onChange} />
+      <SubmissionSection
+        side="for"
+        round={round}
+        submissions={submissions}
+        onCreateTechnique={onCreateTechnique}
+        onChange={onChange}
+      />
+      <SubmissionSection
+        side="against"
+        round={round}
+        submissions={submissions}
+        onCreateTechnique={onCreateTechnique}
+        onChange={onChange}
+      />
 
       <Stepper label="Sweeps" value={round.sweeps ?? 0} onChange={(n) => onChange({ sweeps: n })} />
       <Stepper
@@ -405,7 +522,7 @@ function GrapplingCounters({
       <View>
         <Text style={styles.miniLabel}>Positions worked</Text>
         <View style={styles.chipRow}>
-          {GRAPPLING_POSITIONS.map((p) => (
+          {positions.map((p) => (
             <Chip
               key={p.value}
               label={p.label}
@@ -413,18 +530,37 @@ function GrapplingCounters({
               onPress={() => togglePosition(p.value)}
             />
           ))}
+          <Chip
+            label="Add position"
+            leftIcon="add"
+            onPress={() => setAddingPosition(true)}
+            style={styles.addChip}
+            textStyle={styles.addChipText}
+          />
         </View>
       </View>
+
+      <CreateTechniqueModal
+        visible={addingPosition}
+        title="Add position"
+        placeholder="e.g. Butterfly guard"
+        onClose={() => setAddingPosition(false)}
+        onCreate={async (label) => {
+          const t = await onCreateTechnique('position', label);
+          if (!t) return false;
+          addPosition(t.value);
+          return true;
+        }}
+      />
     </View>
   );
 }
 
 /**
- * Submission tally for one side (for/against). Shows only the submissions that
- * have been tallied as stepper rows (label + − count +), with the running total
- * derived from those rows. A horizontally-scrolling palette of the not-yet-used
- * submissions sits below; tapping one adds it at 1, moving it up into the list.
- * Decrementing a row to 0 removes it, returning that type to the palette.
+ * Submission tally for one side (landed/taken). Shows only the submissions
+ * actually logged this round as counted chips ("Armbar · 2"); tap a chip to +1,
+ * tap its ✕ to clear it. A single "Add submission" chip opens a searchable
+ * picker to choose an existing type or create a custom one from the bank.
  *
  * The stored `submissionsFor` / `submissionsAgainst` total is kept equal to the
  * sum of the type map. Legacy rounds that carry a bare total larger than the
@@ -433,14 +569,19 @@ function GrapplingCounters({
 function SubmissionSection({
   side,
   round,
+  submissions,
+  onCreateTechnique,
   onChange,
 }: {
   side: 'for' | 'against';
   round: EditableRound;
+  submissions: TechniqueOption[];
+  onCreateTechnique: (kind: TechniqueKind, label: string) => Promise<Technique | null>;
   onChange: (patch: Partial<EditableRound>) => void;
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const totalKey = side === 'for' ? 'submissionsFor' : 'submissionsAgainst';
   const mapKey = side === 'for' ? 'submissionsForTypes' : 'submissionsAgainstTypes';
@@ -464,27 +605,41 @@ function SubmissionSection({
     onChange(patch as Partial<EditableRound>);
   };
 
-  const selected = GRAPPLING_SUBMISSIONS.filter((s) => (counts[s.value] ?? 0) > 0);
-  const available = GRAPPLING_SUBMISSIONS.filter((s) => (counts[s.value] ?? 0) === 0);
+  const labelOf = (value: string) =>
+    value === 'other'
+      ? 'Other'
+      : submissions.find((s) => s.value === value)?.label ?? submissionLabel(value);
+
+  const logged = Object.entries(counts).filter(([, n]) => n > 0);
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
 
   return (
     <View style={{ gap: 8 }}>
       <View style={styles.sectionHead}>
         <Text style={styles.miniLabel}>
-          {side === 'for' ? 'Submissions for' : 'Submissions against'}
+          {side === 'for' ? 'Submissions landed' : 'Submissions taken'}
         </Text>
         <Text style={styles.totalBadge}>{total}</Text>
       </View>
 
-      {selected.map((s) => (
-        <Stepper
-          key={s.value}
-          label={submissionLabel(s.value)}
-          value={counts[s.value] ?? 0}
-          onChange={(n) => setCount(s.value, n)}
+      <View style={styles.chipRow}>
+        {logged.map(([value, n]) => (
+          <CountChip
+            key={value}
+            label={labelOf(value)}
+            count={n}
+            onIncrement={() => setCount(value, n + 1)}
+            onRemove={() => setCount(value, 0)}
+          />
+        ))}
+        <Chip
+          label="Add submission"
+          leftIcon="add"
+          onPress={() => setPickerOpen(true)}
+          style={styles.addChip}
+          textStyle={styles.addChipText}
         />
-      ))}
+      </View>
 
       {(counts.other ?? 0) > 0 && (
         <TextInput
@@ -496,26 +651,229 @@ function SubmissionSection({
         />
       )}
 
-      {available.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={styles.addStrip}
-        >
-          {available.map((s) => (
-            <Chip
-              key={s.value}
-              label={submissionLabel(s.value)}
-              leftIcon="add"
-              onPress={() => setCount(s.value, 1)}
-              style={styles.addChip}
-              accessibilityLabel={`Add ${submissionLabel(s.value)}`}
-            />
-          ))}
-        </ScrollView>
-      )}
+      <SubmissionPicker
+        visible={pickerOpen}
+        submissions={submissions}
+        counts={counts}
+        onClose={() => setPickerOpen(false)}
+        onSelect={(value) => {
+          setCount(value, (counts[value] ?? 0) + 1);
+          setPickerOpen(false);
+        }}
+        onCreate={async (label) => {
+          const t = await onCreateTechnique('submission', label);
+          if (!t) return;
+          setCount(t.value, (counts[t.value] ?? 0) + 1);
+          setPickerOpen(false);
+        }}
+      />
     </View>
+  );
+}
+
+/**
+ * A counted, removable chip (Design A): the label with its tally ("Armbar · 2").
+ * Tapping the body adds one (light haptic); tapping the ✕ clears the type.
+ */
+function CountChip({
+  label,
+  count,
+  onIncrement,
+  onRemove,
+}: {
+  label: string;
+  count: number;
+  onIncrement: () => void;
+  onRemove: () => void;
+}) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  return (
+    <View style={styles.countChip}>
+      <TouchableOpacity
+        onPress={() => {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onIncrement();
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={`${label}, ${count}. Tap to add one`}
+      >
+        <Text style={styles.countChipText}>
+          {label} · {count}
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        hitSlop={8}
+        onPress={onRemove}
+        accessibilityRole="button"
+        accessibilityLabel={`Remove ${label}`}
+      >
+        <Ionicons name="close" size={13} color={T.onPrimary} style={styles.countChipClose} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+/**
+ * Searchable pageSheet picker for submission types: lists the bank (seeds +
+ * customs, plus the 'Other' escape hatch) filtered by query; tapping one adds
+ * it. A "Create …" row runs the pro-gated create path when nothing matches.
+ */
+function SubmissionPicker({
+  visible,
+  submissions,
+  counts,
+  onClose,
+  onSelect,
+  onCreate,
+}: {
+  visible: boolean;
+  submissions: TechniqueOption[];
+  counts: Record<string, number>;
+  onClose: () => void;
+  onSelect: (value: string) => void;
+  onCreate: (label: string) => Promise<void>;
+}) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const [query, setQuery] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const items = useMemo<TechniqueOption[]>(
+    () => [...submissions, { value: 'other', label: 'Other' }],
+    [submissions],
+  );
+  const q = query.trim().toLowerCase();
+  const matches = q ? items.filter((s) => s.label.toLowerCase().includes(q)) : items;
+  const exact = items.some((s) => s.label.toLowerCase() === q);
+
+  const close = () => {
+    setQuery('');
+    setBusy(false);
+    onClose();
+  };
+  const select = (value: string) => {
+    setQuery('');
+    onSelect(value);
+  };
+  const create = async () => {
+    if (busy || q === '') return;
+    setBusy(true);
+    await onCreate(query.trim());
+    setQuery('');
+    setBusy(false);
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={close}>
+      <View style={styles.modalSheet}>
+        <View style={styles.pickerHead}>
+          <Text style={styles.modalTitle}>Add submission</Text>
+          <TouchableOpacity onPress={close}>
+            <Text style={styles.pickerCancel}>Done</Text>
+          </TouchableOpacity>
+        </View>
+        <TextInput
+          style={styles.modalInput}
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search or create…"
+          placeholderTextColor={T.muted}
+          autoFocus
+          returnKeyType="done"
+          onSubmitEditing={() => {
+            if (!exact && q) create();
+          }}
+          selectionColor={T.primary}
+        />
+        <ScrollView style={styles.pickerList} keyboardShouldPersistTaps="handled">
+          {matches.map((s) => {
+            const n = counts[s.value] ?? 0;
+            return (
+              <TouchableOpacity key={s.value} style={styles.pickerRow} onPress={() => select(s.value)}>
+                <Text style={styles.pickerRowText}>{s.label}</Text>
+                {n > 0 && <Text style={styles.pickerRowCount}>· {n}</Text>}
+              </TouchableOpacity>
+            );
+          })}
+          {q !== '' && !exact && (
+            <TouchableOpacity style={styles.pickerRow} onPress={create} disabled={busy}>
+              <Ionicons name="add" size={15} color={T.primary} />
+              <Text style={[styles.pickerRowText, styles.pickerCreateText]}>
+                Create “{query.trim()}”
+              </Text>
+            </TouchableOpacity>
+          )}
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
+/**
+ * Minimal create-only pageSheet used for custom positions (existing positions
+ * are already visible as toggle chips, so only creation needs a modal).
+ */
+function CreateTechniqueModal({
+  visible,
+  title,
+  placeholder,
+  onClose,
+  onCreate,
+}: {
+  visible: boolean;
+  title: string;
+  placeholder: string;
+  onClose: () => void;
+  onCreate: (label: string) => Promise<boolean>;
+}) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const close = () => {
+    setText('');
+    setBusy(false);
+    onClose();
+  };
+  const submit = async () => {
+    if (busy || text.trim() === '') return;
+    setBusy(true);
+    const ok = await onCreate(text);
+    if (ok) close();
+    else setBusy(false);
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={close}>
+      <View style={styles.modalSheet}>
+        <View style={styles.pickerHead}>
+          <Text style={styles.modalTitle}>{title}</Text>
+          <TouchableOpacity onPress={close}>
+            <Text style={styles.pickerCancel}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+        <TextInput
+          style={styles.modalInput}
+          value={text}
+          onChangeText={setText}
+          placeholder={placeholder}
+          placeholderTextColor={T.muted}
+          autoFocus
+          returnKeyType="done"
+          onSubmitEditing={submit}
+          selectionColor={T.primary}
+        />
+        <TouchableOpacity
+          style={[styles.modalPrimaryBtn, busy && styles.modalBtnDisabled]}
+          onPress={submit}
+          disabled={busy}
+        >
+          <Text style={styles.modalPrimaryText}>Add</Text>
+        </TouchableOpacity>
+      </View>
+    </Modal>
   );
 }
 
@@ -604,12 +962,12 @@ function MmaCounters({
         onChange={(n) => onChange({ takedownsDefended: n })}
       />
       <Stepper
-        label="Submissions for"
+        label="Submissions landed"
         value={round.submissionsFor ?? 0}
         onChange={(n) => onChange({ submissionsFor: n })}
       />
       <Stepper
-        label="Submissions against"
+        label="Submissions taken"
         value={round.submissionsAgainst ?? 0}
         onChange={(n) => onChange({ submissionsAgainst: n })}
       />
@@ -620,7 +978,6 @@ function MmaCounters({
 function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
     chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-    addStrip: { flexDirection: 'row', gap: 6, paddingVertical: 2 },
     addChip: { borderStyle: 'dashed', borderColor: T.borderStrong, backgroundColor: T.surface },
     roundCard: {
       gap: 10, padding: 12,
@@ -678,5 +1035,36 @@ function makeStyles(T: ThemeColors) {
       paddingVertical: 11, borderRadius: R.sm, borderWidth: 1, borderStyle: 'dashed', borderColor: T.borderStrong,
     },
     addRoundText: { fontFamily: F.uiSemi, fontSize: 14, color: T.primary },
+    addChipText: { color: T.primary },
+    countChip: {
+      flexDirection: 'row', alignItems: 'center', gap: 3,
+      paddingHorizontal: 11, paddingVertical: 6, borderRadius: R.chip,
+      borderWidth: 1, borderColor: T.primary, backgroundColor: T.primary,
+    },
+    countChipText: { fontFamily: F.uiMed, fontSize: 12, color: T.onPrimary, textTransform: 'capitalize' },
+    countChipClose: { marginLeft: 2, marginRight: -2, opacity: 0.85 },
+    modalSheet: { flex: 1, backgroundColor: T.bg, padding: 20, gap: 14 },
+    modalTitle: { fontFamily: F.uiBold, fontSize: 18, color: T.text },
+    modalInput: {
+      fontFamily: F.ui, fontSize: 16, color: T.text,
+      backgroundColor: T.surface, borderRadius: R.sm, borderWidth: 1, borderColor: T.border,
+      paddingHorizontal: 12, paddingVertical: 12,
+    },
+    pickerHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    pickerCancel: { fontFamily: F.uiSemi, fontSize: 15, color: T.primary },
+    pickerList: { marginTop: 2 },
+    pickerRow: {
+      flexDirection: 'row', alignItems: 'center', gap: 6,
+      paddingVertical: 13, paddingHorizontal: 4,
+      borderBottomWidth: 1, borderBottomColor: T.border,
+    },
+    pickerRowText: { fontFamily: F.uiMed, fontSize: 16, color: T.text },
+    pickerRowCount: { fontFamily: F.mono, fontSize: 14, color: T.textDim },
+    pickerCreateText: { color: T.primary, fontFamily: F.uiSemi },
+    modalPrimaryBtn: {
+      backgroundColor: T.primary, borderRadius: R.card, paddingVertical: 14, alignItems: 'center',
+    },
+    modalPrimaryText: { fontFamily: F.uiBold, fontSize: 16, color: T.onPrimary },
+    modalBtnDisabled: { opacity: 0.55 },
   });
 }
