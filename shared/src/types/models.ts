@@ -594,8 +594,14 @@ export interface MatStatsResponse {
     rounds: number;
     submissionsFor: number;
     submissionsAgainst: number;
+    /** Submissions landed, broken down by type; empty when none were typed. */
+    submissionsForByType: Record<string, number>;
+    /** Submissions conceded, broken down by type; empty when none were typed. */
+    submissionsAgainstByType: Record<string, number>;
     sweeps: number;
     takedowns: number;
+    /** Rounds worked per position (rounds-per-position); empty when none logged. */
+    positions: Record<string, number>;
   };
   striking: {
     rounds: number;

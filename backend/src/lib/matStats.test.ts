@@ -52,10 +52,47 @@ describe('aggregateMatStats', () => {
       rounds: 3,
       submissionsFor: 3,
       submissionsAgainst: 1,
+      submissionsForByType: {},
+      submissionsAgainstByType: {},
       sweeps: 1,
       takedowns: 3,
+      positions: {},
     });
     expect(res.striking.rounds).toBe(0);
+  });
+
+  it('aggregates grappling positions and submission-type breakdowns', () => {
+    const details = grappling([
+      {
+        id: 'r1',
+        submissionsFor: 2,
+        submissionsForTypes: { armbar: 1, triangle: 1 },
+        submissionsAgainst: 1,
+        submissionsAgainstTypes: { rnc: 1 },
+        positions: ['mount', 'closed_guard'],
+      },
+      {
+        id: 'r2',
+        submissionsFor: 1,
+        submissionsForTypes: { armbar: 1 },
+        positions: ['mount'],
+      },
+    ]);
+    const res = aggregateMatStats([row({ details })], new Set(), SINCE, WEEKS);
+
+    expect(res.grappling.submissionsFor).toBe(3);
+    expect(res.grappling.submissionsForByType).toEqual({ armbar: 2, triangle: 1 });
+    expect(res.grappling.submissionsAgainstByType).toEqual({ rnc: 1 });
+    expect(res.grappling.positions).toEqual({ mount: 2, closed_guard: 1 });
+  });
+
+  it('treats legacy grappling rounds without the new fields as empty breakdowns', () => {
+    const details = grappling([{ id: 'r1', submissionsFor: 2 }]);
+    const res = aggregateMatStats([row({ details })], new Set(), SINCE, WEEKS);
+
+    expect(res.grappling.submissionsFor).toBe(2);
+    expect(res.grappling.submissionsForByType).toEqual({});
+    expect(res.grappling.positions).toEqual({});
   });
 
   it('aggregates striking rounds: types and strike counts', () => {

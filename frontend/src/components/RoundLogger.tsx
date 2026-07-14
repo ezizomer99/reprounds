@@ -14,7 +14,12 @@ import type {
   StrikingRound,
   StrikingRoundType,
 } from '@app/shared';
-import { ROUNDS_SCHEMA } from '@app/shared';
+import {
+  ROUNDS_SCHEMA,
+  GRAPPLING_POSITIONS,
+  GRAPPLING_SUBMISSIONS,
+  submissionLabel,
+} from '@app/shared';
 import { PartnerPicker } from './PartnerPicker';
 import { useTheme } from '../theme/ThemeContext';
 import { F, R, ThemeColors } from '../theme/colors';
@@ -311,6 +316,33 @@ function GrapplingCounters({
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+
+  // Tap a submission chip: +1 to its type count AND +1 to the top-line total.
+  // Long-press: -1 to both (clamped at 0), removing the key when it hits 0.
+  // The top-line stepper stays authoritative; sum(types) <= total (the gap is
+  // untyped taps / legacy rounds).
+  const bumpSubmission = (side: 'for' | 'against', type: string, delta: number) => {
+    const totalKey = side === 'for' ? 'submissionsFor' : 'submissionsAgainst';
+    const mapKey = side === 'for' ? 'submissionsForTypes' : 'submissionsAgainstTypes';
+    const map = { ...(round[mapKey] ?? {}) };
+    const cur = map[type] ?? 0;
+    if (delta < 0 && cur === 0) return;
+    const nextTypeCount = Math.max(0, cur + delta);
+    if (nextTypeCount === 0) delete map[type];
+    else map[type] = nextTypeCount;
+    const nextTotal = Math.max(0, (round[totalKey] ?? 0) + (nextTypeCount - cur));
+    onChange({ [mapKey]: map, [totalKey]: nextTotal } as Partial<EditableRound>);
+  };
+
+  const togglePosition = (pos: string) => {
+    const current = round.positions ?? [];
+    onChange({
+      positions: current.includes(pos)
+        ? current.filter((p) => p !== pos)
+        : [...current, pos],
+    });
+  };
+
   return (
     <View style={{ gap: 10 }}>
       <View style={styles.giRow}>
@@ -321,16 +353,94 @@ function GrapplingCounters({
           trackColor={{ true: T.primary }}
         />
       </View>
+
       <Stepper
         label="Submissions for"
         value={round.submissionsFor ?? 0}
         onChange={(n) => onChange({ submissionsFor: n })}
       />
+      <SubmissionTally
+        counts={round.submissionsForTypes ?? {}}
+        onBump={(type, delta) => bumpSubmission('for', type, delta)}
+      />
+
       <Stepper
         label="Submissions against"
         value={round.submissionsAgainst ?? 0}
         onChange={(n) => onChange({ submissionsAgainst: n })}
       />
+      <SubmissionTally
+        counts={round.submissionsAgainstTypes ?? {}}
+        onBump={(type, delta) => bumpSubmission('against', type, delta)}
+      />
+
+      <Stepper
+        label="Sweeps"
+        value={round.sweeps ?? 0}
+        onChange={(n) => onChange({ sweeps: n })}
+      />
+      <Stepper
+        label="Takedowns"
+        value={round.takedowns ?? 0}
+        onChange={(n) => onChange({ takedowns: n })}
+      />
+
+      <View>
+        <Text style={styles.miniLabel}>Positions worked</Text>
+        <View style={styles.chipRow}>
+          {GRAPPLING_POSITIONS.map((p) => {
+            const active = (round.positions ?? []).includes(p.value);
+            return (
+              <TouchableOpacity
+                key={p.value}
+                style={[styles.chip, active && styles.chipActive]}
+                onPress={() => togglePosition(p.value)}
+              >
+                <Text style={[styles.chipText, active && styles.chipTextActive]}>{p.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Compact submission-type tally: a wrap of chips, one per curated submission.
+ * Tap increments that submission (and the caller bumps the top-line total);
+ * long-press decrements. Active chips show a count and the label is postfixed
+ * with the tally so a glance reads "Armbar · 2".
+ */
+function SubmissionTally({
+  counts,
+  onBump,
+}: {
+  counts: Record<string, number>;
+  onBump: (type: string, delta: number) => void;
+}) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  return (
+    <View style={styles.chipRow}>
+      {GRAPPLING_SUBMISSIONS.map((s) => {
+        const n = counts[s.value] ?? 0;
+        const active = n > 0;
+        return (
+          <TouchableOpacity
+            key={s.value}
+            style={[styles.chip, active && styles.chipActive]}
+            onPress={() => onBump(s.value, +1)}
+            onLongPress={() => onBump(s.value, -1)}
+            delayLongPress={250}
+          >
+            <Text style={[styles.chipText, active && styles.chipTextActive]}>
+              {submissionLabel(s.value)}
+              {active ? ` · ${n}` : ''}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 }
