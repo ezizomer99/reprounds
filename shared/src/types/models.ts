@@ -1,4 +1,4 @@
-import type { ActivityType, DisciplineCat, EntryKind, FightMethod, FightResult, FocusStatus, GiType, SessionStatus, SetType } from './enums';
+import type { ActivityType, DisciplineCat, EntryKind, FightMethod, FightResult, FocusStatus, GiType, SessionStatus, SetType, TechniqueKind } from './enums';
 import type { FieldConfig } from './fieldConfig';
 import type { StrikeCounts, StrikingRoundType } from './rounds';
 
@@ -73,6 +73,20 @@ export interface Discipline {
   name: string;
   category: DisciplineCat;
   fieldConfig: FieldConfig;
+  createdAt: string;
+}
+
+// A grappling technique in the user's bank — the martial-arts analog of Exercise.
+// `userId: null` = global seed; a non-null userId = a user's custom. `value` is the
+// machine key stored in the rounds JSONB (positions[] / submissionsFor(Types) keys);
+// `label` is what the chip displays.
+export interface Technique {
+  id: string;
+  userId: string | null;
+  kind: TechniqueKind;
+  category: DisciplineCat;
+  value: string;
+  label: string;
   createdAt: string;
 }
 
@@ -261,6 +275,10 @@ export interface DisciplineListResponse {
   disciplines: Discipline[];
 }
 
+export interface TechniqueListResponse {
+  techniques: Technique[];
+}
+
 export interface PartnerListResponse {
   partners: Partner[];
 }
@@ -370,6 +388,16 @@ export interface UpdateDisciplineRequest {
   name?: string;
   category?: DisciplineCat;
   fieldConfig?: FieldConfig;
+}
+
+export interface CreateTechniqueRequest {
+  kind: TechniqueKind;
+  label: string;
+  category?: DisciplineCat;
+}
+
+export interface UpdateTechniqueRequest {
+  label?: string;
 }
 
 export interface RoutineItemWithDetails extends RoutineItem {

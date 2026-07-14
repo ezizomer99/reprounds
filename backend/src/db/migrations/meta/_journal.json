@@ -162,6 +162,13 @@
       "when": 1783773535821,
       "tag": "0022_known_natasha_romanoff",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1784037620775,
+      "tag": "0023_faithful_chat",
+      "breakpoints": true
     }
   ]
 }
