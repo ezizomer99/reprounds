@@ -317,23 +317,6 @@ function GrapplingCounters({
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
 
-  // Tap a submission chip: +1 to its type count AND +1 to the top-line total.
-  // Long-press: -1 to both (clamped at 0), removing the key when it hits 0.
-  // The top-line stepper stays authoritative; sum(types) <= total (the gap is
-  // untyped taps / legacy rounds).
-  const bumpSubmission = (side: 'for' | 'against', type: string, delta: number) => {
-    const totalKey = side === 'for' ? 'submissionsFor' : 'submissionsAgainst';
-    const mapKey = side === 'for' ? 'submissionsForTypes' : 'submissionsAgainstTypes';
-    const map = { ...(round[mapKey] ?? {}) };
-    const cur = map[type] ?? 0;
-    if (delta < 0 && cur === 0) return;
-    const nextTypeCount = Math.max(0, cur + delta);
-    if (nextTypeCount === 0) delete map[type];
-    else map[type] = nextTypeCount;
-    const nextTotal = Math.max(0, (round[totalKey] ?? 0) + (nextTypeCount - cur));
-    onChange({ [mapKey]: map, [totalKey]: nextTotal } as Partial<EditableRound>);
-  };
-
   const togglePosition = (pos: string) => {
     const current = round.positions ?? [];
     onChange({
@@ -354,25 +337,8 @@ function GrapplingCounters({
         />
       </View>
 
-      <Stepper
-        label="Submissions for"
-        value={round.submissionsFor ?? 0}
-        onChange={(n) => onChange({ submissionsFor: n })}
-      />
-      <SubmissionTally
-        counts={round.submissionsForTypes ?? {}}
-        onBump={(type, delta) => bumpSubmission('for', type, delta)}
-      />
-
-      <Stepper
-        label="Submissions against"
-        value={round.submissionsAgainst ?? 0}
-        onChange={(n) => onChange({ submissionsAgainst: n })}
-      />
-      <SubmissionTally
-        counts={round.submissionsAgainstTypes ?? {}}
-        onBump={(type, delta) => bumpSubmission('against', type, delta)}
-      />
+      <SubmissionSection side="for" round={round} onChange={onChange} />
+      <SubmissionSection side="against" round={round} onChange={onChange} />
 
       <Stepper
         label="Sweeps"
@@ -407,40 +373,73 @@ function GrapplingCounters({
 }
 
 /**
- * Compact submission-type tally: a wrap of chips, one per curated submission.
- * Tap increments that submission (and the caller bumps the top-line total);
- * long-press decrements. Active chips show a count and the label is postfixed
- * with the tally so a glance reads "Armbar · 2".
+ * Submission tally for one side (for/against). Shows only the submissions that
+ * have been tallied as stepper rows (label + − count +), with the running total
+ * derived from those rows. A palette of the not-yet-used submissions sits below;
+ * tapping one adds it at 1, moving it up into the list. Decrementing a row to 0
+ * removes it, returning that type to the palette. The stored `submissionsFor` /
+ * `submissionsAgainst` total is always kept equal to the sum of the type map.
  */
-function SubmissionTally({
-  counts,
-  onBump,
+function SubmissionSection({
+  side,
+  round,
+  onChange,
 }: {
-  counts: Record<string, number>;
-  onBump: (type: string, delta: number) => void;
+  side: 'for' | 'against';
+  round: EditableRound;
+  onChange: (patch: Partial<EditableRound>) => void;
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+
+  const totalKey = side === 'for' ? 'submissionsFor' : 'submissionsAgainst';
+  const mapKey = side === 'for' ? 'submissionsForTypes' : 'submissionsAgainstTypes';
+  const counts = round[mapKey] ?? {};
+
+  const setCount = (type: string, n: number) => {
+    const map = { ...counts };
+    if (n <= 0) delete map[type];
+    else map[type] = n;
+    const total = Object.values(map).reduce((sum, v) => sum + v, 0);
+    onChange({ [mapKey]: map, [totalKey]: total } as Partial<EditableRound>);
+  };
+
+  const selected = GRAPPLING_SUBMISSIONS.filter((s) => (counts[s.value] ?? 0) > 0);
+  const available = GRAPPLING_SUBMISSIONS.filter((s) => (counts[s.value] ?? 0) === 0);
+  const total = Object.values(counts).reduce((sum, v) => sum + v, 0);
+
   return (
-    <View style={styles.chipRow}>
-      {GRAPPLING_SUBMISSIONS.map((s) => {
-        const n = counts[s.value] ?? 0;
-        const active = n > 0;
-        return (
-          <TouchableOpacity
-            key={s.value}
-            style={[styles.chip, active && styles.chipActive]}
-            onPress={() => onBump(s.value, +1)}
-            onLongPress={() => onBump(s.value, -1)}
-            delayLongPress={250}
-          >
-            <Text style={[styles.chipText, active && styles.chipTextActive]}>
-              {submissionLabel(s.value)}
-              {active ? ` · ${n}` : ''}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
+    <View style={{ gap: 8 }}>
+      <View style={styles.sectionHead}>
+        <Text style={styles.miniLabel}>
+          {side === 'for' ? 'Submissions for' : 'Submissions against'}
+        </Text>
+        <Text style={styles.totalBadge}>{total}</Text>
+      </View>
+
+      {selected.map((s) => (
+        <Stepper
+          key={s.value}
+          label={submissionLabel(s.value)}
+          value={counts[s.value] ?? 0}
+          onChange={(n) => setCount(s.value, n)}
+        />
+      ))}
+
+      {available.length > 0 && (
+        <View style={styles.chipRow}>
+          {available.map((s) => (
+            <TouchableOpacity
+              key={s.value}
+              style={styles.addChip}
+              onPress={() => setCount(s.value, 1)}
+            >
+              <Ionicons name="add" size={13} color={T.textDim} />
+              <Text style={styles.chipText}>{submissionLabel(s.value)}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -591,6 +590,19 @@ function makeStyles(T: ThemeColors) {
     chipActive: { backgroundColor: T.primary, borderColor: T.primary },
     chipText: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, textTransform: 'capitalize' },
     chipTextActive: { color: T.onPrimary },
+    addChip: {
+      flexDirection: 'row', alignItems: 'center', gap: 3,
+      paddingHorizontal: 10, paddingVertical: 6,
+      borderRadius: R.chip, borderWidth: 1, borderStyle: 'dashed',
+      borderColor: T.borderStrong, backgroundColor: T.surface,
+    },
+    sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    totalBadge: {
+      fontFamily: F.monoBold, fontSize: 14, color: T.text,
+      minWidth: 26, textAlign: 'center',
+      paddingHorizontal: 8, paddingVertical: 2,
+      borderRadius: R.chip, backgroundColor: T.surface,
+    },
     roundCard: {
       gap: 10, padding: 12,
       backgroundColor: T.surface2, borderRadius: R.card, borderWidth: 1, borderColor: T.border,
