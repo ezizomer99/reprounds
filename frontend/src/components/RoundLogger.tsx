@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTechniqueTags } from '../hooks/useNotes';
 import type {
@@ -21,6 +21,8 @@ import {
   submissionLabel,
 } from '@app/shared';
 import { PartnerPicker } from './PartnerPicker';
+import { Chip } from './ui/Chip';
+import { Stepper } from './ui/Stepper';
 import { useTheme } from '../theme/ThemeContext';
 import { F, R, ThemeColors } from '../theme/colors';
 import { withAlpha } from '../lib/color';
@@ -84,18 +86,28 @@ export function emptyRoundsSession(category: DisciplineCat): RoundsSessionDetail
  * core counters branched on `category`, and a technique-journal field. Writes
  * the whole RoundsSessionDetails back through onChange (the parent persists it
  * into session_entries.details).
+ *
+ * When `sessionActive` and `elapsedSeconds` are supplied, each round's Minutes
+ * field grows a "stamp from timer" button that fills the round's duration from
+ * the session clock (minus the rounds already logged).
  */
 export function RoundLogger({
   category,
   value,
   onChange,
   strikeWeapons = BOXING_WEAPONS,
+  elapsedSeconds,
+  sessionActive = false,
 }: {
   category: DisciplineCat;
   value: RoundsSessionDetails | null;
   onChange: (next: RoundsSessionDetails) => void;
   /** Which striking weapons to show as counters (boxing vs Muay Thai). */
   strikeWeapons?: StrikeWeapon[];
+  /** Live session stopwatch (seconds); enables the Minutes stamp button. */
+  elapsedSeconds?: number;
+  /** Whether the session is still in progress (gates the stamp button). */
+  sessionActive?: boolean;
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
@@ -119,22 +131,34 @@ export function RoundLogger({
   const removeRound = (id: string) =>
     emit({ ...data, rounds: rounds.filter((r) => r.id !== id) });
 
+  // Fill a round's duration from the session clock: elapsed minus the time
+  // already accounted for by the other rounds, so back-to-back stamps record
+  // each round's own slice rather than the whole session.
+  const stampDuration = (round: EditableRound) => {
+    if (elapsedSeconds == null) return;
+    const otherSum = rounds.reduce(
+      (sum, r) => (r.id === round.id ? sum : sum + (r.durationSeconds ?? 0)),
+      0,
+    );
+    updateRound(round.id, { durationSeconds: Math.max(0, elapsedSeconds - otherSum) });
+  };
+
+  const canStamp = sessionActive && elapsedSeconds != null;
+
   return (
     <View style={{ gap: 14 }}>
       {/* Class type */}
       <View style={styles.chipRow}>
-        {CLASS_TYPES.map((ct) => {
-          const active = data.classType === ct.value;
-          return (
-            <TouchableOpacity
-              key={ct.value}
-              style={[styles.chip, active && styles.chipActive]}
-              onPress={() => patchSession({ classType: active ? null : ct.value })}
-            >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>{ct.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
+        {CLASS_TYPES.map((ct) => (
+          <Chip
+            key={ct.value}
+            label={ct.label}
+            selected={data.classType === ct.value}
+            onPress={() =>
+              patchSession({ classType: data.classType === ct.value ? null : ct.value })
+            }
+          />
+        ))}
       </View>
 
       {/* Rounds */}
@@ -142,7 +166,12 @@ export function RoundLogger({
         <View key={round.id} style={styles.roundCard}>
           <View style={styles.roundHead}>
             <Text style={styles.roundTitle}>Round {i + 1}</Text>
-            <TouchableOpacity hitSlop={8} onPress={() => removeRound(round.id)}>
+            <TouchableOpacity
+              hitSlop={8}
+              onPress={() => removeRound(round.id)}
+              accessibilityRole="button"
+              accessibilityLabel={`Delete round ${i + 1}`}
+            >
               <Ionicons name="trash-outline" size={16} color={T.muted} />
             </TouchableOpacity>
           </View>
@@ -155,36 +184,44 @@ export function RoundLogger({
           <View style={styles.inlineRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.miniLabel}>Minutes</Text>
-              <TextInput
-                style={styles.numInput}
-                value={
-                  round.durationSeconds != null ? String(Math.round(round.durationSeconds / 60)) : ''
-                }
-                onChangeText={(t) =>
-                  updateRound(round.id, {
-                    durationSeconds: t.trim() === '' ? null : Math.round(Number(t) * 60),
-                  })
-                }
-                keyboardType="number-pad"
-                placeholder="0"
-                placeholderTextColor={T.muted}
-              />
+              <View style={styles.minuteRow}>
+                <TextInput
+                  style={[styles.numInput, { flex: 1 }]}
+                  value={
+                    round.durationSeconds != null ? String(Math.round(round.durationSeconds / 60)) : ''
+                  }
+                  onChangeText={(t) =>
+                    updateRound(round.id, {
+                      durationSeconds: t.trim() === '' ? null : Math.round(Number(t) * 60),
+                    })
+                  }
+                  keyboardType="number-pad"
+                  placeholder="0"
+                  placeholderTextColor={T.muted}
+                />
+                {canStamp && (
+                  <TouchableOpacity
+                    style={styles.stampBtn}
+                    onPress={() => stampDuration(round)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Fill minutes from session timer"
+                  >
+                    <Ionicons name="stopwatch-outline" size={18} color={T.primary} />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
             <View style={{ flex: 2 }}>
               <Text style={styles.miniLabel}>Intensity</Text>
               <View style={styles.chipRow}>
-                {INTENSITIES.map((lvl) => {
-                  const active = round.intensity === lvl;
-                  return (
-                    <TouchableOpacity
-                      key={lvl}
-                      style={[styles.chip, active && styles.chipActive]}
-                      onPress={() => updateRound(round.id, { intensity: lvl })}
-                    >
-                      <Text style={[styles.chipText, active && styles.chipTextActive]}>{lvl}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                {INTENSITIES.map((lvl) => (
+                  <Chip
+                    key={lvl}
+                    label={lvl}
+                    selected={round.intensity === lvl}
+                    onPress={() => updateRound(round.id, { intensity: lvl })}
+                  />
+                ))}
               </View>
             </View>
           </View>
@@ -216,7 +253,12 @@ export function RoundLogger({
         </View>
       ))}
 
-      <TouchableOpacity style={styles.addRound} onPress={addRound}>
+      <TouchableOpacity
+        style={styles.addRound}
+        onPress={addRound}
+        accessibilityRole="button"
+        accessibilityLabel="Add round"
+      >
         <Ionicons name="add" size={16} color={T.primary} />
         <Text style={styles.addRoundText}>Add round</Text>
       </TouchableOpacity>
@@ -276,7 +318,13 @@ function TagEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string
       <Text style={styles.miniLabel}>Technique tags</Text>
       <View style={styles.tagWrap}>
         {tags.map((tag) => (
-          <TouchableOpacity key={tag} style={styles.tagChip} onPress={() => removeTag(tag)}>
+          <TouchableOpacity
+            key={tag}
+            style={styles.tagChip}
+            onPress={() => removeTag(tag)}
+            accessibilityRole="button"
+            accessibilityLabel={`Remove tag ${tag}`}
+          >
             <Text style={styles.tagChipText}>{tag}</Text>
             <Ionicons name="close" size={13} color={T.primary} />
           </TouchableOpacity>
@@ -296,7 +344,13 @@ function TagEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string
       {suggestions.length > 0 && (
         <View style={styles.tagSuggestRow}>
           {suggestions.map((s) => (
-            <TouchableOpacity key={s} style={styles.tagSuggest} onPress={() => addTag(s)}>
+            <TouchableOpacity
+              key={s}
+              style={styles.tagSuggest}
+              onPress={() => addTag(s)}
+              accessibilityRole="button"
+              accessibilityLabel={`Add tag ${s}`}
+            >
               <Ionicons name="add" size={12} color={T.textDim} />
               <Text style={styles.tagSuggestText}>{s}</Text>
             </TouchableOpacity>
@@ -334,17 +388,14 @@ function GrapplingCounters({
           value={round.gi === 'gi'}
           onValueChange={(v) => onChange({ gi: v ? 'gi' : 'no_gi' })}
           trackColor={{ true: T.primary }}
+          accessibilityLabel="Gi"
         />
       </View>
 
       <SubmissionSection side="for" round={round} onChange={onChange} />
       <SubmissionSection side="against" round={round} onChange={onChange} />
 
-      <Stepper
-        label="Sweeps"
-        value={round.sweeps ?? 0}
-        onChange={(n) => onChange({ sweeps: n })}
-      />
+      <Stepper label="Sweeps" value={round.sweeps ?? 0} onChange={(n) => onChange({ sweeps: n })} />
       <Stepper
         label="Takedowns"
         value={round.takedowns ?? 0}
@@ -354,18 +405,14 @@ function GrapplingCounters({
       <View>
         <Text style={styles.miniLabel}>Positions worked</Text>
         <View style={styles.chipRow}>
-          {GRAPPLING_POSITIONS.map((p) => {
-            const active = (round.positions ?? []).includes(p.value);
-            return (
-              <TouchableOpacity
-                key={p.value}
-                style={[styles.chip, active && styles.chipActive]}
-                onPress={() => togglePosition(p.value)}
-              >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{p.label}</Text>
-              </TouchableOpacity>
-            );
-          })}
+          {GRAPPLING_POSITIONS.map((p) => (
+            <Chip
+              key={p.value}
+              label={p.label}
+              selected={(round.positions ?? []).includes(p.value)}
+              onPress={() => togglePosition(p.value)}
+            />
+          ))}
         </View>
       </View>
     </View>
@@ -375,10 +422,13 @@ function GrapplingCounters({
 /**
  * Submission tally for one side (for/against). Shows only the submissions that
  * have been tallied as stepper rows (label + − count +), with the running total
- * derived from those rows. A palette of the not-yet-used submissions sits below;
- * tapping one adds it at 1, moving it up into the list. Decrementing a row to 0
- * removes it, returning that type to the palette. The stored `submissionsFor` /
- * `submissionsAgainst` total is always kept equal to the sum of the type map.
+ * derived from those rows. A horizontally-scrolling palette of the not-yet-used
+ * submissions sits below; tapping one adds it at 1, moving it up into the list.
+ * Decrementing a row to 0 removes it, returning that type to the palette.
+ *
+ * The stored `submissionsFor` / `submissionsAgainst` total is kept equal to the
+ * sum of the type map. Legacy rounds that carry a bare total larger than the
+ * typed sum have the remainder folded into `other`, so nothing looks lost.
  */
 function SubmissionSection({
   side,
@@ -394,19 +444,29 @@ function SubmissionSection({
 
   const totalKey = side === 'for' ? 'submissionsFor' : 'submissionsAgainst';
   const mapKey = side === 'for' ? 'submissionsForTypes' : 'submissionsAgainstTypes';
-  const counts = round[mapKey] ?? {};
+  const otherKey = side === 'for' ? 'submissionsForOther' : 'submissionsAgainstOther';
+
+  const raw = round[mapKey] ?? {};
+  const storedTotal = round[totalKey] ?? 0;
+  const rawSum = Object.values(raw).reduce((a, b) => a + b, 0);
+  // Fold any legacy untyped remainder into `other` so old totals stay visible.
+  const counts: Record<string, number> =
+    storedTotal > rawSum ? { ...raw, other: (raw.other ?? 0) + (storedTotal - rawSum) } : raw;
 
   const setCount = (type: string, n: number) => {
     const map = { ...counts };
     if (n <= 0) delete map[type];
     else map[type] = n;
-    const total = Object.values(map).reduce((sum, v) => sum + v, 0);
-    onChange({ [mapKey]: map, [totalKey]: total } as Partial<EditableRound>);
+    const total = Object.values(map).reduce((a, b) => a + b, 0);
+    const patch: Record<string, unknown> = { [mapKey]: map, [totalKey]: total };
+    // Drop the free-text note when the 'other' count clears out.
+    if (type === 'other' && n <= 0) patch[otherKey] = null;
+    onChange(patch as Partial<EditableRound>);
   };
 
   const selected = GRAPPLING_SUBMISSIONS.filter((s) => (counts[s.value] ?? 0) > 0);
   const available = GRAPPLING_SUBMISSIONS.filter((s) => (counts[s.value] ?? 0) === 0);
-  const total = Object.values(counts).reduce((sum, v) => sum + v, 0);
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
 
   return (
     <View style={{ gap: 8 }}>
@@ -426,19 +486,34 @@ function SubmissionSection({
         />
       ))}
 
+      {(counts.other ?? 0) > 0 && (
+        <TextInput
+          style={styles.otherNote}
+          value={round[otherKey] ?? ''}
+          onChangeText={(t) => onChange({ [otherKey]: t } as Partial<EditableRound>)}
+          placeholder="What was the other submission?"
+          placeholderTextColor={T.muted}
+        />
+      )}
+
       {available.length > 0 && (
-        <View style={styles.chipRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.addStrip}
+        >
           {available.map((s) => (
-            <TouchableOpacity
+            <Chip
               key={s.value}
-              style={styles.addChip}
+              label={submissionLabel(s.value)}
+              leftIcon="add"
               onPress={() => setCount(s.value, 1)}
-            >
-              <Ionicons name="add" size={13} color={T.textDim} />
-              <Text style={styles.chipText}>{submissionLabel(s.value)}</Text>
-            </TouchableOpacity>
+              style={styles.addChip}
+              accessibilityLabel={`Add ${submissionLabel(s.value)}`}
+            />
           ))}
-        </View>
+        </ScrollView>
       )}
     </View>
   );
@@ -464,18 +539,14 @@ function StrikingCounters({
       <View>
         <Text style={styles.miniLabel}>Round type</Text>
         <View style={styles.chipRow}>
-          {STRIKING_ROUND_TYPES.map((rt) => {
-            const active = round.roundType === rt.value;
-            return (
-              <TouchableOpacity
-                key={rt.value}
-                style={[styles.chip, active && styles.chipActive]}
-                onPress={() => onChange({ roundType: active ? null : rt.value })}
-              >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{rt.label}</Text>
-              </TouchableOpacity>
-            );
-          })}
+          {STRIKING_ROUND_TYPES.map((rt) => (
+            <Chip
+              key={rt.value}
+              label={rt.label}
+              selected={round.roundType === rt.value}
+              onPress={() => onChange({ roundType: round.roundType === rt.value ? null : rt.value })}
+            />
+          ))}
         </View>
       </View>
 
@@ -512,18 +583,14 @@ function MmaCounters({
       <View>
         <Text style={styles.miniLabel}>Phases</Text>
         <View style={styles.chipRow}>
-          {MMA_PHASES.map((ph) => {
-            const active = phases.includes(ph.value);
-            return (
-              <TouchableOpacity
-                key={ph.value}
-                style={[styles.chip, active && styles.chipActive]}
-                onPress={() => togglePhase(ph.value)}
-              >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{ph.label}</Text>
-              </TouchableOpacity>
-            );
-          })}
+          {MMA_PHASES.map((ph) => (
+            <Chip
+              key={ph.value}
+              label={ph.label}
+              selected={phases.includes(ph.value)}
+              onPress={() => togglePhase(ph.value)}
+            />
+          ))}
         </View>
       </View>
       <Stepper
@@ -550,59 +617,11 @@ function MmaCounters({
   );
 }
 
-function Stepper({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (n: number) => void;
-}) {
-  const { T } = useTheme();
-  const styles = useMemo(() => makeStyles(T), [T]);
-  return (
-    <View style={styles.stepperRow}>
-      <Text style={styles.stepperLabel}>{label}</Text>
-      <View style={styles.stepper}>
-        <TouchableOpacity
-          style={styles.stepBtn}
-          onPress={() => onChange(Math.max(0, value - 1))}
-        >
-          <Ionicons name="remove" size={18} color={T.text} />
-        </TouchableOpacity>
-        <Text style={styles.stepValue}>{value}</Text>
-        <TouchableOpacity style={styles.stepBtn} onPress={() => onChange(value + 1)}>
-          <Ionicons name="add" size={18} color={T.text} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
 function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
     chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-    chip: {
-      paddingHorizontal: 11, paddingVertical: 6,
-      borderRadius: R.chip, borderWidth: 1, borderColor: T.border, backgroundColor: T.surface2,
-    },
-    chipActive: { backgroundColor: T.primary, borderColor: T.primary },
-    chipText: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, textTransform: 'capitalize' },
-    chipTextActive: { color: T.onPrimary },
-    addChip: {
-      flexDirection: 'row', alignItems: 'center', gap: 3,
-      paddingHorizontal: 10, paddingVertical: 6,
-      borderRadius: R.chip, borderWidth: 1, borderStyle: 'dashed',
-      borderColor: T.borderStrong, backgroundColor: T.surface,
-    },
-    sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    totalBadge: {
-      fontFamily: F.monoBold, fontSize: 14, color: T.text,
-      minWidth: 26, textAlign: 'center',
-      paddingHorizontal: 8, paddingVertical: 2,
-      borderRadius: R.chip, backgroundColor: T.surface,
-    },
+    addStrip: { flexDirection: 'row', gap: 6, paddingVertical: 2 },
+    addChip: { borderStyle: 'dashed', borderColor: T.borderStrong, backgroundColor: T.surface },
     roundCard: {
       gap: 10, padding: 12,
       backgroundColor: T.surface2, borderRadius: R.card, borderWidth: 1, borderColor: T.border,
@@ -610,6 +629,11 @@ function makeStyles(T: ThemeColors) {
     roundHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     roundTitle: { fontFamily: F.uiSemi, fontSize: 14, color: T.text },
     inlineRow: { flexDirection: 'row', gap: 12 },
+    minuteRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    stampBtn: {
+      width: 40, height: 40, alignItems: 'center', justifyContent: 'center',
+      borderRadius: R.sm, borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,
+    },
     miniLabel: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim, marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.4 },
     numInput: {
       fontFamily: F.mono, fontSize: 15, color: T.text,
@@ -617,6 +641,11 @@ function makeStyles(T: ThemeColors) {
       paddingHorizontal: 12, paddingVertical: 9,
     },
     journal: { minHeight: 64, fontFamily: F.ui },
+    otherNote: {
+      fontFamily: F.ui, fontSize: 14, color: T.text,
+      backgroundColor: T.surface, borderRadius: R.sm, borderWidth: 1, borderColor: T.border,
+      paddingHorizontal: 12, paddingVertical: 8,
+    },
     tagWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
     tagChip: {
       flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -637,14 +666,13 @@ function makeStyles(T: ThemeColors) {
       paddingHorizontal: 12, paddingVertical: 9, minHeight: 40,
     },
     giRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    stepperRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    stepperLabel: { fontFamily: F.uiMed, fontSize: 14, color: T.text, flex: 1 },
-    stepper: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-    stepBtn: {
-      width: 34, height: 34, alignItems: 'center', justifyContent: 'center',
-      borderRadius: R.sm, borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,
+    sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    totalBadge: {
+      fontFamily: F.monoBold, fontSize: 14, color: T.text,
+      minWidth: 26, textAlign: 'center',
+      paddingHorizontal: 8, paddingVertical: 2,
+      borderRadius: R.chip, backgroundColor: T.surface,
     },
-    stepValue: { fontFamily: F.monoBold, fontSize: 16, color: T.text, minWidth: 22, textAlign: 'center' },
     addRound: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
       paddingVertical: 11, borderRadius: R.sm, borderWidth: 1, borderStyle: 'dashed', borderColor: T.borderStrong,

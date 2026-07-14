@@ -1090,10 +1090,12 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseTyp
 
 // ─── Martial arts entry card ──────────────────────────────────────────────────
 
-function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
+function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, sessionActive }: {
   entry: SessionEntryWithSets;
   sessionId: string;
   disciplines: Discipline[];
+  elapsedSeconds?: number;
+  sessionActive?: boolean;
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
@@ -1153,6 +1155,8 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines }: {
           value={isRoundsSession(details) ? details : null}
           onChange={(next) => setDetails(next as unknown as Record<string, unknown>)}
           strikeWeapons={strikeWeapons}
+          elapsedSeconds={elapsedSeconds}
+          sessionActive={sessionActive}
         />
       ) : discipline.fieldConfig.map((field) => {
         if (field.type === 'enum') {
@@ -1951,6 +1955,8 @@ export default function SessionScreen() {
                     entry={entry}
                     sessionId={session.id}
                     disciplines={disciplines ?? []}
+                    elapsedSeconds={elapsed}
+                    sessionActive={isActive}
                   />
                 )}
               </View>
