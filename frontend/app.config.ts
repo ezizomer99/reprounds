@@ -17,7 +17,7 @@ const config: ExpoConfig = {
   android: {
     adaptiveIcon: {
       foregroundImage: './assets/images/icon-fg.png',
-      backgroundColor: '#D8432A',
+      backgroundColor: '#C8F031',
     },
     package: 'com.reprounds.app',
     // EAS builds ignore this (appVersionSource: remote); self-hosted Gradle

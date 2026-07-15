@@ -1,4 +1,5 @@
 import Svg, { Defs, Mask, Polygon, Rect } from 'react-native-svg';
+import { BRAND } from '../theme/colors';
 
 export type OctaVariant = 'solid' | 'line' | 'two-tone';
 
@@ -8,8 +9,8 @@ interface OctaMarkProps {
   color?: string;
 }
 
-const INK = '#17140F';
-const VERMILION = '#D8432A';
+const INK = BRAND.ink;
+const VOLT = BRAND.volt;
 
 const OCTA_POINTS = '60,6 140,6 194,60 194,140 140,194 60,194 6,140 6,60';
 
@@ -59,9 +60,9 @@ export function OctaMark({ size = 48, variant = 'solid', color }: OctaMarkProps)
         strokeWidth="16"
         strokeLinejoin="round"
       />
-      <Rect x="18" y="90" width="164" height="20" rx="10" fill={VERMILION} />
-      <Rect x="44" y="62" width="18" height="76" rx="6" fill={VERMILION} />
-      <Rect x="138" y="62" width="18" height="76" rx="6" fill={VERMILION} />
+      <Rect x="18" y="90" width="164" height="20" rx="10" fill={VOLT} />
+      <Rect x="44" y="62" width="18" height="76" rx="6" fill={VOLT} />
+      <Rect x="138" y="62" width="18" height="76" rx="6" fill={VOLT} />
     </Svg>
   );
 }
