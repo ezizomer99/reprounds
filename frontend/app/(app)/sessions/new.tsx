@@ -7,6 +7,7 @@ import { useRoutines } from '../../../src/hooks/useRoutines';
 import { useCreateSession } from '../../../src/hooks/useSession';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
+import { CutCornerView } from '../../../src/components/CutCornerView';
 import type { EntryKind, RoutineWithItems } from '@app/shared';
 
 export default function NewSessionScreen() {
@@ -96,12 +97,14 @@ export default function NewSessionScreen() {
           keyExtractor={(item) => item.id}
           ListHeaderComponent={
             <View style={styles.body}>
-              <TouchableOpacity style={styles.heroCta} onPress={handleEmptySession} activeOpacity={0.8}>
-                <Ionicons name="add" size={20} color={T.onPrimary} />
-                <View>
-                  <Text style={styles.heroCtaTitle}>Start empty session</Text>
-                  <Text style={styles.heroCtaSub}>Log without a routine</Text>
-                </View>
+              <TouchableOpacity onPress={handleEmptySession} activeOpacity={0.8}>
+                <CutCornerView fill={T.primary} style={styles.heroCta}>
+                  <Ionicons name="add" size={20} color={T.onPrimary} />
+                  <View>
+                    <Text style={styles.heroCtaTitle}>Start empty session</Text>
+                    <Text style={styles.heroCtaSub}>Log without a routine</Text>
+                  </View>
+                </CutCornerView>
               </TouchableOpacity>
 
               <Text style={styles.eyebrow}>From routine</Text>
@@ -175,11 +178,10 @@ function makeStyles(T: ThemeColors) {
     headerTitle: { flex: 1, fontFamily: F.uiSemi, fontSize: 19, color: T.text, letterSpacing: -0.2, textAlign: 'center' },
     body: { padding: D.pad, gap: D.stack },
     heroCta: {
-      flexDirection: 'row', alignItems: 'center', gap: 14,
-      backgroundColor: T.primary, borderRadius: R.card, padding: 18,
+      flexDirection: 'row', alignItems: 'center', gap: 14, padding: 18,
     },
     heroCtaTitle: { fontFamily: F.uiBold, fontSize: 16, color: T.onPrimary },
-    heroCtaSub: { fontFamily: F.uiMed, fontSize: 12, color: 'rgba(13,15,20,0.65)', marginTop: 1 },
+    heroCtaSub: { fontFamily: F.uiMed, fontSize: 12, color: 'rgba(10,11,13,0.65)', marginTop: 1 },
     eyebrow: { fontFamily: F.uiBold, fontSize: 11, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1.2 },
     routineRow: {
       flexDirection: 'row', alignItems: 'center', gap: 14,

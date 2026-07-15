@@ -198,7 +198,7 @@ function makeStyles(T: ThemeColors) {
     filterChip: {
       paddingHorizontal: 14,
       paddingVertical: 7,
-      borderRadius: 20,
+      borderRadius: R.sm,
       borderWidth: 1,
       borderColor: T.border,
       backgroundColor: T.surface,

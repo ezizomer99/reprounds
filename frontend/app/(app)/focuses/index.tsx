@@ -26,6 +26,7 @@ import {
 import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
+import { CutCornerView } from '../../../src/components/CutCornerView';
 import { withAlpha } from '../../../src/lib/color';
 
 const FREE_FOCUS_LIMIT = 3;
@@ -399,12 +400,14 @@ export default function FocusesScreen() {
           ListHeaderComponent={
             statusFilter === 'active' ? (
               <View style={styles.heroWrap}>
-                <TouchableOpacity style={styles.heroCta} onPress={handleAddPress} activeOpacity={0.85}>
-                  <Ionicons name="add" size={20} color={T.onPrimary} />
-                  <View>
-                    <Text style={styles.heroCtaTitle}>New focus</Text>
-                    <Text style={styles.heroCtaSub}>What you want to work on</Text>
-                  </View>
+                <TouchableOpacity onPress={handleAddPress} activeOpacity={0.85}>
+                  <CutCornerView fill={T.primary} style={styles.heroCta}>
+                    <Ionicons name="add" size={20} color={T.onPrimary} />
+                    <View>
+                      <Text style={styles.heroCtaTitle}>New focus</Text>
+                      <Text style={styles.heroCtaSub}>What you want to work on</Text>
+                    </View>
+                  </CutCornerView>
                 </TouchableOpacity>
               </View>
             ) : null
@@ -478,11 +481,10 @@ function makeStyles(T: ThemeColors) {
 
     heroWrap: { paddingHorizontal: D.pad, paddingTop: 4, paddingBottom: 8 },
     heroCta: {
-      flexDirection: 'row', alignItems: 'center', gap: 14,
-      backgroundColor: T.primary, borderRadius: R.card, padding: 18,
+      flexDirection: 'row', alignItems: 'center', gap: 14, padding: 18,
     },
     heroCtaTitle: { fontFamily: F.uiBold, fontSize: 16, color: T.onPrimary },
-    heroCtaSub: { fontFamily: F.uiMed, fontSize: 12, color: 'rgba(13,15,20,0.65)', marginTop: 1 },
+    heroCtaSub: { fontFamily: F.uiMed, fontSize: 12, color: 'rgba(10,11,13,0.65)', marginTop: 1 },
 
     row: {
       flexDirection: 'row',

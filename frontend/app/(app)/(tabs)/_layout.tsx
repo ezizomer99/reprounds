@@ -7,6 +7,7 @@ import { F, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { useActiveSession } from '../../../src/hooks/useSession';
 import { BrandedHeader } from '../../../src/components/BrandedHeader';
+import { CutCornerView } from '../../../src/components/CutCornerView';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -110,14 +111,16 @@ export default function TabLayout() {
 
       {activeSession && (
         <TouchableOpacity
-          style={styles.resumeBtn}
+          style={styles.resumeBtnWrap}
           onPress={() => router.push({ pathname: '/sessions/[id]', params: { id: activeSession.id } } as never)}
           activeOpacity={0.85}
           accessibilityRole="button"
           accessibilityLabel="Resume active session"
         >
-          <Ionicons name="chevron-up" size={18} color={T.onPrimary} />
-          <Text style={styles.resumeBtnText}>Resume Session</Text>
+          <CutCornerView fill={T.primary} style={styles.resumeBtn}>
+            <Ionicons name="chevron-up" size={18} color={T.onPrimary} />
+            <Text style={styles.resumeBtnText}>Resume Session</Text>
+          </CutCornerView>
         </TouchableOpacity>
       )}
     </View>
@@ -126,22 +129,17 @@ export default function TabLayout() {
 
 function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
-    resumeBtn: {
+    resumeBtnWrap: {
       position: 'absolute',
       bottom: 76,
       alignSelf: 'center',
+    },
+    resumeBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
-      backgroundColor: T.primary,
       paddingVertical: 14,
       paddingHorizontal: 32,
-      borderRadius: 32,
-      elevation: 6,
-      shadowColor: '#000',
-      shadowOpacity: 0.3,
-      shadowRadius: 8,
-      shadowOffset: { width: 0, height: 3 },
     },
     resumeBtnText: {
       fontFamily: F.uiBold,

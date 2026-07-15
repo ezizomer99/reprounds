@@ -56,7 +56,10 @@ export const lightTheme: ThemeColors = {
 // Kept for backward-compat during migration — will be removed once all screens use useTheme()
 export const T = darkTheme;
 
-export const R = { card: 12, sm: 8, chip: 999 };
+// Shape language: sharp. Nothing above 2px except true circles (avatars, day
+// dots) — rounded-everything reads as template. Hero actions get 45° cut
+// corners via CutCornerView instead of radius.
+export const R = { card: 2, sm: 2, chip: 2 };
 
 export const D = { rowH: 60, pad: 18, cardPad: 17, gap: 12, stack: 14 };
 

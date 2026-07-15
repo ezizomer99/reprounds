@@ -472,7 +472,7 @@ function makeStyles(T: ThemeColors) {
     intensityBar: {
       flexDirection: 'row',
       height: 14,
-      borderRadius: 7,
+      borderRadius: 2,
       overflow: 'hidden',
       backgroundColor: T.surface2,
     },
