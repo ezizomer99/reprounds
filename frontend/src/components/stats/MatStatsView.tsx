@@ -9,7 +9,7 @@ import { useMatStats } from '../../hooks/useStats';
 import { useProGate } from '../../hooks/useProGate';
 import { weeksAgoMonday } from '../../lib/statsHelpers';
 import { Skeleton } from '../Skeleton';
-import { D, F, R, ThemeColors } from '../../theme/colors';
+import { F, R, ThemeColors } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeContext';
 import { withAlpha } from '../../lib/color';
 

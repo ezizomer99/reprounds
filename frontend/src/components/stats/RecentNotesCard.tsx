@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useRecentNotes } from '../../hooks/useNotes';
 import { Skeleton } from '../Skeleton';
-import { D, F, R, ThemeColors } from '../../theme/colors';
+import { F, R, ThemeColors } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeContext';
 import { withAlpha } from '../../lib/color';
 
