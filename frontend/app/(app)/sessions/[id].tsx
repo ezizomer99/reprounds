@@ -53,6 +53,7 @@ import {
 import { useRoutines } from '../../../src/hooks/useRoutines';
 import { useFocuses, useSetSessionFocuses } from '../../../src/hooks/useFocuses';
 import { RestTimer } from '../../../src/components/RestTimer';
+import { CutCornerView } from '../../../src/components/CutCornerView';
 import { Skeleton } from '../../../src/components/Skeleton';
 import { RoundLogger, BOXING_WEAPONS, MUAY_THAI_WEAPONS } from '../../../src/components/RoundLogger';
 import { PlateCalculator } from '../../../src/components/PlateCalculator';
@@ -1997,10 +1998,16 @@ export default function SessionScreen() {
 
       {/* PR banner */}
       {prBanner !== null && (
-        <View style={[styles.prBanner, { bottom: insets.bottom + (restSeconds !== null ? 126 : 16) }]}>
-          <Ionicons name="trophy" size={15} color="#1A1200" style={{ marginRight: 6 }} />
-          <Text style={styles.prBannerText}>New PR — {prBanner}</Text>
-        </View>
+        <CutCornerView
+          fill={withAlpha('#F5C300', 0.95)}
+          cut={10}
+          style={[styles.prBanner, { bottom: insets.bottom + (restSeconds !== null ? 126 : 16) }]}
+        >
+          <View style={styles.prBannerRow}>
+            <Ionicons name="trophy" size={15} color="#1A1200" style={{ marginRight: 6 }} />
+            <Text style={styles.prBannerText}>New PR — {prBanner}</Text>
+          </View>
+        </CutCornerView>
       )}
 
       <PickExerciseModal
@@ -2063,7 +2070,7 @@ function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
   screen: { flex: 1, backgroundColor: T.bg },
   loadingScreen: { flex: 1, backgroundColor: T.bg, alignItems: 'center', justifyContent: 'center' },
-  skeletonCard: { backgroundColor: T.surface, borderRadius: R.card, borderWidth: 1, borderColor: T.border, padding: 14 },
+  skeletonCard: { borderTopWidth: 1, borderTopColor: T.borderStrong, paddingVertical: 14 },
   skeletonSetRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
   errorText: { fontFamily: F.ui, fontSize: 15, color: T.danger, textAlign: 'center' },
 
@@ -2073,8 +2080,8 @@ function makeStyles(T: ThemeColors) {
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: T.border,
+    borderBottomWidth: 2,
+    borderBottomColor: T.text,
     gap: 8,
   },
   headerCenter: { flex: 1, alignItems: 'center' },
@@ -2082,7 +2089,7 @@ function makeStyles(T: ThemeColors) {
   headerDoneLabel: { fontFamily: F.uiSemi, fontSize: 17, color: T.text, letterSpacing: -0.2 },
   headerActions: { flexDirection: 'row', gap: 6 },
   headerIconBtn: {
-    width: 40, height: 40, borderRadius: 20,
+    width: 40, height: 40, borderRadius: R.sm,
     backgroundColor: T.surface2, alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: T.border,
   },
@@ -2102,7 +2109,8 @@ function makeStyles(T: ThemeColors) {
   emptyEntries: { alignItems: 'center', paddingVertical: 48 },
   summaryBar: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.card,
+    borderTopWidth: 1, borderTopColor: T.borderStrong,
+    borderBottomWidth: 1, borderBottomColor: T.borderStrong,
     paddingVertical: 12, marginBottom: 4,
   },
   summaryStat: { flex: 1, alignItems: 'center', gap: 2 },
@@ -2115,13 +2123,12 @@ function makeStyles(T: ThemeColors) {
   emptyTitle: { fontFamily: F.uiSemi, fontSize: 16, color: T.textDim, marginBottom: 4 },
   emptySub: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, textAlign: 'center' },
 
-  // Entry card
+  // Broadsheet: entries are flat rule-separated sections, not floating cards.
   entryCard: {
-    backgroundColor: T.surface,
-    borderWidth: 1,
-    borderColor: T.border,
-    borderRadius: R.card,
-    padding: D.cardPad,
+    borderTopWidth: 1,
+    borderTopColor: T.borderStrong,
+    paddingTop: 12,
+    paddingBottom: 4,
     gap: 9,
   },
   entryHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -2195,7 +2202,7 @@ function makeStyles(T: ThemeColors) {
   setNumText: { fontFamily: F.uiSemi, fontSize: 13, color: T.muted },
   setCircleCol: { width: 30, alignItems: 'center', gap: 2 },
   setCircle: {
-    width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, borderColor: T.borderStrong,
+    width: 30, height: 30, borderRadius: R.sm, borderWidth: 1.5, borderColor: T.borderStrong,
     backgroundColor: T.surface2, alignItems: 'center', justifyContent: 'center',
   },
   setCircleWarm: { borderColor: withAlpha(T.gold, 0.5) },
@@ -2305,7 +2312,7 @@ function makeStyles(T: ThemeColors) {
   maSaveBtnText: { fontFamily: F.uiSemi, fontSize: 15, color: T.onPrimary },
 
   // Training focus checklist
-  focusCardTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text },
+  focusCardTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
   focusCardSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: -2 },
   focusRow: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 5 },
   focusCheckbox: {
@@ -2333,8 +2340,8 @@ function makeStyles(T: ThemeColors) {
     left: 18,
     right: 18,
     zIndex: 60,
-    backgroundColor: withAlpha('#F5C300', 0.95),
-    borderRadius: R.card,
+  },
+  prBannerRow: {
     paddingVertical: 10,
     paddingHorizontal: 16,
     flexDirection: 'row',
@@ -2421,7 +2428,7 @@ function makeStyles(T: ThemeColors) {
   createExSegmentTextActive: { fontFamily: F.uiBold, color: T.onPrimary },
   createExPillWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   createExPill: {
-    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: R.sm,
     borderWidth: 1, borderColor: T.borderStrong, backgroundColor: T.surface,
   },
   createExPillActive: { backgroundColor: T.primary, borderColor: T.primary },
@@ -2461,9 +2468,7 @@ function makeStyles(T: ThemeColors) {
     textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 8,
   },
   settingsCard: {
-    backgroundColor: T.surface, borderRadius: R.card,
-    borderWidth: 1, borderColor: T.border,
-    overflow: 'hidden',
+    borderTopWidth: 1, borderTopColor: T.borderStrong,
   },
   settingsInput: {
     backgroundColor: T.surface, borderWidth: 1, borderColor: T.border,

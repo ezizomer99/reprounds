@@ -980,11 +980,11 @@ function makeStyles(T: ThemeColors) {
     chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
     addChip: { borderStyle: 'dashed', borderColor: T.borderStrong, backgroundColor: T.surface },
     roundCard: {
-      gap: 10, padding: 12,
-      backgroundColor: T.surface2, borderRadius: R.card, borderWidth: 1, borderColor: T.border,
+      gap: 10, paddingVertical: 12,
+      borderTopWidth: 1, borderTopColor: T.borderStrong,
     },
     roundHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    roundTitle: { fontFamily: F.uiSemi, fontSize: 14, color: T.text },
+    roundTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
     inlineRow: { flexDirection: 'row', gap: 12 },
     minuteRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     stampBtn: {

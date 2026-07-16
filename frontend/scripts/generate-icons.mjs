@@ -3,8 +3,8 @@
  * Run once: node frontend/scripts/generate-icons.mjs
  *
  * Outputs:
- *   frontend/assets/images/icon.png       — 1024×1024, ink bg + vermilion mark (iOS / generic)
- *   frontend/assets/images/icon-fg.png    — 1024×1024, transparent bg + bone mark (Android adaptive fg)
+ *   frontend/assets/images/icon.png       — 1024×1024, ink bg + volt mark (iOS / generic)
+ *   frontend/assets/images/icon-fg.png    — 1024×1024, transparent bg + ink mark (Android adaptive fg, volt bg in app.config)
  */
 
 import { Resvg } from '@resvg/resvg-js';
@@ -16,9 +16,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT = resolve(__dirname, '../assets/images');
 mkdirSync(OUT, { recursive: true });
 
-const INK       = '#17140F';
-const VERMILION = '#D8432A';
-const BONE      = '#F4F0E7';
+const INK  = '#0A0B0D';
+const VOLT = '#C8F031';
 
 const OCTA_POINTS = '60,6 140,6 194,60 194,140 140,194 60,194 6,140 6,60';
 
@@ -82,5 +81,5 @@ function render(svg, outPath) {
   console.log(`✓ ${outPath}`);
 }
 
-render(solidSvg(INK, VERMILION), resolve(OUT, 'icon.png'));
-render(fgSvg(BONE), resolve(OUT, 'icon-fg.png'));
+render(solidSvg(INK, VOLT), resolve(OUT, 'icon.png'));
+render(fgSvg(INK), resolve(OUT, 'icon-fg.png'));

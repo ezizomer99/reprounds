@@ -27,7 +27,7 @@ export default function SplashScreen() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#17140F', alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ flex: 1, backgroundColor: '#0A0B0D', alignItems: 'center', justifyContent: 'center' }}>
       <MotiView
         from={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}

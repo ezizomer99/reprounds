@@ -319,8 +319,8 @@ function makeStyles(T: ThemeColors) {
       paddingHorizontal: 8,
       paddingTop: 10,
       paddingBottom: 14,
-      borderBottomWidth: 1,
-      borderBottomColor: T.border,
+      borderBottomWidth: 2,
+      borderBottomColor: T.text,
     },
     backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
     headerTitle: { fontFamily: F.uiSemi, fontSize: 19, color: T.text },
@@ -332,11 +332,9 @@ function makeStyles(T: ThemeColors) {
 
     // Status card
     statusCard: {
-      backgroundColor: T.surface,
-      borderWidth: 1,
-      borderColor: T.border,
-      borderRadius: R.card,
-      padding: D.cardPad,
+      borderTopWidth: 1,
+      borderTopColor: T.borderStrong,
+      paddingVertical: 18,
       alignItems: 'center',
       gap: 10,
     },
@@ -378,16 +376,13 @@ function makeStyles(T: ThemeColors) {
 
     // List card (actions + history)
     listCard: {
-      backgroundColor: T.surface,
-      borderWidth: 1,
-      borderColor: T.border,
-      borderRadius: R.card,
-      overflow: 'hidden',
+      borderTopWidth: 1,
+      borderTopColor: T.borderStrong,
     },
     rowDivider: {
       height: 1,
       backgroundColor: T.border,
-      marginLeft: D.cardPad + 30 + 12,
+      marginLeft: 30 + 12,
     },
 
     // Action rows
@@ -395,7 +390,6 @@ function makeStyles(T: ThemeColors) {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      paddingHorizontal: D.cardPad,
       paddingVertical: 15,
     },
     actionIcon: {

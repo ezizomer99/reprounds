@@ -221,7 +221,7 @@ function makeStyles(T: ThemeColors) {
     pill: {
       paddingHorizontal: 12,
       paddingVertical: 8,
-      borderRadius: 20,
+      borderRadius: R.sm,
       borderWidth: 1,
       borderColor: T.borderStrong,
       backgroundColor: T.surface,

@@ -391,8 +391,8 @@ function makeStyles(T: ThemeColors) {
       paddingHorizontal: D.pad,
       paddingTop: 14,
       paddingBottom: 14,
-      borderBottomWidth: 1,
-      borderBottomColor: T.border,
+      borderBottomWidth: 2,
+      borderBottomColor: T.text,
     },
     headerTitle: { fontFamily: F.uiBold, fontSize: 22, color: T.text, letterSpacing: -0.3 },
     headerSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 2 },
@@ -437,17 +437,15 @@ function makeStyles(T: ThemeColors) {
       backgroundColor: withAlpha(T.danger, 0.1),
     },
 
+    // Broadsheet: quick actions are flat rows in the list, not floating cards.
     quickCard: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      margin: D.pad,
-      marginBottom: 0,
-      padding: D.cardPad,
-      backgroundColor: T.surface,
-      borderWidth: 1,
-      borderColor: T.border,
-      borderRadius: R.card,
+      paddingHorizontal: D.pad,
+      paddingVertical: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: T.border,
     },
     quickIconBox: {
       width: 38,

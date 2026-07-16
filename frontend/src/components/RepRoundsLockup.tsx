@@ -1,9 +1,10 @@
 import { View } from 'react-native';
 import { OctaMark } from './OctaMark';
 import { RepRoundsWordmark } from './RepRoundsWordmark';
+import { BRAND } from '../theme/colors';
 
-const BONE = '#F4F0E7';
-const INK = '#17140F';
+const BONE = BRAND.bone;
+const INK = BRAND.ink;
 
 type LockupSize = 'sm' | 'md' | 'lg';
 
