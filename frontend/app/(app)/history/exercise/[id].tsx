@@ -287,7 +287,7 @@ function makeStyles(T: ThemeColors) {
     header: {
       flexDirection: 'row', alignItems: 'center', gap: 8,
       paddingHorizontal: 12, paddingVertical: 10,
-      borderBottomWidth: 1, borderBottomColor: T.border,
+      borderBottomWidth: 2, borderBottomColor: T.text,
     },
     backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
     headerTitle: { fontFamily: F.uiSemi, fontSize: 19, color: T.text, letterSpacing: -0.2 },
@@ -296,9 +296,8 @@ function makeStyles(T: ThemeColors) {
     body: { padding: D.pad, gap: D.stack },
 
     prCard: {
-      backgroundColor: T.surface,
-      borderWidth: 1, borderColor: withAlpha(T.gold, 0.35),
-      borderRadius: R.card, padding: D.cardPad,
+      borderTopWidth: 2, borderTopColor: withAlpha(T.gold, 0.6),
+      paddingTop: 14, paddingBottom: 4,
       gap: 12,
     },
     prHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -319,14 +318,14 @@ function makeStyles(T: ThemeColors) {
     muscleToggleText: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim },
     muscleToggleTextActive: { color: T.onPrimary },
 
-    card: { backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.card, padding: D.cardPad, paddingBottom: 10, overflow: 'hidden' },
+    card: { borderTopWidth: 1, borderTopColor: T.borderStrong, paddingTop: 14, paddingBottom: 10, overflow: 'hidden' },
     sparklineHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
     sparklineRange: { fontFamily: F.mono, fontSize: 12, color: T.textDim },
 
     eyebrow: { fontFamily: F.uiBold, fontSize: 11, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1.2 },
 
-    historyCard: { backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.card, overflow: 'hidden' },
-    historyRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: D.cardPad, paddingVertical: 12, gap: 10 },
+    historyCard: { borderTopWidth: 1, borderTopColor: T.borderStrong },
+    historyRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 },
     historyDate: { fontFamily: F.uiSemi, fontSize: 14, color: T.text, width: 76 },
     historySets: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
     historyVol: { fontFamily: F.uiMed, fontSize: 11, color: T.muted, marginTop: 2 },

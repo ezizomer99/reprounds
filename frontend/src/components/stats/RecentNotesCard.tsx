@@ -98,11 +98,10 @@ export function RecentNotesCard() {
 function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
     card: {
-      backgroundColor: T.surface,
-      borderWidth: 1,
-      borderColor: T.border,
-      borderRadius: R.card,
-      padding: D.cardPad,
+      borderTopWidth: 1,
+      borderTopColor: T.borderStrong,
+      paddingTop: 14,
+      paddingBottom: 4,
     },
     cardHeader: {
       flexDirection: 'row',
@@ -118,7 +117,7 @@ function makeStyles(T: ThemeColors) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    cardTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text },
+    cardTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
     seeAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 2 },
     seeAllText: { fontFamily: F.uiMed, fontSize: 13, color: T.muted },
 

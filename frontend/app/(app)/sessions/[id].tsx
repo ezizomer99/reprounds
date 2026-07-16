@@ -2064,7 +2064,7 @@ function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
   screen: { flex: 1, backgroundColor: T.bg },
   loadingScreen: { flex: 1, backgroundColor: T.bg, alignItems: 'center', justifyContent: 'center' },
-  skeletonCard: { backgroundColor: T.surface, borderRadius: R.card, borderWidth: 1, borderColor: T.border, padding: 14 },
+  skeletonCard: { borderTopWidth: 1, borderTopColor: T.borderStrong, paddingVertical: 14 },
   skeletonSetRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
   errorText: { fontFamily: F.ui, fontSize: 15, color: T.danger, textAlign: 'center' },
 
@@ -2074,8 +2074,8 @@ function makeStyles(T: ThemeColors) {
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: T.border,
+    borderBottomWidth: 2,
+    borderBottomColor: T.text,
     gap: 8,
   },
   headerCenter: { flex: 1, alignItems: 'center' },
@@ -2103,7 +2103,8 @@ function makeStyles(T: ThemeColors) {
   emptyEntries: { alignItems: 'center', paddingVertical: 48 },
   summaryBar: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: T.surface, borderWidth: 1, borderColor: T.border, borderRadius: R.card,
+    borderTopWidth: 1, borderTopColor: T.borderStrong,
+    borderBottomWidth: 1, borderBottomColor: T.borderStrong,
     paddingVertical: 12, marginBottom: 4,
   },
   summaryStat: { flex: 1, alignItems: 'center', gap: 2 },
@@ -2116,13 +2117,12 @@ function makeStyles(T: ThemeColors) {
   emptyTitle: { fontFamily: F.uiSemi, fontSize: 16, color: T.textDim, marginBottom: 4 },
   emptySub: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, textAlign: 'center' },
 
-  // Entry card
+  // Broadsheet: entries are flat rule-separated sections, not floating cards.
   entryCard: {
-    backgroundColor: T.surface,
-    borderWidth: 1,
-    borderColor: T.border,
-    borderRadius: R.card,
-    padding: D.cardPad,
+    borderTopWidth: 1,
+    borderTopColor: T.borderStrong,
+    paddingTop: 12,
+    paddingBottom: 4,
     gap: 9,
   },
   entryHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -2306,7 +2306,7 @@ function makeStyles(T: ThemeColors) {
   maSaveBtnText: { fontFamily: F.uiSemi, fontSize: 15, color: T.onPrimary },
 
   // Training focus checklist
-  focusCardTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text },
+  focusCardTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
   focusCardSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: -2 },
   focusRow: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 5 },
   focusCheckbox: {
@@ -2462,9 +2462,7 @@ function makeStyles(T: ThemeColors) {
     textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 8,
   },
   settingsCard: {
-    backgroundColor: T.surface, borderRadius: R.card,
-    borderWidth: 1, borderColor: T.border,
-    overflow: 'hidden',
+    borderTopWidth: 1, borderTopColor: T.borderStrong,
   },
   settingsInput: {
     backgroundColor: T.surface, borderWidth: 1, borderColor: T.border,

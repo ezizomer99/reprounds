@@ -108,7 +108,7 @@ export default function HistoryScreen() {
         <View style={{ paddingTop: 8 }}>
           {Array.from({ length: 7 }).map((_, i) => (
             <View key={i} style={styles.skeletonRow}>
-              <Skeleton width={40} height={40} radius={20} />
+              <Skeleton width={40} height={40} radius={R.sm} />
               <View style={{ flex: 1, gap: 8 }}>
                 <Skeleton width="55%" height={14} />
                 <Skeleton width="32%" height={11} />
@@ -182,7 +182,7 @@ function makeStyles(T: ThemeColors) {
     header: {
       flexDirection: 'row', alignItems: 'center', gap: 8,
       paddingHorizontal: 12, paddingVertical: 10,
-      borderBottomWidth: 1, borderBottomColor: T.border,
+      borderBottomWidth: 2, borderBottomColor: T.text,
     },
     backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
     headerTitle: { fontFamily: F.uiSemi, fontSize: 19, color: T.text, letterSpacing: -0.2 },

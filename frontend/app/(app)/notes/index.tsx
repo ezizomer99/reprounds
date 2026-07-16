@@ -194,7 +194,7 @@ function makeStyles(T: ThemeColors) {
     header: {
       flexDirection: 'row', alignItems: 'center', gap: 8,
       paddingHorizontal: 12, paddingVertical: 10,
-      borderBottomWidth: 1, borderBottomColor: T.border,
+      borderBottomWidth: 2, borderBottomColor: T.text,
     },
     backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
     headerTitle: { flex: 1, fontFamily: F.uiBold, fontSize: 19, color: T.text, letterSpacing: -0.2 },
@@ -216,11 +216,10 @@ function makeStyles(T: ThemeColors) {
     tagChipTextActive: { color: T.primary, fontFamily: F.uiSemi },
 
     groupCard: {
-      backgroundColor: T.surface,
-      borderWidth: 1,
-      borderColor: T.border,
-      borderRadius: R.card,
-      padding: D.cardPad,
+      borderTopWidth: 1,
+      borderTopColor: T.borderStrong,
+      paddingTop: 12,
+      paddingBottom: 4,
     },
     groupHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     groupDate: { fontFamily: F.monoBold, fontSize: 11, color: T.muted },

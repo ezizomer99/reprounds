@@ -592,11 +592,11 @@ function makeStyles(T: ThemeColors) {
     chipText: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, textTransform: 'capitalize' },
     chipTextActive: { color: T.onPrimary },
     roundCard: {
-      gap: 10, padding: 12,
-      backgroundColor: T.surface2, borderRadius: R.card, borderWidth: 1, borderColor: T.border,
+      gap: 10, paddingVertical: 12,
+      borderTopWidth: 1, borderTopColor: T.borderStrong,
     },
     roundHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    roundTitle: { fontFamily: F.uiSemi, fontSize: 14, color: T.text },
+    roundTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
     inlineRow: { flexDirection: 'row', gap: 12 },
     miniLabel: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim, marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.4 },
     numInput: {
