@@ -24,6 +24,8 @@ import { useFightRecords } from '../../../src/hooks/useFights';
 import type { FightRecord } from '@app/shared';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useProGate } from '../../../src/hooks/useProGate';
+import { CutCornerView } from '../../../src/components/CutCornerView';
+import { MyWeek } from '../../../src/components/MyWeek';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -304,22 +306,34 @@ export default function MatTab() {
           keyExtractor={(item) => item.id}
           ListHeaderComponent={
             <>
-              <TouchableOpacity
-                style={styles.quickCard}
-                onPress={() => router.push('/sessions/new' as never)}
-                activeOpacity={0.8}
-              >
-                <View style={styles.quickIconBox}>
-                  <Ionicons name="flash" size={18} color={T.primary} />
+              <View style={styles.headerBlock}>
+                {/* Quick Start — mirrors the Workout tab's hero */}
+                <View style={styles.heroCard}>
+                  <View style={styles.heroRow}>
+                    <View style={styles.heroIconBox}>
+                      <Ionicons name="flash" size={18} color={T.primary} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.heroTitle}>Quick start</Text>
+                      <Text style={styles.heroSub}>Log rounds and techniques right away</Text>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => router.push('/sessions/new' as never)}
+                    activeOpacity={0.85}
+                  >
+                    <CutCornerView fill={T.primary} style={styles.startBtn}>
+                      <Ionicons name="add" size={20} color={T.onPrimary} />
+                      <Text style={styles.startBtnText}>Start New Mat Session</Text>
+                    </CutCornerView>
+                  </TouchableOpacity>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.quickTitle}>Quick mat session</Text>
-                  <Text style={styles.quickSub}>Log rounds and techniques right away</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={16} color={T.muted} />
-              </TouchableOpacity>
+
+                {/* My Week */}
+                <MyWeek />
+              </View>
               <TouchableOpacity
-                style={styles.quickCard}
+                style={[styles.quickCard, styles.quickCardFirst]}
                 onPress={() => router.push('/focuses' as never)}
                 activeOpacity={0.8}
               >
@@ -329,6 +343,20 @@ export default function MatTab() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.quickTitle}>Training focuses</Text>
                   <Text style={styles.quickSub}>Plan what to work on before you train</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={T.muted} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.quickCard}
+                onPress={() => router.push('/library/techniques' as never)}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.quickIconBox, { backgroundColor: withAlpha(T.grappling, 0.14) }]}>
+                  <Ionicons name="body-outline" size={18} color={T.grappling} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.quickTitle}>Positions & submissions</Text>
+                  <Text style={styles.quickSub}>Manage the chips you tap while logging</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={T.muted} />
               </TouchableOpacity>
@@ -423,6 +451,45 @@ function makeStyles(T: ThemeColors) {
       backgroundColor: withAlpha(T.danger, 0.1),
     },
 
+    // Hero block above the row list — same gutter as the Workout tab's body.
+    headerBlock: {
+      paddingHorizontal: D.pad,
+      paddingTop: D.pad,
+      paddingBottom: D.stack,
+      gap: D.stack,
+    },
+    // Broadsheet: flat section separated by a rule, matching the Workout tab.
+    heroCard: {
+      borderTopWidth: 1,
+      borderTopColor: T.borderStrong,
+      paddingTop: 14,
+      paddingBottom: 4,
+    },
+    heroRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+      marginBottom: 14,
+    },
+    heroIconBox: {
+      width: 32,
+      height: 32,
+      borderRadius: R.sm,
+      backgroundColor: withAlpha(T.primary, 0.14),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    heroTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 2 },
+    heroSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
+    startBtn: {
+      paddingVertical: 14,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+    },
+    startBtnText: { fontFamily: F.uiBold, fontSize: 16, color: T.onPrimary },
+
     // Broadsheet: quick actions are flat rows in the list, not floating cards.
     quickCard: {
       flexDirection: 'row',
@@ -442,6 +509,7 @@ function makeStyles(T: ThemeColors) {
       justifyContent: 'center',
       flexShrink: 0,
     },
+    quickCardFirst: { borderTopWidth: 1, borderTopColor: T.border },
     quickTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text, marginBottom: 2 },
     quickSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
 

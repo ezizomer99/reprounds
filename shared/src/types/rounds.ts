@@ -62,14 +62,19 @@ export interface GrapplingRound extends BaseRound {
   submissionsFor?: number;
   submissionsAgainst?: number;
   /**
-   * Optional breakdown of which submissions were landed, keyed by submission
-   * type (e.g. { armbar: 2, rnc: 1 }). The sum is always <= submissionsFor:
-   * the gap is untyped taps or legacy rounds. `submissionsFor` remains the
-   * authoritative total.
+   * Breakdown of which submissions were landed, keyed by submission type
+   * (e.g. { armbar: 2, rnc: 1 }). This map is authoritative: `submissionsFor`
+   * is kept equal to the sum of its values. Older rounds may carry a bare
+   * `submissionsFor` with an empty/smaller map (the gap is untyped legacy taps);
+   * the logger folds that remainder into `other` when editing.
    */
   submissionsForTypes?: Record<string, number>;
-  /** Same breakdown for submissions conceded; sum is always <= submissionsAgainst. */
+  /** Same breakdown for submissions conceded; `submissionsAgainst` = sum of its values. */
   submissionsAgainstTypes?: Record<string, number>;
+  /** Free-text describing the 'other' submissions landed, shown when `other` > 0. */
+  submissionsForOther?: string | null;
+  /** Free-text describing the 'other' submissions conceded. */
+  submissionsAgainstOther?: string | null;
   sweeps?: number;
   takedowns?: number;
   /** Positions worked, e.g. ['mount', 'back', 'half_guard']. */

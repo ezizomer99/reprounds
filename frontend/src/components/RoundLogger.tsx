@@ -1,7 +1,11 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useTechniqueTags } from '../hooks/useNotes';
+import { useTechniques, useCreateTechnique } from '../hooks/useTechniques';
+import { useCurrentUser } from '../hooks/useAuth';
+import { useProGate } from '../hooks/useProGate';
 import type {
   ClassType,
   DisciplineCat,
@@ -13,17 +17,53 @@ import type {
   StrikeWeapon,
   StrikingRound,
   StrikingRoundType,
+  Technique,
+  TechniqueKind,
 } from '@app/shared';
 import {
   ROUNDS_SCHEMA,
   GRAPPLING_POSITIONS,
   GRAPPLING_SUBMISSIONS,
+  FREE_CUSTOM_TECHNIQUE_LIMIT,
   submissionLabel,
 } from '@app/shared';
 import { PartnerPicker } from './PartnerPicker';
+import { Chip } from './ui/Chip';
+import { Stepper } from './ui/Stepper';
 import { useTheme } from '../theme/ThemeContext';
 import { F, R, ThemeColors } from '../theme/colors';
 import { withAlpha } from '../lib/color';
+
+type TechniqueOption = { value: string; label: string };
+
+// Submissions minus the 'other' escape hatch — 'other' is a client-only chip,
+// never a bank row (it isn't seeded and can't be created as a custom).
+const SUBMISSION_FALLBACK: TechniqueOption[] = GRAPPLING_SUBMISSIONS.filter(
+  (s) => s.value !== 'other',
+);
+
+// Merge the server technique bank (global seeds + this user's customs) over the
+// hardcoded constants, keeping the curated order and appending customs after.
+// The constants are the offline / first-render fallback (and the seed source).
+function mergeTechniqueOptions(
+  fetched: Technique[] | undefined,
+  fallback: readonly TechniqueOption[],
+): TechniqueOption[] {
+  const list = fetched ?? [];
+  const labelByValue = new Map(list.map((t) => [t.value, t.label]));
+  const seen = new Set<string>();
+  const out: TechniqueOption[] = [];
+  for (const c of fallback) {
+    out.push({ value: c.value, label: labelByValue.get(c.value) ?? c.label });
+    seen.add(c.value);
+  }
+  for (const t of list) {
+    if (seen.has(t.value)) continue;
+    out.push({ value: t.value, label: t.label });
+    seen.add(t.value);
+  }
+  return out;
+}
 
 // A structural superset of every round type so the editor can hold all possible
 // fields; the active card only renders the ones relevant to its category.
@@ -84,21 +124,80 @@ export function emptyRoundsSession(category: DisciplineCat): RoundsSessionDetail
  * core counters branched on `category`, and a technique-journal field. Writes
  * the whole RoundsSessionDetails back through onChange (the parent persists it
  * into session_entries.details).
+ *
+ * When `sessionActive` and `elapsedSeconds` are supplied, each round's Minutes
+ * field grows a "stamp from timer" button that fills the round's duration from
+ * the session clock (minus the rounds already logged).
  */
 export function RoundLogger({
   category,
   value,
   onChange,
   strikeWeapons = BOXING_WEAPONS,
+  elapsedSeconds,
+  sessionActive = false,
 }: {
   category: DisciplineCat;
   value: RoundsSessionDetails | null;
   onChange: (next: RoundsSessionDetails) => void;
   /** Which striking weapons to show as counters (boxing vs Muay Thai). */
   strikeWeapons?: StrikeWeapon[];
+  /** Live session stopwatch (seconds); enables the Minutes stamp button. */
+  elapsedSeconds?: number;
+  /** Whether the session is still in progress (gates the stamp button). */
+  sessionActive?: boolean;
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+
+  // Grappling technique bank — global seeds + this user's customs, merged over
+  // the constants. Only grappling surfaces positions / submission types.
+  const isGrappling = category === 'grappling';
+  const positionsQuery = useTechniques({ kind: 'position', category: 'grappling', enabled: isGrappling });
+  const submissionsQuery = useTechniques({ kind: 'submission', enabled: isGrappling });
+  const positionOptions = useMemo(
+    () => mergeTechniqueOptions(positionsQuery.data, GRAPPLING_POSITIONS),
+    [positionsQuery.data],
+  );
+  const submissionOptions = useMemo(
+    () => mergeTechniqueOptions(submissionsQuery.data, SUBMISSION_FALLBACK),
+    [submissionsQuery.data],
+  );
+
+  const createTechnique = useCreateTechnique();
+  const { data: currentUser } = useCurrentUser();
+  const { isPro, showPaywall } = useProGate();
+
+  // Create a custom position/submission, honoring the free-tier cap (counted
+  // across both kinds). Returns the created (or existing) row, or null if the
+  // create was blocked or failed. Callers apply the result to the round.
+  const handleCreateTechnique = async (
+    kind: TechniqueKind,
+    label: string,
+  ): Promise<Technique | null> => {
+    const trimmed = label.trim();
+    if (!trimmed) return null;
+    const customCount = [...(positionsQuery.data ?? []), ...(submissionsQuery.data ?? [])].filter(
+      (t) => t.userId === currentUser?.id,
+    ).length;
+    if (!isPro && customCount >= FREE_CUSTOM_TECHNIQUE_LIMIT) {
+      Alert.alert(
+        'Limit reached',
+        `Free accounts can create up to ${FREE_CUSTOM_TECHNIQUE_LIMIT} custom positions & submissions. Upgrade to RepRounds Pro for unlimited.`,
+        [
+          { text: 'Not now', style: 'cancel' },
+          { text: 'Upgrade', onPress: showPaywall },
+        ],
+      );
+      return null;
+    }
+    try {
+      return await createTechnique.mutateAsync({ kind, label: trimmed });
+    } catch (err) {
+      Alert.alert('Error', (err as Error).message ?? 'Failed to add.');
+      return null;
+    }
+  };
 
   const data = (value ?? { schema: ROUNDS_SCHEMA, category, rounds: [] }) as unknown as EditableSession;
   const rounds = data.rounds ?? [];
@@ -119,22 +218,34 @@ export function RoundLogger({
   const removeRound = (id: string) =>
     emit({ ...data, rounds: rounds.filter((r) => r.id !== id) });
 
+  // Fill a round's duration from the session clock: elapsed minus the time
+  // already accounted for by the other rounds, so back-to-back stamps record
+  // each round's own slice rather than the whole session.
+  const stampDuration = (round: EditableRound) => {
+    if (elapsedSeconds == null) return;
+    const otherSum = rounds.reduce(
+      (sum, r) => (r.id === round.id ? sum : sum + (r.durationSeconds ?? 0)),
+      0,
+    );
+    updateRound(round.id, { durationSeconds: Math.max(0, elapsedSeconds - otherSum) });
+  };
+
+  const canStamp = sessionActive && elapsedSeconds != null;
+
   return (
     <View style={{ gap: 14 }}>
       {/* Class type */}
       <View style={styles.chipRow}>
-        {CLASS_TYPES.map((ct) => {
-          const active = data.classType === ct.value;
-          return (
-            <TouchableOpacity
-              key={ct.value}
-              style={[styles.chip, active && styles.chipActive]}
-              onPress={() => patchSession({ classType: active ? null : ct.value })}
-            >
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>{ct.label}</Text>
-            </TouchableOpacity>
-          );
-        })}
+        {CLASS_TYPES.map((ct) => (
+          <Chip
+            key={ct.value}
+            label={ct.label}
+            selected={data.classType === ct.value}
+            onPress={() =>
+              patchSession({ classType: data.classType === ct.value ? null : ct.value })
+            }
+          />
+        ))}
       </View>
 
       {/* Rounds */}
@@ -142,7 +253,12 @@ export function RoundLogger({
         <View key={round.id} style={styles.roundCard}>
           <View style={styles.roundHead}>
             <Text style={styles.roundTitle}>Round {i + 1}</Text>
-            <TouchableOpacity hitSlop={8} onPress={() => removeRound(round.id)}>
+            <TouchableOpacity
+              hitSlop={8}
+              onPress={() => removeRound(round.id)}
+              accessibilityRole="button"
+              accessibilityLabel={`Delete round ${i + 1}`}
+            >
               <Ionicons name="trash-outline" size={16} color={T.muted} />
             </TouchableOpacity>
           </View>
@@ -155,42 +271,56 @@ export function RoundLogger({
           <View style={styles.inlineRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.miniLabel}>Minutes</Text>
-              <TextInput
-                style={styles.numInput}
-                value={
-                  round.durationSeconds != null ? String(Math.round(round.durationSeconds / 60)) : ''
-                }
-                onChangeText={(t) =>
-                  updateRound(round.id, {
-                    durationSeconds: t.trim() === '' ? null : Math.round(Number(t) * 60),
-                  })
-                }
-                keyboardType="number-pad"
-                placeholder="0"
-                placeholderTextColor={T.muted}
-              />
+              <View style={styles.minuteRow}>
+                <TextInput
+                  style={[styles.numInput, { flex: 1 }]}
+                  value={
+                    round.durationSeconds != null ? String(Math.round(round.durationSeconds / 60)) : ''
+                  }
+                  onChangeText={(t) =>
+                    updateRound(round.id, {
+                      durationSeconds: t.trim() === '' ? null : Math.round(Number(t) * 60),
+                    })
+                  }
+                  keyboardType="number-pad"
+                  placeholder="0"
+                  placeholderTextColor={T.muted}
+                />
+                {canStamp && (
+                  <TouchableOpacity
+                    style={styles.stampBtn}
+                    onPress={() => stampDuration(round)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Fill minutes from session timer"
+                  >
+                    <Ionicons name="stopwatch-outline" size={18} color={T.primary} />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
             <View style={{ flex: 2 }}>
               <Text style={styles.miniLabel}>Intensity</Text>
               <View style={styles.chipRow}>
-                {INTENSITIES.map((lvl) => {
-                  const active = round.intensity === lvl;
-                  return (
-                    <TouchableOpacity
-                      key={lvl}
-                      style={[styles.chip, active && styles.chipActive]}
-                      onPress={() => updateRound(round.id, { intensity: lvl })}
-                    >
-                      <Text style={[styles.chipText, active && styles.chipTextActive]}>{lvl}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                {INTENSITIES.map((lvl) => (
+                  <Chip
+                    key={lvl}
+                    label={lvl}
+                    selected={round.intensity === lvl}
+                    onPress={() => updateRound(round.id, { intensity: lvl })}
+                  />
+                ))}
               </View>
             </View>
           </View>
 
           {category === 'grappling' && (
-            <GrapplingCounters round={round} onChange={(patch) => updateRound(round.id, patch)} />
+            <GrapplingCounters
+              round={round}
+              positions={positionOptions}
+              submissions={submissionOptions}
+              onCreateTechnique={handleCreateTechnique}
+              onChange={(patch) => updateRound(round.id, patch)}
+            />
           )}
 
           {category === 'striking' && (
@@ -216,7 +346,12 @@ export function RoundLogger({
         </View>
       ))}
 
-      <TouchableOpacity style={styles.addRound} onPress={addRound}>
+      <TouchableOpacity
+        style={styles.addRound}
+        onPress={addRound}
+        accessibilityRole="button"
+        accessibilityLabel="Add round"
+      >
         <Ionicons name="add" size={16} color={T.primary} />
         <Text style={styles.addRoundText}>Add round</Text>
       </TouchableOpacity>
@@ -276,7 +411,13 @@ function TagEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string
       <Text style={styles.miniLabel}>Technique tags</Text>
       <View style={styles.tagWrap}>
         {tags.map((tag) => (
-          <TouchableOpacity key={tag} style={styles.tagChip} onPress={() => removeTag(tag)}>
+          <TouchableOpacity
+            key={tag}
+            style={styles.tagChip}
+            onPress={() => removeTag(tag)}
+            accessibilityRole="button"
+            accessibilityLabel={`Remove tag ${tag}`}
+          >
             <Text style={styles.tagChipText}>{tag}</Text>
             <Ionicons name="close" size={13} color={T.primary} />
           </TouchableOpacity>
@@ -296,7 +437,13 @@ function TagEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string
       {suggestions.length > 0 && (
         <View style={styles.tagSuggestRow}>
           {suggestions.map((s) => (
-            <TouchableOpacity key={s} style={styles.tagSuggest} onPress={() => addTag(s)}>
+            <TouchableOpacity
+              key={s}
+              style={styles.tagSuggest}
+              onPress={() => addTag(s)}
+              accessibilityRole="button"
+              accessibilityLabel={`Add tag ${s}`}
+            >
               <Ionicons name="add" size={12} color={T.textDim} />
               <Text style={styles.tagSuggestText}>{s}</Text>
             </TouchableOpacity>
@@ -309,30 +456,20 @@ function TagEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string
 
 function GrapplingCounters({
   round,
+  positions,
+  submissions,
+  onCreateTechnique,
   onChange,
 }: {
   round: EditableRound;
+  positions: TechniqueOption[];
+  submissions: TechniqueOption[];
+  onCreateTechnique: (kind: TechniqueKind, label: string) => Promise<Technique | null>;
   onChange: (patch: Partial<EditableRound>) => void;
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-
-  // Tap a submission chip: +1 to its type count AND +1 to the top-line total.
-  // Long-press: -1 to both (clamped at 0), removing the key when it hits 0.
-  // The top-line stepper stays authoritative; sum(types) <= total (the gap is
-  // untyped taps / legacy rounds).
-  const bumpSubmission = (side: 'for' | 'against', type: string, delta: number) => {
-    const totalKey = side === 'for' ? 'submissionsFor' : 'submissionsAgainst';
-    const mapKey = side === 'for' ? 'submissionsForTypes' : 'submissionsAgainstTypes';
-    const map = { ...(round[mapKey] ?? {}) };
-    const cur = map[type] ?? 0;
-    if (delta < 0 && cur === 0) return;
-    const nextTypeCount = Math.max(0, cur + delta);
-    if (nextTypeCount === 0) delete map[type];
-    else map[type] = nextTypeCount;
-    const nextTotal = Math.max(0, (round[totalKey] ?? 0) + (nextTypeCount - cur));
-    onChange({ [mapKey]: map, [totalKey]: nextTotal } as Partial<EditableRound>);
-  };
+  const [addingPosition, setAddingPosition] = useState(false);
 
   const togglePosition = (pos: string) => {
     const current = round.positions ?? [];
@@ -343,6 +480,11 @@ function GrapplingCounters({
     });
   };
 
+  const addPosition = (pos: string) => {
+    const current = round.positions ?? [];
+    if (!current.includes(pos)) onChange({ positions: [...current, pos] });
+  };
+
   return (
     <View style={{ gap: 10 }}>
       <View style={styles.giRow}>
@@ -351,34 +493,26 @@ function GrapplingCounters({
           value={round.gi === 'gi'}
           onValueChange={(v) => onChange({ gi: v ? 'gi' : 'no_gi' })}
           trackColor={{ true: T.primary }}
+          accessibilityLabel="Gi"
         />
       </View>
 
-      <Stepper
-        label="Submissions for"
-        value={round.submissionsFor ?? 0}
-        onChange={(n) => onChange({ submissionsFor: n })}
+      <SubmissionSection
+        side="for"
+        round={round}
+        submissions={submissions}
+        onCreateTechnique={onCreateTechnique}
+        onChange={onChange}
       />
-      <SubmissionTally
-        counts={round.submissionsForTypes ?? {}}
-        onBump={(type, delta) => bumpSubmission('for', type, delta)}
-      />
-
-      <Stepper
-        label="Submissions against"
-        value={round.submissionsAgainst ?? 0}
-        onChange={(n) => onChange({ submissionsAgainst: n })}
-      />
-      <SubmissionTally
-        counts={round.submissionsAgainstTypes ?? {}}
-        onBump={(type, delta) => bumpSubmission('against', type, delta)}
+      <SubmissionSection
+        side="against"
+        round={round}
+        submissions={submissions}
+        onCreateTechnique={onCreateTechnique}
+        onChange={onChange}
       />
 
-      <Stepper
-        label="Sweeps"
-        value={round.sweeps ?? 0}
-        onChange={(n) => onChange({ sweeps: n })}
-      />
+      <Stepper label="Sweeps" value={round.sweeps ?? 0} onChange={(n) => onChange({ sweeps: n })} />
       <Stepper
         label="Takedowns"
         value={round.takedowns ?? 0}
@@ -388,60 +522,358 @@ function GrapplingCounters({
       <View>
         <Text style={styles.miniLabel}>Positions worked</Text>
         <View style={styles.chipRow}>
-          {GRAPPLING_POSITIONS.map((p) => {
-            const active = (round.positions ?? []).includes(p.value);
-            return (
-              <TouchableOpacity
-                key={p.value}
-                style={[styles.chip, active && styles.chipActive]}
-                onPress={() => togglePosition(p.value)}
-              >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{p.label}</Text>
-              </TouchableOpacity>
-            );
-          })}
+          {positions.map((p) => (
+            <Chip
+              key={p.value}
+              label={p.label}
+              selected={(round.positions ?? []).includes(p.value)}
+              onPress={() => togglePosition(p.value)}
+            />
+          ))}
+          <Chip
+            label="Add position"
+            leftIcon="add"
+            onPress={() => setAddingPosition(true)}
+            style={styles.addChip}
+            textStyle={styles.addChipText}
+          />
         </View>
       </View>
+
+      <CreateTechniqueModal
+        visible={addingPosition}
+        title="Add position"
+        placeholder="e.g. Butterfly guard"
+        onClose={() => setAddingPosition(false)}
+        onCreate={async (label) => {
+          const t = await onCreateTechnique('position', label);
+          if (!t) return false;
+          addPosition(t.value);
+          return true;
+        }}
+      />
     </View>
   );
 }
 
 /**
- * Compact submission-type tally: a wrap of chips, one per curated submission.
- * Tap increments that submission (and the caller bumps the top-line total);
- * long-press decrements. Active chips show a count and the label is postfixed
- * with the tally so a glance reads "Armbar · 2".
+ * Submission tally for one side (landed/taken). Shows only the submissions
+ * actually logged this round as counted chips ("Armbar · 2"); tap a chip to +1,
+ * tap its ✕ to clear it. A single "Add submission" chip opens a searchable
+ * picker to choose an existing type or create a custom one from the bank.
+ *
+ * The stored `submissionsFor` / `submissionsAgainst` total is kept equal to the
+ * sum of the type map. Legacy rounds that carry a bare total larger than the
+ * typed sum have the remainder folded into `other`, so nothing looks lost.
  */
-function SubmissionTally({
-  counts,
-  onBump,
+function SubmissionSection({
+  side,
+  round,
+  submissions,
+  onCreateTechnique,
+  onChange,
 }: {
-  counts: Record<string, number>;
-  onBump: (type: string, delta: number) => void;
+  side: 'for' | 'against';
+  round: EditableRound;
+  submissions: TechniqueOption[];
+  onCreateTechnique: (kind: TechniqueKind, label: string) => Promise<Technique | null>;
+  onChange: (patch: Partial<EditableRound>) => void;
+}) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const totalKey = side === 'for' ? 'submissionsFor' : 'submissionsAgainst';
+  const mapKey = side === 'for' ? 'submissionsForTypes' : 'submissionsAgainstTypes';
+  const otherKey = side === 'for' ? 'submissionsForOther' : 'submissionsAgainstOther';
+
+  const raw = round[mapKey] ?? {};
+  const storedTotal = round[totalKey] ?? 0;
+  const rawSum = Object.values(raw).reduce((a, b) => a + b, 0);
+  // Fold any legacy untyped remainder into `other` so old totals stay visible.
+  const counts: Record<string, number> =
+    storedTotal > rawSum ? { ...raw, other: (raw.other ?? 0) + (storedTotal - rawSum) } : raw;
+
+  const setCount = (type: string, n: number) => {
+    const map = { ...counts };
+    if (n <= 0) delete map[type];
+    else map[type] = n;
+    const total = Object.values(map).reduce((a, b) => a + b, 0);
+    const patch: Record<string, unknown> = { [mapKey]: map, [totalKey]: total };
+    // Drop the free-text note when the 'other' count clears out.
+    if (type === 'other' && n <= 0) patch[otherKey] = null;
+    onChange(patch as Partial<EditableRound>);
+  };
+
+  const labelOf = (value: string) =>
+    value === 'other'
+      ? 'Other'
+      : submissions.find((s) => s.value === value)?.label ?? submissionLabel(value);
+
+  const logged = Object.entries(counts).filter(([, n]) => n > 0);
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+
+  return (
+    <View style={{ gap: 8 }}>
+      <View style={styles.sectionHead}>
+        <Text style={styles.miniLabel}>
+          {side === 'for' ? 'Submissions landed' : 'Submissions taken'}
+        </Text>
+        <Text style={styles.totalBadge}>{total}</Text>
+      </View>
+
+      <View style={styles.chipRow}>
+        {logged.map(([value, n]) => (
+          <CountChip
+            key={value}
+            label={labelOf(value)}
+            count={n}
+            onIncrement={() => setCount(value, n + 1)}
+            onRemove={() => setCount(value, 0)}
+          />
+        ))}
+        <Chip
+          label="Add submission"
+          leftIcon="add"
+          onPress={() => setPickerOpen(true)}
+          style={styles.addChip}
+          textStyle={styles.addChipText}
+        />
+      </View>
+
+      {(counts.other ?? 0) > 0 && (
+        <TextInput
+          style={styles.otherNote}
+          value={round[otherKey] ?? ''}
+          onChangeText={(t) => onChange({ [otherKey]: t } as Partial<EditableRound>)}
+          placeholder="What was the other submission?"
+          placeholderTextColor={T.muted}
+        />
+      )}
+
+      <SubmissionPicker
+        visible={pickerOpen}
+        submissions={submissions}
+        counts={counts}
+        onClose={() => setPickerOpen(false)}
+        onSelect={(value) => {
+          setCount(value, (counts[value] ?? 0) + 1);
+          setPickerOpen(false);
+        }}
+        onCreate={async (label) => {
+          const t = await onCreateTechnique('submission', label);
+          if (!t) return;
+          setCount(t.value, (counts[t.value] ?? 0) + 1);
+          setPickerOpen(false);
+        }}
+      />
+    </View>
+  );
+}
+
+/**
+ * A counted, removable chip (Design A): the label with its tally ("Armbar · 2").
+ * Tapping the body adds one (light haptic); tapping the ✕ clears the type.
+ */
+function CountChip({
+  label,
+  count,
+  onIncrement,
+  onRemove,
+}: {
+  label: string;
+  count: number;
+  onIncrement: () => void;
+  onRemove: () => void;
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   return (
-    <View style={styles.chipRow}>
-      {GRAPPLING_SUBMISSIONS.map((s) => {
-        const n = counts[s.value] ?? 0;
-        const active = n > 0;
-        return (
-          <TouchableOpacity
-            key={s.value}
-            style={[styles.chip, active && styles.chipActive]}
-            onPress={() => onBump(s.value, +1)}
-            onLongPress={() => onBump(s.value, -1)}
-            delayLongPress={250}
-          >
-            <Text style={[styles.chipText, active && styles.chipTextActive]}>
-              {submissionLabel(s.value)}
-              {active ? ` · ${n}` : ''}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
+    <View style={styles.countChip}>
+      <TouchableOpacity
+        onPress={() => {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          onIncrement();
+        }}
+        accessibilityRole="button"
+        accessibilityLabel={`${label}, ${count}. Tap to add one`}
+      >
+        <Text style={styles.countChipText}>
+          {label} · {count}
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        hitSlop={8}
+        onPress={onRemove}
+        accessibilityRole="button"
+        accessibilityLabel={`Remove ${label}`}
+      >
+        <Ionicons name="close" size={13} color={T.onPrimary} style={styles.countChipClose} />
+      </TouchableOpacity>
     </View>
+  );
+}
+
+/**
+ * Searchable pageSheet picker for submission types: lists the bank (seeds +
+ * customs, plus the 'Other' escape hatch) filtered by query; tapping one adds
+ * it. A "Create …" row runs the pro-gated create path when nothing matches.
+ */
+function SubmissionPicker({
+  visible,
+  submissions,
+  counts,
+  onClose,
+  onSelect,
+  onCreate,
+}: {
+  visible: boolean;
+  submissions: TechniqueOption[];
+  counts: Record<string, number>;
+  onClose: () => void;
+  onSelect: (value: string) => void;
+  onCreate: (label: string) => Promise<void>;
+}) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const [query, setQuery] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const items = useMemo<TechniqueOption[]>(
+    () => [...submissions, { value: 'other', label: 'Other' }],
+    [submissions],
+  );
+  const q = query.trim().toLowerCase();
+  const matches = q ? items.filter((s) => s.label.toLowerCase().includes(q)) : items;
+  const exact = items.some((s) => s.label.toLowerCase() === q);
+
+  const close = () => {
+    setQuery('');
+    setBusy(false);
+    onClose();
+  };
+  const select = (value: string) => {
+    setQuery('');
+    onSelect(value);
+  };
+  const create = async () => {
+    if (busy || q === '') return;
+    setBusy(true);
+    await onCreate(query.trim());
+    setQuery('');
+    setBusy(false);
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={close}>
+      <View style={styles.modalSheet}>
+        <View style={styles.pickerHead}>
+          <Text style={styles.modalTitle}>Add submission</Text>
+          <TouchableOpacity onPress={close}>
+            <Text style={styles.pickerCancel}>Done</Text>
+          </TouchableOpacity>
+        </View>
+        <TextInput
+          style={styles.modalInput}
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Search or create…"
+          placeholderTextColor={T.muted}
+          autoFocus
+          returnKeyType="done"
+          onSubmitEditing={() => {
+            if (!exact && q) create();
+          }}
+          selectionColor={T.primary}
+        />
+        <ScrollView style={styles.pickerList} keyboardShouldPersistTaps="handled">
+          {matches.map((s) => {
+            const n = counts[s.value] ?? 0;
+            return (
+              <TouchableOpacity key={s.value} style={styles.pickerRow} onPress={() => select(s.value)}>
+                <Text style={styles.pickerRowText}>{s.label}</Text>
+                {n > 0 && <Text style={styles.pickerRowCount}>· {n}</Text>}
+              </TouchableOpacity>
+            );
+          })}
+          {q !== '' && !exact && (
+            <TouchableOpacity style={styles.pickerRow} onPress={create} disabled={busy}>
+              <Ionicons name="add" size={15} color={T.primary} />
+              <Text style={[styles.pickerRowText, styles.pickerCreateText]}>
+                Create “{query.trim()}”
+              </Text>
+            </TouchableOpacity>
+          )}
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
+/**
+ * Minimal create-only pageSheet used for custom positions (existing positions
+ * are already visible as toggle chips, so only creation needs a modal).
+ */
+function CreateTechniqueModal({
+  visible,
+  title,
+  placeholder,
+  onClose,
+  onCreate,
+}: {
+  visible: boolean;
+  title: string;
+  placeholder: string;
+  onClose: () => void;
+  onCreate: (label: string) => Promise<boolean>;
+}) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const close = () => {
+    setText('');
+    setBusy(false);
+    onClose();
+  };
+  const submit = async () => {
+    if (busy || text.trim() === '') return;
+    setBusy(true);
+    const ok = await onCreate(text);
+    if (ok) close();
+    else setBusy(false);
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={close}>
+      <View style={styles.modalSheet}>
+        <View style={styles.pickerHead}>
+          <Text style={styles.modalTitle}>{title}</Text>
+          <TouchableOpacity onPress={close}>
+            <Text style={styles.pickerCancel}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+        <TextInput
+          style={styles.modalInput}
+          value={text}
+          onChangeText={setText}
+          placeholder={placeholder}
+          placeholderTextColor={T.muted}
+          autoFocus
+          returnKeyType="done"
+          onSubmitEditing={submit}
+          selectionColor={T.primary}
+        />
+        <TouchableOpacity
+          style={[styles.modalPrimaryBtn, busy && styles.modalBtnDisabled]}
+          onPress={submit}
+          disabled={busy}
+        >
+          <Text style={styles.modalPrimaryText}>Add</Text>
+        </TouchableOpacity>
+      </View>
+    </Modal>
   );
 }
 
@@ -465,18 +897,14 @@ function StrikingCounters({
       <View>
         <Text style={styles.miniLabel}>Round type</Text>
         <View style={styles.chipRow}>
-          {STRIKING_ROUND_TYPES.map((rt) => {
-            const active = round.roundType === rt.value;
-            return (
-              <TouchableOpacity
-                key={rt.value}
-                style={[styles.chip, active && styles.chipActive]}
-                onPress={() => onChange({ roundType: active ? null : rt.value })}
-              >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{rt.label}</Text>
-              </TouchableOpacity>
-            );
-          })}
+          {STRIKING_ROUND_TYPES.map((rt) => (
+            <Chip
+              key={rt.value}
+              label={rt.label}
+              selected={round.roundType === rt.value}
+              onPress={() => onChange({ roundType: round.roundType === rt.value ? null : rt.value })}
+            />
+          ))}
         </View>
       </View>
 
@@ -513,18 +941,14 @@ function MmaCounters({
       <View>
         <Text style={styles.miniLabel}>Phases</Text>
         <View style={styles.chipRow}>
-          {MMA_PHASES.map((ph) => {
-            const active = phases.includes(ph.value);
-            return (
-              <TouchableOpacity
-                key={ph.value}
-                style={[styles.chip, active && styles.chipActive]}
-                onPress={() => togglePhase(ph.value)}
-              >
-                <Text style={[styles.chipText, active && styles.chipTextActive]}>{ph.label}</Text>
-              </TouchableOpacity>
-            );
-          })}
+          {MMA_PHASES.map((ph) => (
+            <Chip
+              key={ph.value}
+              label={ph.label}
+              selected={phases.includes(ph.value)}
+              onPress={() => togglePhase(ph.value)}
+            />
+          ))}
         </View>
       </View>
       <Stepper
@@ -538,12 +962,12 @@ function MmaCounters({
         onChange={(n) => onChange({ takedownsDefended: n })}
       />
       <Stepper
-        label="Submissions for"
+        label="Submissions landed"
         value={round.submissionsFor ?? 0}
         onChange={(n) => onChange({ submissionsFor: n })}
       />
       <Stepper
-        label="Submissions against"
+        label="Submissions taken"
         value={round.submissionsAgainst ?? 0}
         onChange={(n) => onChange({ submissionsAgainst: n })}
       />
@@ -551,46 +975,10 @@ function MmaCounters({
   );
 }
 
-function Stepper({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  onChange: (n: number) => void;
-}) {
-  const { T } = useTheme();
-  const styles = useMemo(() => makeStyles(T), [T]);
-  return (
-    <View style={styles.stepperRow}>
-      <Text style={styles.stepperLabel}>{label}</Text>
-      <View style={styles.stepper}>
-        <TouchableOpacity
-          style={styles.stepBtn}
-          onPress={() => onChange(Math.max(0, value - 1))}
-        >
-          <Ionicons name="remove" size={18} color={T.text} />
-        </TouchableOpacity>
-        <Text style={styles.stepValue}>{value}</Text>
-        <TouchableOpacity style={styles.stepBtn} onPress={() => onChange(value + 1)}>
-          <Ionicons name="add" size={18} color={T.text} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
 function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
     chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-    chip: {
-      paddingHorizontal: 11, paddingVertical: 6,
-      borderRadius: R.chip, borderWidth: 1, borderColor: T.border, backgroundColor: T.surface2,
-    },
-    chipActive: { backgroundColor: T.primary, borderColor: T.primary },
-    chipText: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, textTransform: 'capitalize' },
-    chipTextActive: { color: T.onPrimary },
+    addChip: { borderStyle: 'dashed', borderColor: T.borderStrong, backgroundColor: T.surface },
     roundCard: {
       gap: 10, paddingVertical: 12,
       borderTopWidth: 1, borderTopColor: T.borderStrong,
@@ -598,6 +986,11 @@ function makeStyles(T: ThemeColors) {
     roundHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     roundTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
     inlineRow: { flexDirection: 'row', gap: 12 },
+    minuteRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    stampBtn: {
+      width: 40, height: 40, alignItems: 'center', justifyContent: 'center',
+      borderRadius: R.sm, borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,
+    },
     miniLabel: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim, marginBottom: 5, textTransform: 'uppercase', letterSpacing: 0.4 },
     numInput: {
       fontFamily: F.mono, fontSize: 15, color: T.text,
@@ -605,6 +998,11 @@ function makeStyles(T: ThemeColors) {
       paddingHorizontal: 12, paddingVertical: 9,
     },
     journal: { minHeight: 64, fontFamily: F.ui },
+    otherNote: {
+      fontFamily: F.ui, fontSize: 14, color: T.text,
+      backgroundColor: T.surface, borderRadius: R.sm, borderWidth: 1, borderColor: T.border,
+      paddingHorizontal: 12, paddingVertical: 8,
+    },
     tagWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
     tagChip: {
       flexDirection: 'row', alignItems: 'center', gap: 4,
@@ -625,18 +1023,48 @@ function makeStyles(T: ThemeColors) {
       paddingHorizontal: 12, paddingVertical: 9, minHeight: 40,
     },
     giRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    stepperRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    stepperLabel: { fontFamily: F.uiMed, fontSize: 14, color: T.text, flex: 1 },
-    stepper: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-    stepBtn: {
-      width: 34, height: 34, alignItems: 'center', justifyContent: 'center',
-      borderRadius: R.sm, borderWidth: 1, borderColor: T.border, backgroundColor: T.surface,
+    sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    totalBadge: {
+      fontFamily: F.monoBold, fontSize: 14, color: T.text,
+      minWidth: 26, textAlign: 'center',
+      paddingHorizontal: 8, paddingVertical: 2,
+      borderRadius: R.chip, backgroundColor: T.surface,
     },
-    stepValue: { fontFamily: F.monoBold, fontSize: 16, color: T.text, minWidth: 22, textAlign: 'center' },
     addRound: {
       flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
       paddingVertical: 11, borderRadius: R.sm, borderWidth: 1, borderStyle: 'dashed', borderColor: T.borderStrong,
     },
     addRoundText: { fontFamily: F.uiSemi, fontSize: 14, color: T.primary },
+    addChipText: { color: T.primary },
+    countChip: {
+      flexDirection: 'row', alignItems: 'center', gap: 3,
+      paddingHorizontal: 11, paddingVertical: 6, borderRadius: R.chip,
+      borderWidth: 1, borderColor: T.primary, backgroundColor: T.primary,
+    },
+    countChipText: { fontFamily: F.uiMed, fontSize: 12, color: T.onPrimary, textTransform: 'capitalize' },
+    countChipClose: { marginLeft: 2, marginRight: -2, opacity: 0.85 },
+    modalSheet: { flex: 1, backgroundColor: T.bg, padding: 20, gap: 14 },
+    modalTitle: { fontFamily: F.uiBold, fontSize: 18, color: T.text },
+    modalInput: {
+      fontFamily: F.ui, fontSize: 16, color: T.text,
+      backgroundColor: T.surface, borderRadius: R.sm, borderWidth: 1, borderColor: T.border,
+      paddingHorizontal: 12, paddingVertical: 12,
+    },
+    pickerHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    pickerCancel: { fontFamily: F.uiSemi, fontSize: 15, color: T.primary },
+    pickerList: { marginTop: 2 },
+    pickerRow: {
+      flexDirection: 'row', alignItems: 'center', gap: 6,
+      paddingVertical: 13, paddingHorizontal: 4,
+      borderBottomWidth: 1, borderBottomColor: T.border,
+    },
+    pickerRowText: { fontFamily: F.uiMed, fontSize: 16, color: T.text },
+    pickerRowCount: { fontFamily: F.mono, fontSize: 14, color: T.textDim },
+    pickerCreateText: { color: T.primary, fontFamily: F.uiSemi },
+    modalPrimaryBtn: {
+      backgroundColor: T.primary, borderRadius: R.card, paddingVertical: 14, alignItems: 'center',
+    },
+    modalPrimaryText: { fontFamily: F.uiBold, fontSize: 16, color: T.onPrimary },
+    modalBtnDisabled: { opacity: 0.55 },
   });
 }

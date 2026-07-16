@@ -25,6 +25,7 @@ export const giTypeEnum       = pgEnum('gi_type',       ['gi', 'no_gi']);
 export const fightResultEnum  = pgEnum('fight_result',  ['win', 'loss', 'draw']);
 export const fightMethodEnum  = pgEnum('fight_method',  ['ko', 'tko', 'submission', 'decision', 'points', 'other']);
 export const focusStatusEnum  = pgEnum('focus_status',  ['active', 'achieved', 'archived']);
+export const techniqueKindEnum = pgEnum('technique_kind', ['position', 'submission']);
 
 export const users = pgTable('users', {
   id:           uuid('id').primaryKey().defaultRandom(),
@@ -80,6 +81,34 @@ export const disciplines = pgTable('disciplines', {
   globalNameIdx: uniqueIndex('disciplines_global_name_idx')
     .on(t.name)
     .where(sql`${t.userId} IS NULL`),
+}));
+
+// Grappling technique bank — the martial-arts analog of `exercises`. Global
+// seed rows (user_id IS NULL) come from GRAPPLING_POSITIONS/GRAPPLING_SUBMISSIONS
+// in @app/shared; users add their own customs. The round logger renders these as
+// chips. `value` is the machine key stored in the rounds JSONB
+// (session_entries.details) — for customs it's a slug of `label`; keep it stable
+// so previously-logged rounds keep resolving. category is 'grappling' for now
+// but the column leaves room to extend to striking later.
+export const techniques = pgTable('techniques', {
+  id:        uuid('id').primaryKey().defaultRandom(),
+  userId:    uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  kind:      techniqueKindEnum('kind').notNull(),
+  category:  disciplineCatEnum('category').notNull().default('grappling'),
+  value:     text('value').notNull(),
+  label:     text('label').notNull(),
+  sourceId:  text('source_id').unique(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  // One global seed row per (kind, value) — gives the seeder an ON CONFLICT
+  // target so re-seeding can update labels in place. Mirrors disciplines_global_name_idx.
+  globalKeyIdx: uniqueIndex('techniques_global_key_idx')
+    .on(t.kind, t.value)
+    .where(sql`${t.userId} IS NULL`),
+  // A user can't duplicate their own custom for the same (kind, value).
+  ownerKeyIdx: uniqueIndex('techniques_owner_key_idx')
+    .on(t.userId, t.kind, t.value)
+    .where(sql`${t.userId} IS NOT NULL`),
 }));
 
 // Training partners — people the user rolls/spars with, referenced from

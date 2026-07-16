@@ -4,7 +4,8 @@ import { fileURLToPath } from 'url';
 import postgres from 'postgres';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { isNull, sql } from 'drizzle-orm';
-import { disciplines, exercises } from './schema';
+import { GRAPPLING_POSITIONS, GRAPPLING_SUBMISSIONS } from '@app/shared';
+import { disciplines, exercises, techniques } from './schema';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -109,6 +110,34 @@ async function seed() {
       },
     });
   console.log(`Upserted ${globalDisciplines.length} global disciplines.`);
+
+  // 5. Seed the global grappling technique bank from the shared constants. The
+  // `value` is reused verbatim so rounds already logged with these keys keep
+  // resolving. 'other' is a client-only escape hatch in the logger — not a bank
+  // row. Upsert on source_id so re-seeding refreshes labels in place.
+  const techniqueRows = [
+    ...GRAPPLING_POSITIONS.map((p) => ({ kind: 'position' as const, value: p.value, label: p.label })),
+    ...GRAPPLING_SUBMISSIONS.filter((s) => s.value !== 'other').map((s) => ({
+      kind: 'submission' as const,
+      value: s.value,
+      label: s.label,
+    })),
+  ].map((t) => ({
+    kind:      t.kind,
+    category:  'grappling' as const,
+    value:     t.value,
+    label:     t.label,
+    sourceId:  `${t.kind}:${t.value}`,
+  }));
+
+  await db
+    .insert(techniques)
+    .values(techniqueRows)
+    .onConflictDoUpdate({
+      target: techniques.sourceId,
+      set: { label: sql`excluded.label` },
+    });
+  console.log(`Upserted ${techniqueRows.length} global grappling techniques.`);
 
   await client.end();
 }
