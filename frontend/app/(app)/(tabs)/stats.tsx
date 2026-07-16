@@ -350,8 +350,8 @@ function makeStyles(T: ThemeColors) {
       paddingHorizontal: D.pad,
       paddingTop: 14,
       paddingBottom: 14,
-      borderBottomWidth: 1,
-      borderBottomColor: T.border,
+      borderBottomWidth: 2,
+      borderBottomColor: T.text,
     },
     headerTitle: { fontFamily: F.uiBold, fontSize: 22, color: T.text, letterSpacing: -0.3 },
 
@@ -379,17 +379,17 @@ function makeStyles(T: ThemeColors) {
     segmentText: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim },
     segmentTextActive: { color: T.onPrimary, fontFamily: F.uiSemi },
 
+    // Broadsheet: sections are flat, separated by rules — not floating cards.
     card: {
-      backgroundColor: T.surface,
-      borderWidth: 1,
-      borderColor: T.border,
-      borderRadius: R.card,
-      padding: D.cardPad,
+      borderTopWidth: 1,
+      borderTopColor: T.borderStrong,
+      paddingTop: 14,
+      paddingBottom: 4,
     },
 
     // Highlights card
     highlightsLabel: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
-    highlightsTitle: { fontFamily: F.uiBold, fontSize: 16, color: T.text },
+    highlightsTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
     statCardsRow: { flexDirection: 'row', gap: 8 },
     statCard: {
       flex: 1,
@@ -416,7 +416,7 @@ function makeStyles(T: ThemeColors) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    cardTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text },
+    cardTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
 
     // Muscles card
     toggleRow: { flexDirection: 'row', gap: 4 },
@@ -476,11 +476,9 @@ function makeStyles(T: ThemeColors) {
 
     // Body weight category card
     catCard: {
-      backgroundColor: T.surface,
-      borderWidth: 1,
-      borderColor: T.border,
-      borderRadius: R.card,
-      padding: D.cardPad,
+      borderTopWidth: 1,
+      borderTopColor: T.borderStrong,
+      paddingVertical: 14,
       flexDirection: 'row',
       gap: 14,
       alignItems: 'flex-start',

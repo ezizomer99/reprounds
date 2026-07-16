@@ -217,8 +217,8 @@ function makeStyles(T: ThemeColors) {
       paddingHorizontal: D.pad,
       paddingTop: 14,
       paddingBottom: 14,
-      borderBottomWidth: 1,
-      borderBottomColor: T.border,
+      borderBottomWidth: 2,
+      borderBottomColor: T.text,
     },
     headerTitle: { fontFamily: F.uiBold, fontSize: 22, color: T.text, letterSpacing: -0.3 },
     gearBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
@@ -228,11 +228,7 @@ function makeStyles(T: ThemeColors) {
 
     // User card
     userCard: {
-      backgroundColor: T.surface,
-      borderWidth: 1,
-      borderColor: T.border,
-      borderRadius: R.card,
-      padding: D.cardPad,
+      paddingVertical: 6,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 14,
@@ -270,13 +266,12 @@ function makeStyles(T: ThemeColors) {
     },
     guestBannerBtnText: { fontFamily: F.uiBold, fontSize: 14, color: T.onPrimary },
 
-    // Card
+    // Broadsheet: flat rule-separated section.
     card: {
-      backgroundColor: T.surface,
-      borderWidth: 1,
-      borderColor: T.border,
-      borderRadius: R.card,
-      padding: D.cardPad,
+      borderTopWidth: 1,
+      borderTopColor: T.borderStrong,
+      paddingTop: 14,
+      paddingBottom: 4,
     },
     cardHeader: {
       flexDirection: 'row',
@@ -285,7 +280,7 @@ function makeStyles(T: ThemeColors) {
       marginBottom: 14,
     },
     cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-    cardTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text },
+    cardTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
 
     workoutStatRow: {
       flexDirection: 'row',
@@ -313,19 +308,15 @@ function makeStyles(T: ThemeColors) {
       letterSpacing: 1.2,
     },
 
-    // List card
+    // Broadsheet: nav groups are flat rows under a rule, no card shell.
     listCard: {
-      backgroundColor: T.surface,
-      borderWidth: 1,
-      borderColor: T.border,
-      borderRadius: R.card,
-      overflow: 'hidden',
+      borderTopWidth: 1,
+      borderTopColor: T.borderStrong,
     },
     navRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      paddingHorizontal: D.cardPad,
       paddingVertical: 15,
     },
     navRowIcon: {
@@ -337,7 +328,7 @@ function makeStyles(T: ThemeColors) {
       justifyContent: 'center',
     },
     navRowLabel: { flex: 1, fontFamily: F.uiMed, fontSize: 15, color: T.text },
-    rowDivider: { height: 1, backgroundColor: T.border, marginLeft: D.cardPad + 30 + 12 },
+    rowDivider: { height: 1, backgroundColor: T.border, marginLeft: 30 + 12 },
 
   });
 }

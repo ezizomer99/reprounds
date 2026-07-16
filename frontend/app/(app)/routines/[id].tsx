@@ -854,7 +854,7 @@ function makeStyles(T: ThemeColors) {
   header: {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     paddingHorizontal: 12, paddingVertical: 10,
-    borderBottomWidth: 1, borderBottomColor: T.border,
+    borderBottomWidth: 2, borderBottomColor: T.text,
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { flex: 1, fontFamily: F.uiSemi, fontSize: 19, color: T.text, letterSpacing: -0.2 },
@@ -944,7 +944,7 @@ function makeStyles(T: ThemeColors) {
     flexDirection: 'row', alignItems: 'center', gap: 8,
     paddingHorizontal: D.pad, paddingVertical: 8,
   },
-  planNum: { width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, borderColor: T.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  planNum: { width: 30, height: 30, borderRadius: R.sm, borderWidth: 1.5, borderColor: T.borderStrong, alignItems: 'center', justifyContent: 'center' },
   planNumText: { fontFamily: F.monoBold, fontSize: 14, color: T.text },
   planTypeChip: { borderWidth: 1, borderRadius: R.chip, paddingHorizontal: 8, paddingVertical: 4, minWidth: 64, alignItems: 'center' },
   planTypeChipText: { fontFamily: F.uiSemi, fontSize: 11 },

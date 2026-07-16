@@ -202,15 +202,15 @@ function makeStyles(T: ThemeColors) {
     header: {
       flexDirection: 'row', alignItems: 'center', gap: 8,
       paddingHorizontal: 12, paddingVertical: 10,
-      borderBottomWidth: 1, borderBottomColor: T.border,
+      borderBottomWidth: 2, borderBottomColor: T.text,
     },
     backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
     headerTitle: { flex: 1, fontFamily: F.uiBold, fontSize: 19, color: T.text, letterSpacing: -0.2 },
 
     hint: { fontFamily: F.uiMed, fontSize: 12, color: T.muted, marginBottom: 4 },
     card: {
-      backgroundColor: T.surface, borderWidth: 1, borderColor: T.border,
-      borderRadius: R.card, padding: D.cardPad,
+      borderTopWidth: 1, borderTopColor: T.border,
+      paddingVertical: 14,
     },
     cardHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
     avatar: {

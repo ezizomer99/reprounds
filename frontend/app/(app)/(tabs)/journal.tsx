@@ -100,7 +100,7 @@ export default function JournalTab() {
         <View style={{ paddingTop: 8 }}>
           {Array.from({ length: 7 }).map((_, i) => (
             <View key={i} style={styles.skeletonRow}>
-              <Skeleton width={40} height={40} radius={20} />
+              <Skeleton width={40} height={40} radius={R.sm} />
               <View style={{ flex: 1, gap: 8 }}>
                 <Skeleton width="55%" height={14} />
                 <Skeleton width="32%" height={11} />
@@ -181,8 +181,8 @@ function makeStyles(T: ThemeColors) {
       paddingHorizontal: D.pad,
       paddingTop: 14,
       paddingBottom: 14,
-      borderBottomWidth: 1,
-      borderBottomColor: T.border,
+      borderBottomWidth: 2,
+      borderBottomColor: T.text,
     },
     headerTitle: { fontFamily: F.uiBold, fontSize: 22, color: T.text, letterSpacing: -0.3 },
     headerSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 2 },
@@ -197,7 +197,7 @@ function makeStyles(T: ThemeColors) {
     filterChip: {
       paddingHorizontal: 14,
       paddingVertical: 7,
-      borderRadius: 20,
+      borderRadius: R.sm,
       borderWidth: 1,
       borderColor: T.border,
       backgroundColor: T.surface,

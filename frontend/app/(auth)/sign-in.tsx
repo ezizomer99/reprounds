@@ -281,7 +281,7 @@ function makeStyles(T: ThemeColors) {
     tagline: {
       fontFamily: F.mono,
       fontSize: 11,
-      color: '#A29B90',
+      color: '#9DA29B',
       letterSpacing: 2.4,
       textTransform: 'uppercase',
     },

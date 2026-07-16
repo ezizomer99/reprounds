@@ -4,6 +4,7 @@ import * as Haptics from 'expo-haptics';
 import { F, R, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../lib/color';
+import { CutCornerView } from './CutCornerView';
 
 interface RestTimerProps {
   seconds: number;
@@ -22,7 +23,11 @@ export function RestTimer({ seconds, total, onSkip, onAdd, style }: RestTimerPro
   const ss = String(seconds % 60).padStart(2, '0');
 
   return (
-    <View style={[styles.container, style]}>
+    <CutCornerView
+      fill={T.surface2}
+      stroke={withAlpha(T.primary, 0.35)}
+      style={[styles.container, style]}
+    >
       <View style={styles.barTrack}>
         <View style={[styles.barFill, { width: `${frac * 100}%` as `${number}%` }]} />
       </View>
@@ -51,28 +56,21 @@ export function RestTimer({ seconds, total, onSkip, onAdd, style }: RestTimerPro
           <Text style={styles.skipBtnText}>Skip</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </CutCornerView>
   );
 }
 
 function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
     container: {
-      backgroundColor: T.surface2,
-      borderWidth: 1,
-      borderColor: withAlpha(T.primary, 0.35),
-      borderRadius: R.card,
       marginHorizontal: 18,
       marginBottom: 8,
-      overflow: 'hidden',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 10 },
-      shadowOpacity: 0.35,
-      shadowRadius: 15,
-      elevation: 8,
     },
+    // Inset from the edges so the bar clears the cut top-left corner.
     barTrack: {
       height: 3,
+      marginTop: 12,
+      marginHorizontal: 14,
       backgroundColor: withAlpha(T.primary, 0.15),
     },
     barFill: {

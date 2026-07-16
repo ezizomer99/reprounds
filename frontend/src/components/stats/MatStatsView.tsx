@@ -9,7 +9,7 @@ import { useMatStats } from '../../hooks/useStats';
 import { useProGate } from '../../hooks/useProGate';
 import { weeksAgoMonday } from '../../lib/statsHelpers';
 import { Skeleton } from '../Skeleton';
-import { D, F, R, ThemeColors } from '../../theme/colors';
+import { F, R, ThemeColors } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeContext';
 import { withAlpha } from '../../lib/color';
 
@@ -421,26 +421,24 @@ export function MatStatsView() {
 function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
     partnersCard: {
-      backgroundColor: T.surface,
-      borderWidth: 1,
-      borderColor: T.border,
-      borderRadius: R.card,
-      padding: D.cardPad,
+      borderTopWidth: 1,
+      borderTopColor: T.borderStrong,
+      paddingVertical: 14,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
     },
     partnersSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 2 },
+    // Broadsheet: flat rule-separated section.
     card: {
-      backgroundColor: T.surface,
-      borderWidth: 1,
-      borderColor: T.border,
-      borderRadius: R.card,
-      padding: D.cardPad,
+      borderTopWidth: 1,
+      borderTopColor: T.borderStrong,
+      paddingTop: 14,
+      paddingBottom: 4,
     },
 
     highlightsLabel: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
-    highlightsTitle: { fontFamily: F.uiBold, fontSize: 16, color: T.text },
+    highlightsTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
     statCardsRow: { flexDirection: 'row', gap: 8 },
     statCard: {
       flex: 1,
@@ -467,12 +465,12 @@ function makeStyles(T: ThemeColors) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    cardTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text },
+    cardTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
 
     intensityBar: {
       flexDirection: 'row',
       height: 14,
-      borderRadius: 7,
+      borderRadius: 2,
       overflow: 'hidden',
       backgroundColor: T.surface2,
     },

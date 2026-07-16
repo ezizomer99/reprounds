@@ -1,8 +1,8 @@
 import { Text, View } from 'react-native';
+import { BRAND } from '../theme/colors';
 
-const INK = '#17140F';
-const VERMILION = '#D8432A';
-const BONE = '#F4F0E7';
+const INK = BRAND.ink;
+const BONE = BRAND.bone;
 
 interface RepRoundsWordmarkProps {
   fontSize?: number;
@@ -11,6 +11,8 @@ interface RepRoundsWordmarkProps {
 
 export function RepRoundsWordmark({ fontSize = 21, onDark = false }: RepRoundsWordmarkProps) {
   const repColor = onDark ? BONE : INK;
+  // Volt lime is unreadable on white — use the deep variant on light backgrounds.
+  const roundsColor = onDark ? BRAND.volt : BRAND.voltDeep;
   const letterSpacing = -0.02 * fontSize;
 
   const textStyle = {
@@ -23,7 +25,7 @@ export function RepRoundsWordmark({ fontSize = 21, onDark = false }: RepRoundsWo
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
       <Text style={[textStyle, { color: repColor }]}>Rep</Text>
-      <Text style={[textStyle, { color: VERMILION }]}>Rounds</Text>
+      <Text style={[textStyle, { color: roundsColor }]}>Rounds</Text>
     </View>
   );
 }

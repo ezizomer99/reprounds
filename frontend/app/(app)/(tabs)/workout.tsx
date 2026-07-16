@@ -17,6 +17,7 @@ import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useSessions } from '../../../src/hooks/useSession';
 import { useRoutines } from '../../../src/hooks/useRoutines';
 import { InlineError } from '../../../src/components/InlineError';
+import { CutCornerView } from '../../../src/components/CutCornerView';
 import { mondayOf, weekKey, computeWeekStreak } from '../../../src/lib/statsHelpers';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
@@ -158,12 +159,13 @@ export default function WorkoutTab() {
             </View>
           </View>
           <TouchableOpacity
-            style={styles.startBtn}
             onPress={() => router.push('/sessions/new' as never)}
             activeOpacity={0.85}
           >
-            <Ionicons name="add" size={20} color={T.onPrimary} />
-            <Text style={styles.startBtnText}>Start New Workout</Text>
+            <CutCornerView fill={T.primary} style={styles.startBtn}>
+              <Ionicons name="add" size={20} color={T.onPrimary} />
+              <Text style={styles.startBtnText}>Start New Workout</Text>
+            </CutCornerView>
           </TouchableOpacity>
         </View>
 
@@ -270,8 +272,8 @@ function makeStyles(T: ThemeColors) {
       paddingHorizontal: D.pad,
       paddingTop: 14,
       paddingBottom: 14,
-      borderBottomWidth: 1,
-      borderBottomColor: T.border,
+      borderBottomWidth: 2,
+      borderBottomColor: T.text,
     },
     greeting: { fontFamily: F.uiBold, fontSize: 22, color: T.text, letterSpacing: -0.3 },
     todayLabel: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim, marginTop: 3 },
@@ -279,12 +281,12 @@ function makeStyles(T: ThemeColors) {
     scroll: { flex: 1 },
     body: { padding: D.pad, gap: D.stack },
 
+    // Broadsheet: sections are flat, separated by rules — not floating cards.
     card: {
-      backgroundColor: T.surface,
-      borderWidth: 1,
-      borderColor: T.border,
-      borderRadius: R.card,
-      padding: D.cardPad,
+      borderTopWidth: 1,
+      borderTopColor: T.borderStrong,
+      paddingTop: 14,
+      paddingBottom: 4,
     },
 
     quickStartRow: {
@@ -301,11 +303,9 @@ function makeStyles(T: ThemeColors) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    quickTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text, marginBottom: 2 },
+    quickTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 2 },
     quickSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
     startBtn: {
-      backgroundColor: T.primary,
-      borderRadius: R.card,
       paddingVertical: 14,
       flexDirection: 'row',
       alignItems: 'center',
@@ -329,7 +329,7 @@ function makeStyles(T: ThemeColors) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    weekTitle: { fontFamily: F.uiSemi, fontSize: 15, color: T.text },
+    weekTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
     weekSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginBottom: 14 },
 
     weekStrip: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
@@ -380,7 +380,7 @@ function makeStyles(T: ThemeColors) {
       alignItems: 'center',
       justifyContent: 'space-between',
     },
-    sectionTitle: { fontFamily: F.uiBold, fontSize: 17, color: T.text },
+    sectionTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1.2 },
     viewAll: { fontFamily: F.uiMed, fontSize: 13, color: T.primary },
 
     routinesList: { gap: 10, paddingVertical: 2 },

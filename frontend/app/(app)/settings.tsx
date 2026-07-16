@@ -430,7 +430,7 @@ function makeStyles(T: ThemeColors) {
     header: {
       flexDirection: 'row', alignItems: 'center', gap: 8,
       paddingHorizontal: 12, paddingVertical: 10,
-      borderBottomWidth: 1, borderBottomColor: T.border,
+      borderBottomWidth: 2, borderBottomColor: T.text,
     },
     backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
     headerTitle: {
@@ -443,9 +443,8 @@ function makeStyles(T: ThemeColors) {
       textTransform: 'uppercase', letterSpacing: 1.2,
     },
     card: {
-      backgroundColor: T.surface, borderRadius: R.card,
-      borderWidth: 1, borderColor: T.border,
-      padding: D.cardPad, gap: 14,
+      borderTopWidth: 1, borderTopColor: T.borderStrong,
+      paddingTop: 14, gap: 14,
     },
     rowLabel: { fontFamily: F.uiSemi, fontSize: 15, color: T.text },
     segmentRow: {

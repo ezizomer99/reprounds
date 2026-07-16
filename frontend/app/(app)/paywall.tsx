@@ -202,17 +202,13 @@ function makeStyles(T: ThemeColors) {
     },
 
     featureCard: {
-      backgroundColor: T.surface,
-      borderWidth: 1,
-      borderColor: T.border,
-      borderRadius: R.card,
-      overflow: 'hidden',
+      borderTopWidth: 1,
+      borderTopColor: T.borderStrong,
     },
     featureRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
-      paddingHorizontal: D.cardPad,
       paddingVertical: 13,
     },
     featureRowBorder: { borderBottomWidth: 1, borderBottomColor: T.border },
