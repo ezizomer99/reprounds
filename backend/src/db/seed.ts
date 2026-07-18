@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import postgres from 'postgres';
@@ -25,49 +25,56 @@ interface RawExercise {
 }
 
 async function seed() {
-  // 1. Load exercises.json (lives two levels up at data/exercises.json)
+  // 1. Load exercises.json (lives two levels up at data/exercises.json).
+  // data/ is gitignored, so the file only exists on a dev machine — in CI
+  // (deploy-backend's "Seed global defaults" step) it is absent and the
+  // exercise seed is skipped; disciplines and techniques still run.
   const jsonPath = join(__dirname, '..', '..', '..', 'data', 'exercises.json');
-  const raw: RawExercise[] = JSON.parse(readFileSync(jsonPath, 'utf8'));
+  if (existsSync(jsonPath)) {
+    const raw: RawExercise[] = JSON.parse(readFileSync(jsonPath, 'utf8'));
 
-  console.log(`Seeding ${raw.length} exercises...`);
+    console.log(`Seeding ${raw.length} exercises...`);
 
-  const rows = raw.map((ex) => {
-    return {
-      sourceId:         ex.id,
-      name:             ex.name,
-      type:             (ex.type ?? 'strength') as 'strength' | 'conditioning' | 'martial_arts',
-      category:         ex.category ?? null,
-      bodyPart:         ex.body_part ?? null,
-      equipment:        ex.equipment ?? null,
-      muscleGroup:      ex.muscle_group ?? null,
-      secondaryMuscles: ex.secondary_muscles ?? [],
-      target:           ex.target ?? null,
-    };
-  });
+    const rows = raw.map((ex) => {
+      return {
+        sourceId:         ex.id,
+        name:             ex.name,
+        type:             (ex.type ?? 'strength') as 'strength' | 'conditioning' | 'martial_arts',
+        category:         ex.category ?? null,
+        bodyPart:         ex.body_part ?? null,
+        equipment:        ex.equipment ?? null,
+        muscleGroup:      ex.muscle_group ?? null,
+        secondaryMuscles: ex.secondary_muscles ?? [],
+        target:           ex.target ?? null,
+      };
+    });
 
-  // 3. Upsert in chunks of 100 to stay within Postgres parameter limit
-  const CHUNK = 100;
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    await db
-      .insert(exercises)
-      .values(rows.slice(i, i + CHUNK))
-      .onConflictDoUpdate({
-        target: exercises.sourceId,
-        set: {
-          name:             sql`excluded.name`,
-          type:             sql`excluded.type`,
-          category:         sql`excluded.category`,
-          bodyPart:         sql`excluded.body_part`,
-          equipment:        sql`excluded.equipment`,
-          muscleGroup:      sql`excluded.muscle_group`,
-          secondaryMuscles: sql`excluded.secondary_muscles`,
-          target:           sql`excluded.target`,
-        },
-      });
-    console.log(`  ${Math.min(i + CHUNK, rows.length)}/${rows.length}`);
+    // 3. Upsert in chunks of 100 to stay within Postgres parameter limit
+    const CHUNK = 100;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      await db
+        .insert(exercises)
+        .values(rows.slice(i, i + CHUNK))
+        .onConflictDoUpdate({
+          target: exercises.sourceId,
+          set: {
+            name:             sql`excluded.name`,
+            type:             sql`excluded.type`,
+            category:         sql`excluded.category`,
+            bodyPart:         sql`excluded.body_part`,
+            equipment:        sql`excluded.equipment`,
+            muscleGroup:      sql`excluded.muscle_group`,
+            secondaryMuscles: sql`excluded.secondary_muscles`,
+            target:           sql`excluded.target`,
+          },
+        });
+      console.log(`  ${Math.min(i + CHUNK, rows.length)}/${rows.length}`);
+    }
+
+    console.log('Exercises seeded.');
+  } else {
+    console.log('data/exercises.json not found (gitignored, local-only) — skipping exercise seed.');
   }
-
-  console.log('Exercises seeded.');
 
   // 4. Seed global disciplines (idempotent per-name — adds any missing ones).
   // Category drives the structured round-logging UI; field_config is the
