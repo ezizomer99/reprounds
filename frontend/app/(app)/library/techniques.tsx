@@ -201,6 +201,7 @@ export default function TechniquesScreen() {
   const { data: currentUser } = useCurrentUser();
   const { isPro, showPaywall } = useProGate();
   const [showAdd, setShowAdd] = useState(false);
+  const [search, setSearch] = useState('');
 
   const { data: techniques, isLoading, isError, error } = useTechniques({ category: 'grappling' });
   const deleteTechnique = useDeleteTechnique();
@@ -210,13 +211,17 @@ export default function TechniquesScreen() {
   const canAdd = isPro || customCount < FREE_CUSTOM_TECHNIQUE_LIMIT;
 
   const sections = useMemo(() => {
-    const positions = list.filter((t) => t.kind === 'position');
-    const submissions = list.filter((t) => t.kind === 'submission');
+    const query = search.trim().toLowerCase();
+    const matches = query
+      ? list.filter((t) => t.label.toLowerCase().includes(query))
+      : list;
+    const positions = matches.filter((t) => t.kind === 'position');
+    const submissions = matches.filter((t) => t.kind === 'submission');
     return [
       { title: 'Positions', data: positions },
       { title: 'Submissions', data: submissions },
     ].filter((s) => s.data.length > 0);
-  }, [list]);
+  }, [list, search]);
 
   function handleDelete(id: string) {
     deleteTechnique.mutate(id, {
@@ -263,6 +268,19 @@ export default function TechniquesScreen() {
         </TouchableOpacity>
       </View>
 
+      <View style={styles.searchRow}>
+        <Ionicons name="search" size={15} color={T.muted} />
+        <TextInput
+          style={styles.searchInput}
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search positions & submissions…"
+          placeholderTextColor={T.muted}
+          returnKeyType="search"
+          selectionColor={T.primary}
+        />
+      </View>
+
       {isLoading && (
         <View style={styles.centered}><ActivityIndicator size="large" color={T.primary} /></View>
       )}
@@ -290,7 +308,11 @@ export default function TechniquesScreen() {
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
             <View style={styles.centered}>
-              <Text style={styles.emptyText}>No techniques found.</Text>
+              <Text style={styles.emptyText}>
+                {search.trim()
+                  ? `No techniques match "${search.trim()}".`
+                  : 'No techniques found.'}
+              </Text>
             </View>
           }
           contentContainerStyle={[
@@ -326,6 +348,27 @@ function makeStyles(T: ThemeColors) {
     addBtn: {
       width: 36, height: 36, borderRadius: R.sm,
       backgroundColor: T.primary, alignItems: 'center', justifyContent: 'center',
+    },
+
+    searchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: T.surface,
+      margin: D.pad,
+      marginBottom: 0,
+      borderRadius: R.sm,
+      paddingLeft: 12,
+      borderWidth: 1,
+      borderColor: T.border,
+    },
+    searchInput: {
+      flex: 1,
+      fontFamily: F.uiMed,
+      fontSize: 14,
+      color: T.text,
+      paddingVertical: 10,
+      paddingRight: 12,
     },
 
     sectionHeader: {

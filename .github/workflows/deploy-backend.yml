@@ -53,6 +53,16 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: pnpm --filter backend deploy:production
 
+      # Idempotent upsert of global defaults (exercises, disciplines,
+      # positions/submissions). Runs after migrate so the schema is current.
+      # Without this, seed-only additions (e.g. new default techniques) never
+      # reach prod — that's how the Positions & Submissions library screen
+      # sat empty while the round logger showed hardcoded fallbacks.
+      - name: Seed global defaults
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: pnpm --filter backend db:seed:ci
+
       # Also deploy the dev Worker (reprounds-api) so it never drifts behind
       # prod. EAS *development* builds point EXPO_PUBLIC_API_URL at this Worker
       # (see frontend/eas.json), so if it lags, on-device dev testing 404s on
