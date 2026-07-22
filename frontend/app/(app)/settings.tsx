@@ -21,7 +21,6 @@ import { useCurrentUser, useSignOut, useDeleteAccount, useChangePassword } from 
 import { F, R, D, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useUnit } from '../../src/units/UnitContext';
-import { useRestTimerDefault } from '../../src/restTimer/RestTimerContext';
 import { useNotificationsEnabled } from '../../src/notifications/NotificationsContext';
 import { withAlpha } from '../../src/lib/color';
 import type { WeightUnit } from '../../src/units/units';
@@ -39,20 +38,9 @@ const UNITS: { value: WeightUnit; label: string }[] = [
   { value: 'lbs', label: 'Pounds' },
 ];
 
-const REST_OPTS = [
-  { value: 30, label: '30s' },
-  { value: 60, label: '1 min' },
-  { value: 90, label: '90s' },
-  { value: 120, label: '2 min' },
-  { value: 180, label: '3 min' },
-] as const;
-
-const REST_PRESET_VALUES = REST_OPTS.map((o) => o.value);
-
 export default function SettingsScreen() {
   const { T, mode, setMode } = useTheme();
   const { unit, setUnit } = useUnit();
-  const { restTimerDefault, setRestTimerDefault } = useRestTimerDefault();
   const { notificationsEnabled, setNotificationsEnabled } = useNotificationsEnabled();
   const styles = useMemo(() => makeStyles(T), [T]);
   const router = useRouter();
@@ -63,11 +51,6 @@ export default function SettingsScreen() {
   const { deleteAccount } = useDeleteAccount();
   const [deleting, setDeleting] = useState(false);
   const [showChangePw, setShowChangePw] = useState(false);
-  const [customRest, setCustomRest] = useState(() =>
-    REST_PRESET_VALUES.includes(restTimerDefault as 30 | 60 | 90 | 120 | 180)
-      ? ''
-      : String(restTimerDefault),
-  );
 
   const isGuest = user?.isGuest ?? false;
   const displayName = isGuest
@@ -232,60 +215,6 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               );
             })}
-          </View>
-        </View>
-
-        {/* Workout Defaults */}
-        <Text style={styles.sectionLabel}>Workout Defaults</Text>
-        <View style={styles.card}>
-          <Text style={styles.rowLabel}>Rest Timer</Text>
-          <View style={styles.segmentRowWrap}>
-            {REST_OPTS.map(({ value, label }) => {
-              const active = restTimerDefault === value && customRest === '';
-              return (
-                <TouchableOpacity
-                  key={value}
-                  style={[styles.segmentWrap, active && styles.segmentActive]}
-                  onPress={() => { setRestTimerDefault(value); setCustomRest(''); }}
-                  activeOpacity={0.75}
-                >
-                  <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
-                    {label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-          <View style={styles.customRestRow}>
-            <Text style={styles.customRestLabel}>Custom (sec)</Text>
-            <TextInput
-              style={[styles.customRestInput, customRest !== '' && styles.customRestInputActive]}
-              value={customRest}
-              onChangeText={setCustomRest}
-              onBlur={() => {
-                const n = parseInt(customRest, 10);
-                if (Number.isInteger(n) && n > 0 && n <= 600) {
-                  setRestTimerDefault(n);
-                  setCustomRest(String(n));
-                } else {
-                  setCustomRest('');
-                }
-              }}
-              onSubmitEditing={() => {
-                const n = parseInt(customRest, 10);
-                if (Number.isInteger(n) && n > 0 && n <= 600) {
-                  setRestTimerDefault(n);
-                  setCustomRest(String(n));
-                } else {
-                  setCustomRest('');
-                }
-              }}
-              keyboardType="number-pad"
-              maxLength={3}
-              placeholder="e.g. 45"
-              placeholderTextColor={T.muted}
-              returnKeyType="done"
-            />
           </View>
         </View>
 
@@ -458,36 +387,9 @@ function makeStyles(T: ThemeColors) {
       flex: 1, paddingVertical: 8, alignItems: 'center',
       borderRadius: R.sm - 2,
     },
-    segmentRowWrap: {
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      backgroundColor: T.surface2,
-      borderRadius: R.sm,
-      padding: 3,
-      gap: 3,
-    },
-    segmentWrap: {
-      flexGrow: 1,
-      minWidth: '18%',
-      paddingVertical: 8,
-      alignItems: 'center',
-      borderRadius: R.sm - 2,
-    },
     segmentActive: { backgroundColor: T.primary },
     segmentText: { fontFamily: F.uiMed, fontSize: 14, color: T.textDim },
     segmentTextActive: { fontFamily: F.uiBold, color: T.onPrimary },
-    // Custom rest timer
-    customRestRow: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    },
-    customRestLabel: { fontFamily: F.uiMed, fontSize: 14, color: T.textDim },
-    customRestInput: {
-      fontFamily: F.mono, fontSize: 15, color: T.text,
-      borderWidth: 1, borderColor: T.border, borderRadius: R.sm,
-      paddingHorizontal: 12, paddingVertical: 7,
-      minWidth: 72, textAlign: 'center',
-    },
-    customRestInputActive: { borderColor: T.primary, color: T.primary },
     // Account section
     avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
     avatarCircle: {

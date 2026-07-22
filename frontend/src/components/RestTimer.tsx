@@ -18,6 +18,9 @@ export function RestTimer({ seconds, total, onSkip, onAdd, style }: RestTimerPro
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
 
+  // The pill lingers briefly at 0:00 before auto-dismissing; label it "Done"
+  // so the pause reads as intentional.
+  const done = seconds <= 0;
   const frac = Math.max(0, Math.min(1, seconds / total));
   const mm = String(Math.floor(seconds / 60));
   const ss = String(seconds % 60).padStart(2, '0');
@@ -34,10 +37,10 @@ export function RestTimer({ seconds, total, onSkip, onAdd, style }: RestTimerPro
 
       <View style={styles.row}>
         <View style={styles.textCol}>
-          <Text style={styles.label}>Rest</Text>
-          <Text style={styles.time}>{mm}:{ss}</Text>
+          <Text style={styles.label}>{done ? 'Rest done' : 'Rest'}</Text>
+          <Text style={[styles.time, done && { color: T.primary }]}>{mm}:{ss}</Text>
         </View>
-        <TouchableOpacity
+        {!done && <TouchableOpacity
           style={styles.addBtn}
           onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onAdd(); }}
           activeOpacity={0.7}
@@ -45,15 +48,15 @@ export function RestTimer({ seconds, total, onSkip, onAdd, style }: RestTimerPro
           accessibilityLabel="Add 15 seconds to rest"
         >
           <Text style={styles.addBtnText}>+15s</Text>
-        </TouchableOpacity>
+        </TouchableOpacity>}
         <TouchableOpacity
           style={styles.skipBtn}
           onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onSkip(); }}
           activeOpacity={0.7}
           accessibilityRole="button"
-          accessibilityLabel="Skip rest timer"
+          accessibilityLabel={done ? 'Dismiss rest timer' : 'Skip rest timer'}
         >
-          <Text style={styles.skipBtnText}>Skip</Text>
+          <Text style={styles.skipBtnText}>{done ? 'Dismiss' : 'Skip'}</Text>
         </TouchableOpacity>
       </View>
     </CutCornerView>
