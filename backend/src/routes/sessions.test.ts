@@ -58,6 +58,7 @@ function makeSelectChain() {
     limit: () => Chain;
     orderBy: () => Chain;
     leftJoin: () => Chain;
+    innerJoin: () => Chain;
     then: (resolve: (v: unknown[]) => void, reject: (e: unknown) => void) => void;
   };
   const chain: Chain = {
@@ -66,6 +67,7 @@ function makeSelectChain() {
     limit: () => chain,
     orderBy: () => chain,
     leftJoin: () => chain,
+    innerJoin: () => chain,
     then(resolve, reject) {
       Promise.resolve(mock.selectQueue.shift() ?? []).then(resolve, reject);
     },
@@ -230,6 +232,7 @@ describe('POST /sessions', () => {
       { kind: 'martial_arts', exerciseId: null, disciplineId: 'disc-1', orderIndex: 1, supersetGroup: null, defaultRestSeconds: null, target: null },
     ]);
     mock.selectQueue.push([]);                     // no active session
+    mock.selectQueue.push([]);                     // rest-seconds history for ex-1 (none)
     mock.selectQueue.push([fakeSessionRow]);       // fetchSessionWithEntries: session row
     mock.selectQueue.push([]);                     // entries (empty)
 
@@ -474,6 +477,7 @@ describe('PATCH /sessions/:id/entries/:entryId — exerciseId swap', () => {
     mock.selectQueue.push([{ id: ENTRY_ID }]);                  // entry found ✓
     mock.selectQueue.push([{ kind: 'exercise' as const }]);     // kind re-fetch ✓
     mock.selectQueue.push([{ id: NEW_EXERCISE_ID }]);           // exercise visible ✓
+    mock.selectQueue.push([{ restSeconds: 90 }]);               // rest-seconds history reseed
     // fetchEntryWithSets: entry row then sets
     mock.selectQueue.push([{
       id: ENTRY_ID, sessionId: SESSION_ID, kind: 'exercise' as const,

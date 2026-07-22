@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, asc, desc, eq, inArray, max } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, max } from 'drizzle-orm';
 import { createDb } from '../db';
 import {
   disciplines,
@@ -39,6 +39,31 @@ sessionRoutes.use('*', authMiddleware);
 
 function getDb(env: Env['Bindings']) {
   return createDb(env.HYPERDRIVE?.connectionString ?? env.DATABASE_URL!);
+}
+
+const FALLBACK_REST_SECONDS = 120;
+
+// The rest duration an exercise "remembers": the value from the user's most
+// recent session entry for that exercise. A remembered 0 ("Off") counts.
+async function lastRestSecondsForExercise(
+  db: ReturnType<typeof createDb>,
+  userId: string,
+  exerciseId: string,
+): Promise<number | null> {
+  const [row] = await db
+    .select({ restSeconds: sessionEntries.restSeconds })
+    .from(sessionEntries)
+    .innerJoin(sessions, eq(sessionEntries.sessionId, sessions.id))
+    .where(
+      and(
+        eq(sessions.userId, userId),
+        eq(sessionEntries.exerciseId, exerciseId),
+        isNotNull(sessionEntries.restSeconds),
+      ),
+    )
+    .orderBy(desc(sessions.date), desc(sessions.createdAt))
+    .limit(1);
+  return row?.restSeconds ?? null;
 }
 
 function buildEntryWithSets(
@@ -383,6 +408,24 @@ sessionRoutes.post('/', async (c) => {
     return c.json({ error: 'active_session_exists', sessionId: existing.id }, 409);
   }
 
+  // Seed rest durations for routine exercises without an explicit routine
+  // default: the exercise's remembered value from the user's last session.
+  // Looked up before the transaction to keep it short.
+  const restHistory = new Map<string, number | null>();
+  for (const item of routineSeedItems) {
+    if (
+      item.kind === 'exercise' &&
+      item.defaultRestSeconds == null &&
+      item.exerciseId &&
+      !restHistory.has(item.exerciseId)
+    ) {
+      restHistory.set(
+        item.exerciseId,
+        await lastRestSecondsForExercise(db, userId, item.exerciseId),
+      );
+    }
+  }
+
   const newSession = await db.transaction(async (tx) => {
     const [sess] = await tx
       .insert(sessions)
@@ -407,7 +450,12 @@ sessionRoutes.post('/', async (c) => {
             disciplineId: item.disciplineId ?? null,
             orderIndex: item.orderIndex,
             supersetGroup: item.supersetGroup ?? null,
-            restSeconds: item.defaultRestSeconds ?? null,
+            restSeconds:
+              item.kind === 'exercise'
+                ? item.defaultRestSeconds ??
+                  (item.exerciseId ? restHistory.get(item.exerciseId) : null) ??
+                  FALLBACK_REST_SECONDS
+                : null,
           })
           .returning();
 
@@ -651,6 +699,15 @@ sessionRoutes.post('/:id/entries', async (c) => {
 
   const nextIndex = body.orderIndex ?? (maxRow?.maxOrder ?? -1) + 1;
 
+  // Exercise entries "remember" their rest duration: when the client doesn't
+  // send one, seed from the user's last session with this exercise.
+  let restSeconds: number | null = body.restSeconds ?? null;
+  if (body.kind === 'exercise' && body.restSeconds === undefined && body.exerciseId) {
+    restSeconds =
+      (await lastRestSecondsForExercise(db, userId, body.exerciseId)) ??
+      FALLBACK_REST_SECONDS;
+  }
+
   const [inserted] = await db
     .insert(sessionEntries)
     .values({
@@ -660,7 +717,7 @@ sessionRoutes.post('/:id/entries', async (c) => {
       disciplineId: body.disciplineId ?? null,
       gi: body.gi ?? null,
       orderIndex: nextIndex,
-      restSeconds: body.restSeconds ?? null,
+      restSeconds,
       details: body.details ?? null,
       notes: body.notes ?? null,
     })
@@ -768,6 +825,13 @@ sessionRoutes.patch('/:id/entries/:entryId', async (c) => {
       return c.json({ error: 'Exercise not found' }, 404);
     }
     updates.exerciseId = body.exerciseId;
+    // Swapping the exercise reseeds the rest duration from the new exercise's
+    // history, unless the client set one explicitly in the same request.
+    if (!('restSeconds' in body)) {
+      updates.restSeconds =
+        (await lastRestSecondsForExercise(db, userId, body.exerciseId)) ??
+        FALLBACK_REST_SECONDS;
+    }
   }
 
   if (Object.keys(updates).length > 0) {
