@@ -22,9 +22,10 @@ import {
 import { BricolageGrotesque_800ExtraBold } from '@expo-google-fonts/bricolage-grotesque';
 import { Archivo_800ExtraBold } from '@expo-google-fonts/archivo';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import * as SecureStore from 'expo-secure-store';
+import { useEffect } from 'react';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
 import { UnitProvider } from '../src/units/UnitContext';
-import { RestTimerProvider } from '../src/restTimer/RestTimerContext';
 import { NotificationsProvider } from '../src/notifications/NotificationsContext';
 import { SubscriptionProvider } from '../src/context/SubscriptionContext';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
@@ -87,6 +88,11 @@ if (offlineReady) {
 
 function AppShell() {
   const { isDark } = useTheme();
+  // The global rest-timer default moved into the workout screen (per-exercise);
+  // clear the orphaned stored value.
+  useEffect(() => {
+    SecureStore.deleteItemAsync('rest_timer_default').catch(() => {});
+  }, []);
   return (
     <>
       <StatusBar style={isDark ? 'light' : 'dark'} />
@@ -113,13 +119,11 @@ export default function RootLayout() {
     <ThemeProvider>
       <ErrorBoundary>
         <UnitProvider>
-          <RestTimerProvider>
-            <NotificationsProvider>
-              <SubscriptionProvider>
-                <AppShell />
-              </SubscriptionProvider>
-            </NotificationsProvider>
-          </RestTimerProvider>
+          <NotificationsProvider>
+            <SubscriptionProvider>
+              <AppShell />
+            </SubscriptionProvider>
+          </NotificationsProvider>
         </UnitProvider>
       </ErrorBoundary>
     </ThemeProvider>

@@ -59,11 +59,10 @@ import { RoundLogger, BOXING_WEAPONS, MUAY_THAI_WEAPONS } from '../../../src/com
 import { PlateCalculator } from '../../../src/components/PlateCalculator';
 import { CalendarPicker } from '../../../src/components/CalendarPicker';
 import { useUnit } from '../../../src/units/UnitContext';
-import { useRestTimerDefault } from '../../../src/restTimer/RestTimerContext';
 import { fmtWeight, kgToUnit, unitToKg, fmtDuration, parseDuration } from '../../../src/units/units';
 import { suggestOverload } from '../../../src/lib/overload';
 import { generateWarmupRamp } from '../../../src/lib/warmup';
-import { cancelScheduled, scheduleInSeconds } from '../../../src/lib/notifications';
+import { cancelScheduled, cancelScheduledByKind, scheduleInSeconds } from '../../../src/lib/notifications';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -381,7 +380,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   sessionId: string;
   entryId: string;
   displayNumber: number | null; // null = warm-up
-  onCompleted: (weightKg: number | null) => void;
+  onCompleted?: (weightKg: number | null) => void;
   onOpenMenu: () => void;
   exerciseType?: 'strength' | 'conditioning';
 }) {
@@ -445,7 +444,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
     if (next) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     updateSet.mutate(
       { sessionId, entryId, setId: set.id, completed: next },
-      { onSuccess: () => { if (next) onCompleted(set.setType !== 'warmup' ? wKg : null); } },
+      { onSuccess: () => { if (next) onCompleted?.(set.setType !== 'warmup' ? wKg : null); } },
     );
   }
 
@@ -629,8 +628,7 @@ function SetActionsMenu({ set, onSetType, onDuplicate, onDelete, onPlateMath, on
 
 // ─── Rest timer preset sheet ──────────────────────────────────────────────────
 
-const REST_PRESETS: Array<{ label: string; value: number | null }> = [
-  { label: 'Default', value: null },
+const REST_PRESETS: Array<{ label: string; value: number }> = [
   { label: 'Off', value: 0 },
   { label: '0:30', value: 30 },
   { label: '1:00', value: 60 },
@@ -642,15 +640,20 @@ const REST_PRESETS: Array<{ label: string; value: number | null }> = [
 
 function RestTimerSheet({ current, onSelect, onClose }: {
   current: number | null;
-  onSelect: (v: number | null) => void;
+  onSelect: (v: number) => void;
   onClose: () => void;
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
+  const isPreset = REST_PRESETS.some((p) => p.value === current);
+  const [custom, setCustom] = useState(current !== null && !isPreset ? String(current) : '');
+  const customParsed = Number(custom.trim());
+  const customValid = custom.trim() !== '' && Number.isInteger(customParsed) && customParsed > 0 && customParsed <= 600;
+
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={styles.menuBackdrop} activeOpacity={1} onPress={onClose}>
-        <View style={styles.menuSheet}>
+        <View style={styles.menuSheet} onStartShouldSetResponder={() => true}>
           <Text style={styles.menuHeader}>Rest Timer</Text>
           {REST_PRESETS.map((p) => (
             <TouchableOpacity
@@ -662,6 +665,27 @@ function RestTimerSheet({ current, onSelect, onClose }: {
               {current === p.value && <Ionicons name="checkmark" size={16} color={T.primary} />}
             </TouchableOpacity>
           ))}
+          <View style={styles.restCustomRow}>
+            <TextInput
+              style={styles.restCustomInput}
+              value={custom}
+              onChangeText={setCustom}
+              placeholder="Custom (sec)"
+              placeholderTextColor={T.muted}
+              keyboardType="number-pad"
+              maxLength={3}
+              accessibilityLabel="Custom rest duration in seconds"
+            />
+            <TouchableOpacity
+              style={[styles.restCustomSet, !customValid && { opacity: 0.4 }]}
+              disabled={!customValid}
+              onPress={() => { onSelect(customParsed); onClose(); }}
+              accessibilityRole="button"
+              accessibilityLabel="Set custom rest duration"
+            >
+              <Text style={styles.restCustomSetText}>Set</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </TouchableOpacity>
     </Modal>
@@ -755,15 +779,16 @@ function LastTime({ exerciseId }: { exerciseId: string }) {
 
 // ─── Strength entry card ──────────────────────────────────────────────────────
 
-function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseType, exerciseMeta, sessionActive, restTimerFallback }: {
+function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingActive, onPR, exerciseType, exerciseMeta, sessionActive }: {
   entry: SessionEntryWithSets;
   sessionId: string;
-  onSetCompleted: (restSecs: number) => void;
+  onStartRest: (restSecs: number) => void;
+  onStopRest: () => void;
+  restingActive: boolean;
   onPR?: (exerciseName: string) => void;
   exerciseType?: 'strength' | 'conditioning';
   exerciseMeta?: { equipment: string | null; bodyPart: string | null };
   sessionActive?: boolean;
-  restTimerFallback?: number;
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
@@ -775,12 +800,10 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseTyp
   const updateEntry = useUpdateSessionEntry();
   const deleteEntry = useDeleteSessionEntry();
   const { data: history } = useExerciseHistory(entry.exerciseId);
-  const restSeconds = entry.restSeconds ?? restTimerFallback ?? 120;
-  const restChipLabel = entry.restSeconds === null
-    ? 'Default'
-    : entry.restSeconds === 0
-      ? 'Off'
-      : fmtDuration(entry.restSeconds);
+  // New entries arrive server-seeded with a concrete value; null only remains
+  // on legacy rows, rendered as the historical 2:00 fallback.
+  const restSeconds = entry.restSeconds ?? 120;
+  const restChipLabel = restSeconds === 0 ? 'Off' : fmtDuration(restSeconds);
   const [menuSet, setMenuSet] = useState<StrengthSet | null>(null);
   const [plateWeight, setPlateWeight] = useState<number | null>(null);
   const [showEntryMenu, setShowEntryMenu] = useState(false);
@@ -946,6 +969,25 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseTyp
           >
             <Text style={styles.restChipText}>Rest: {restChipLabel}</Text>
           </TouchableOpacity>
+          {sessionActive && restSeconds > 0 && (
+            <TouchableOpacity
+              onPress={() => {
+                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                if (restingActive) onStopRest();
+                else onStartRest(restSeconds);
+              }}
+              style={[styles.restPlayBtn, restingActive && styles.restPlayBtnActive]}
+              disabled={isOptimisticEntry}
+              accessibilityRole="button"
+              accessibilityLabel={restingActive ? 'Stop rest timer' : 'Start rest timer'}
+            >
+              <Ionicons
+                name={restingActive ? 'stop' : 'play'}
+                size={12}
+                color={restingActive ? T.primary : T.textDim}
+              />
+            </TouchableOpacity>
+          )}
           <View style={styles.gymBadge}><Text style={styles.gymBadgeText}>Gym</Text></View>
         </View>
       </View>
@@ -992,7 +1034,6 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseTyp
           sessionId={sessionId}
           entryId={entry.id}
           displayNumber={null}
-          onCompleted={() => onSetCompleted(restSeconds)}
           onOpenMenu={() => setMenuSet(set)}
           exerciseType={exerciseType}
         />
@@ -1022,7 +1063,6 @@ function StrengthEntryCard({ entry, sessionId, onSetCompleted, onPR, exerciseTyp
           entryId={entry.id}
           displayNumber={i + 1}
           onCompleted={(wKg) => {
-            onSetCompleted(restSeconds);
             if (wKg !== null && maxHistoryWeight !== null && wKg > maxHistoryWeight) {
               onPR?.(entry.exerciseName ?? 'Exercise');
             }
@@ -1561,7 +1601,6 @@ export default function SessionScreen() {
   const insets = useSafeAreaInsets();
 
   const { unit } = useUnit();
-  const { restTimerDefault } = useRestTimerDefault();
   const { data: session, isLoading, isError } = useSession(id ?? null);
   const completeSession = useCompleteSession();
   const deleteSession = useDeleteSession();
@@ -1594,7 +1633,9 @@ export default function SessionScreen() {
   const [showSettings, setShowSettings] = useState(false);
   const [showReorder, setShowReorder] = useState(false);
   const [restSeconds, setRestSeconds] = useState<number | null>(null);
-  const [restTotal, setRestTotal] = useState(restTimerDefault);
+  const [restTotal, setRestTotal] = useState(120);
+  // Which entry's rest timer is running, so its card can show a stop control.
+  const [restEntryId, setRestEntryId] = useState<string | null>(null);
   // Absolute wall-clock time (epoch ms) the rest period ends. The visible
   // countdown is derived from this, not decremented tick-by-tick, so it stays
   // aligned with the scheduled "Rest complete" notification even when the app
@@ -1608,12 +1649,29 @@ export default function SessionScreen() {
   // Derive the visible rest countdown from the absolute end time. The interval
   // only recomputes from Date.now(), so on return from background it snaps to
   // the true remaining time instead of resuming from where JS froze.
+  const restDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restZeroFiredRef = useRef(false);
+
+  // Rest hit zero: buzz (unless the background notification already alerted),
+  // hold the pill at 0:00 briefly, then auto-dismiss it.
+  function finishRestCountdown(alreadyAlerted: boolean) {
+    setRestEndsAt(null);
+    if (restZeroFiredRef.current) return;
+    restZeroFiredRef.current = true;
+    if (!alreadyAlerted) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    restDismissRef.current = setTimeout(() => {
+      setRestSeconds(null);
+      setRestEntryId(null);
+      restDismissRef.current = null;
+    }, 4000);
+  }
+
   useEffect(() => {
     if (restEndsAt === null) return;
     const tick = () => {
       const remaining = Math.max(0, Math.ceil((restEndsAt - Date.now()) / 1000));
       setRestSeconds(remaining);
-      if (remaining <= 0) setRestEndsAt(null); // reached 0 → stop ticking, UI stays at 0:00
+      if (remaining <= 0) finishRestCountdown(false);
     };
     tick();
     const intervalId = setInterval(tick, 500);
@@ -1621,13 +1679,14 @@ export default function SessionScreen() {
   }, [restEndsAt]);
 
   // Snap the countdown back in sync the instant the app is foregrounded,
-  // rather than waiting for the next interval tick.
+  // rather than waiting for the next interval tick. If the timer ran out while
+  // backgrounded the OS notification already alerted, so no extra buzz.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active' && restEndsAt !== null) {
         const remaining = Math.max(0, Math.ceil((restEndsAt - Date.now()) / 1000));
         setRestSeconds(remaining);
-        if (remaining <= 0) setRestEndsAt(null);
+        if (remaining <= 0) finishRestCountdown(true);
       }
     });
     return () => sub.remove();
@@ -1640,6 +1699,13 @@ export default function SessionScreen() {
     const intervalId = setInterval(tick, 1000);
     return () => clearInterval(intervalId);
   }, [session?.startedAt, session?.status]);
+
+  // A finished session has no next set to rest for — clear any pending
+  // "Rest complete" notification (covers finishing mid-rest and reopening a
+  // completed session after the app was killed).
+  useEffect(() => {
+    if (session?.status === 'completed') void cancelScheduledByKind('rest');
+  }, [session?.status]);
 
   // Schedule a local notification for when the rest timer ends, so it still
   // fires (with sound/vibration) if the app is backgrounded.
@@ -1654,24 +1720,38 @@ export default function SessionScreen() {
     );
   }
 
-  function handleSetCompleted(secs: number) {
+  function handleStartRest(entryId: string, secs: number) {
+    if (secs <= 0) return;
+    if (restDismissRef.current) {
+      clearTimeout(restDismissRef.current);
+      restDismissRef.current = null;
+    }
+    restZeroFiredRef.current = false;
+    setRestEntryId(entryId);
     setRestTotal(secs);
     setRestSeconds(secs);
     setRestEndsAt(Date.now() + secs * 1000);
     armRestNotification(secs);
   }
 
-  function handleRestSkip() {
-    cancelScheduled(restNotifId.current);
+  function handleStopRest() {
+    void cancelScheduled(restNotifId.current);
     restNotifId.current = null;
+    if (restDismissRef.current) {
+      clearTimeout(restDismissRef.current);
+      restDismissRef.current = null;
+    }
+    restZeroFiredRef.current = false;
     setRestEndsAt(null);
     setRestSeconds(null);
+    setRestEntryId(null);
   }
 
   function handleRestAdd() {
+    if (restEndsAt === null) return; // already at 0:00 (or stopped) — nothing to extend
     // Extend from the existing end time so wall-clock and notification stay
     // aligned; re-arm the notification for the newly-remaining duration.
-    const newEnd = (restEndsAt ?? Date.now()) + 15 * 1000;
+    const newEnd = restEndsAt + 15 * 1000;
     const remaining = Math.max(0, Math.ceil((newEnd - Date.now()) / 1000));
     setRestEndsAt(newEnd);
     setRestTotal((t) => t + 15);
@@ -1711,6 +1791,7 @@ export default function SessionScreen() {
         durationMinutes: durationMinutes || null,
         date,
       });
+      handleStopRest();
       setShowSettings(false);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowCelebration(true);
@@ -1743,6 +1824,7 @@ export default function SessionScreen() {
             if (!id) return;
             try {
               await deleteSession.mutateAsync({ id });
+              handleStopRest();
               setShowSettings(false);
               router.back();
             } catch {
@@ -1944,12 +2026,13 @@ export default function SessionScreen() {
                   <StrengthEntryCard
                     entry={entry}
                     sessionId={session.id}
-                    onSetCompleted={handleSetCompleted}
+                    onStartRest={(secs) => handleStartRest(entry.id, secs)}
+                    onStopRest={handleStopRest}
+                    restingActive={restEntryId === entry.id && restSeconds !== null}
                     onPR={handlePR}
                     exerciseType={entry.exerciseId ? exerciseTypeMap.get(entry.exerciseId) : undefined}
                     exerciseMeta={entry.exerciseId ? exerciseMetaMap.get(entry.exerciseId) : undefined}
                     sessionActive={isActive}
-                    restTimerFallback={restTimerDefault}
                   />
                 ) : (
                   <MartialArtsEntryCard
@@ -1990,7 +2073,7 @@ export default function SessionScreen() {
         <RestTimer
           seconds={restSeconds}
           total={restTotal}
-          onSkip={handleRestSkip}
+          onSkip={handleStopRest}
           onAdd={handleRestAdd}
           style={[styles.restTimerFloat, { bottom: insets.bottom + 16 }]}
         />
@@ -2140,6 +2223,27 @@ function makeStyles(T: ThemeColors) {
     backgroundColor: T.surface2, borderWidth: 1, borderColor: T.borderStrong,
   },
   restChipText: { fontFamily: F.uiSemi, fontSize: 10, color: T.textDim, letterSpacing: 0.4 },
+  restPlayBtn: {
+    width: 24, height: 24, borderRadius: R.chip, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: T.surface2, borderWidth: 1, borderColor: T.borderStrong,
+  },
+  restPlayBtnActive: {
+    backgroundColor: withAlpha(T.primary, 0.13), borderColor: withAlpha(T.primary, 0.28),
+  },
+  restCustomRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    paddingHorizontal: 20, paddingVertical: 10,
+  },
+  restCustomInput: {
+    flex: 1, fontFamily: F.uiSemi, fontSize: 15, color: T.text,
+    borderWidth: 1, borderColor: T.borderStrong, borderRadius: R.sm,
+    backgroundColor: T.surface2, paddingHorizontal: 12, paddingVertical: 8,
+  },
+  restCustomSet: {
+    paddingHorizontal: 16, paddingVertical: 9, borderRadius: R.sm,
+    backgroundColor: T.primary,
+  },
+  restCustomSetText: { fontFamily: F.uiSemi, fontSize: 13, color: T.onPrimary },
   gymBadge: {
     paddingHorizontal: 8, paddingVertical: 2, borderRadius: R.chip,
     backgroundColor: withAlpha(T.primary, 0.13), borderWidth: 1, borderColor: withAlpha(T.primary, 0.28),
