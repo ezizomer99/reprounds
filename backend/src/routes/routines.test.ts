@@ -13,6 +13,7 @@ const mock = vi.hoisted(() => ({
   transaction: vi.fn(),
   selectQueue: [] as unknown[][],
   insertedRow: null as unknown,
+  insertedValues: [] as unknown[],
 }));
 
 vi.mock('../db', () => ({
@@ -71,7 +72,12 @@ function makeSelectChain() {
 function makeTx() {
   return {
     select: makeSelectChain,
-    insert: () => ({ values: () => ({ returning: async () => [mock.insertedRow] }) }),
+    insert: () => ({
+      values: (values: unknown) => {
+        mock.insertedValues.push(values);
+        return { returning: async () => [mock.insertedRow] };
+      },
+    }),
     update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
     delete: () => ({ where: () => Promise.resolve() }),
   };
@@ -80,6 +86,7 @@ function makeTx() {
 beforeEach(() => {
   mock.selectQueue.length = 0;
   mock.insertedRow = null;
+  mock.insertedValues.length = 0;
   for (const fn of [
     mock.findFirst, mock.select, mock.insert,
     mock.update, mock.delete, mock.transaction,
@@ -97,6 +104,53 @@ beforeEach(() => {
   mock.transaction.mockImplementation(
     async (fn: (tx: ReturnType<typeof makeTx>) => Promise<unknown>) => fn(makeTx()),
   );
+});
+
+// ---------------------------------------------------------------------------
+// POST /routines — list ordering
+// ---------------------------------------------------------------------------
+describe('POST /routines', () => {
+  const routineRow = {
+    id: ROUTINE_ID,
+    userId: USER_ID,
+    name: 'Pull day',
+    dayLabel: 'Pull',
+    notes: null,
+    orderIndex: -1,
+    createdAt: new Date('2026-01-01T00:00:00Z'),
+  };
+
+  it('places a new routine above the existing ones', async () => {
+    mock.insertedRow = routineRow;
+    mock.selectQueue.push([{ minOrder: 0 }]); // lowest existing order_index
+    mock.selectQueue.push([routineRow]);      // fetchRoutineWithItems: routine
+    mock.selectQueue.push([]);                // fetchRoutineWithItems: items
+
+    const res = await makeApp().request('/routines', {
+      method: 'POST',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Pull day', dayLabel: 'Pull' }),
+    }, env);
+
+    expect(res.status).toBe(201);
+    expect(mock.insertedValues[0]).toMatchObject({ userId: USER_ID, orderIndex: -1 });
+  });
+
+  it('handles a user with no routines yet (min aggregate is null)', async () => {
+    mock.insertedRow = { ...routineRow, orderIndex: -1 };
+    mock.selectQueue.push([{ minOrder: null }]); // no rows -> aggregate is null
+    mock.selectQueue.push([routineRow]);
+    mock.selectQueue.push([]);
+
+    const res = await makeApp().request('/routines', {
+      method: 'POST',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Pull day' }),
+    }, env);
+
+    expect(res.status).toBe(201);
+    expect(mock.insertedValues[0]).toMatchObject({ orderIndex: -1 });
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -187,6 +187,10 @@ export interface Routine {
   name: string;
   dayLabel: string | null;
   notes: string | null;
+  // User-defined position in the routines list. Ascending; ties fall back to
+  // newest-first so pre-existing rows keep the order they had before ordering
+  // was introduced.
+  orderIndex: number;
   createdAt: string;
   items?: RoutineItem[];
 }
@@ -447,6 +451,10 @@ export interface UpdateRoutineItemRequest {
 }
 
 export interface ReorderRoutineItemsRequest {
+  order: string[];
+}
+
+export interface ReorderRoutinesRequest {
   order: string[];
 }
 

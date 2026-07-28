@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, asc, desc, eq, inArray, max } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, max, min } from 'drizzle-orm';
 import { createDb } from '../db';
 import { disciplines, exercises, routineItems, routines, sessions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
@@ -9,6 +9,7 @@ import type {
   AddRoutineItemRequest,
   CreateRoutineRequest,
   ReorderRoutineItemsRequest,
+  ReorderRoutinesRequest,
   RoutineItemWithDetails,
   RoutineListResponse,
   RoutineWithItems,
@@ -19,6 +20,9 @@ import type {
 type Env = AppEnv;
 
 const routineRoutes = new Hono<Env>();
+
+// Upper bound on ids accepted by the reorder endpoints.
+const MAX_REORDER_IDS = 500;
 
 routineRoutes.use('*', authMiddleware);
 
@@ -33,6 +37,7 @@ function routineMeta(row: typeof routines.$inferSelect) {
     name: row.name,
     dayLabel: row.dayLabel,
     notes: row.notes,
+    orderIndex: row.orderIndex,
     createdAt: row.createdAt.toISOString(),
   };
 }
@@ -124,7 +129,7 @@ routineRoutes.get('/', async (c) => {
     .select()
     .from(routines)
     .where(eq(routines.userId, userId))
-    .orderBy(desc(routines.createdAt));
+    .orderBy(asc(routines.orderIndex), desc(routines.createdAt));
 
   if (userRoutines.length === 0) {
     const result: RoutineListResponse = { routines: [] };
@@ -187,6 +192,15 @@ routineRoutes.post('/', async (c) => {
     }
   }
 
+  // New routines go to the top of the list, which is where they appeared back
+  // when the list was sorted newest-first.
+  const [minRow] = await db
+    .select({ minOrder: min(routines.orderIndex) })
+    .from(routines)
+    .where(eq(routines.userId, userId));
+
+  const nextOrderIndex = (minRow?.minOrder ?? 0) - 1;
+
   const result = await db.transaction(async (tx) => {
     const [routine] = await tx
       .insert(routines)
@@ -195,6 +209,7 @@ routineRoutes.post('/', async (c) => {
         name: body.name,
         dayLabel: body.dayLabel ?? null,
         notes: body.notes ?? null,
+        orderIndex: nextOrderIndex,
       })
       .returning();
 
@@ -218,6 +233,46 @@ routineRoutes.post('/', async (c) => {
 
   const routine = await fetchRoutineWithItems(db, result.id, userId);
   return c.json({ routine }, 201);
+});
+
+// Declared ahead of the '/:id' routes so '/order' is never swallowed as an id.
+routineRoutes.put('/order', async (c) => {
+  const userId = c.get('userId');
+  const db = getDb(c.env);
+
+  let body: ReorderRoutinesRequest;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid request body' }, 400);
+  }
+
+  if (!Array.isArray(body.order) || body.order.length === 0) {
+    return c.json({ error: 'order must be a non-empty array of routine IDs' }, 400);
+  }
+
+  if (body.order.some((id) => typeof id !== 'string')) {
+    return c.json({ error: 'order must be a non-empty array of routine IDs' }, 400);
+  }
+
+  // Each id costs one round-trip inside the transaction, so cap the work a
+  // single request can queue. Far above any realistic routine count.
+  if (body.order.length > MAX_REORDER_IDS) {
+    return c.json({ error: 'order array too large' }, 400);
+  }
+
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < body.order.length; i++) {
+      // The user_id predicate is the authorization boundary — without it this
+      // would let anyone reindex another user's routines.
+      await tx
+        .update(routines)
+        .set({ orderIndex: i })
+        .where(and(eq(routines.id, body.order[i]), eq(routines.userId, userId)));
+    }
+  });
+
+  return c.json({ success: true });
 });
 
 routineRoutes.patch('/:id', async (c) => {
@@ -467,6 +522,10 @@ routineRoutes.put('/:id/items/order', async (c) => {
 
   if (!Array.isArray(body.order) || body.order.length === 0) {
     return c.json({ error: 'order must be a non-empty array of item IDs' }, 400);
+  }
+
+  if (body.order.length > MAX_REORDER_IDS) {
+    return c.json({ error: 'order array too large' }, 400);
   }
 
   await db.transaction(async (tx) => {
