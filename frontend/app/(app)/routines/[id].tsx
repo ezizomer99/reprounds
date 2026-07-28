@@ -16,6 +16,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import type {
   CreateRoutineItemRequest,
   Discipline,
@@ -46,6 +47,17 @@ type ExerciseType = 'strength' | 'conditioning';
 interface PendingItem extends CreateRoutineItemRequest {
   _localId: string;
   _displayName: string;
+}
+
+// One row shape for both the unsaved (pendingItems) and saved (routine.items)
+// cases, so the screen renders a single drag list instead of two.
+interface ItemRowVM {
+  key: string;
+  name: string;
+  kind: 'exercise' | 'martial_arts';
+  targetSummary: string | null;
+  onPress: () => void;
+  onRemove: () => void;
 }
 
 function asTarget(raw: Record<string, unknown> | null | undefined): RoutineItemTarget | null {
@@ -109,8 +121,29 @@ function ItemRow({ name, kind, targetSummary, onPress, onRemove, drag, isActive 
   const tappable = kind === 'exercise' && !!onPress;
   return (
     <View style={[styles.itemRow, isActive && styles.itemRowActive]}>
-      <TouchableOpacity onLongPress={drag} style={styles.gripHandle} activeOpacity={0.6} disabled={!drag}>
-        <Ionicons name="reorder-three-outline" size={16} color={drag ? T.textDim : T.muted} />
+      {/* Drag lives on the handle alone so the row body stays tappable for
+          editing sets. The default 500ms long-press felt like nothing was
+          happening, hence the shorter delay. */}
+      <TouchableOpacity
+        onLongPress={() => {
+          if (!drag) return;
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          drag();
+        }}
+        delayLongPress={120}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
+        style={styles.gripHandle}
+        activeOpacity={0.6}
+        disabled={!drag}
+        accessibilityRole="button"
+        accessibilityLabel={`Reorder ${name}`}
+        accessibilityHint="Press and hold, then drag up or down"
+      >
+        <Ionicons
+          name="reorder-three-outline"
+          size={20}
+          color={isActive ? T.primary : drag ? T.textDim : T.muted}
+        />
       </TouchableOpacity>
       <View style={[styles.kindBadge, kind === 'martial_arts' && styles.kindBadgeMat]}>
         {kind === 'martial_arts' ? (
@@ -135,6 +168,79 @@ function ItemRow({ name, kind, targetSummary, onPress, onRemove, drag, isActive 
       <TouchableOpacity onPress={onRemove} style={styles.removeButton} activeOpacity={0.7}>
         <Ionicons name="close" size={14} color={T.danger} />
       </TouchableOpacity>
+    </View>
+  );
+}
+
+// ---- List header ----
+
+interface RoutineFieldsProps {
+  name: string;
+  onChangeName: (v: string) => void;
+  dayLabel: string;
+  onChangeDayLabel: (v: string) => void;
+  notes: string;
+  onChangeNotes: (v: string) => void;
+  showDragHint: boolean;
+}
+
+// Must stay a module-level component. Inlining this as an arrow function in
+// ListHeaderComponent creates a new component type on every render, which
+// remounts these TextInputs and drops the keyboard on each keystroke.
+function RoutineFields({
+  name, onChangeName, dayLabel, onChangeDayLabel, notes, onChangeNotes, showDragHint,
+}: RoutineFieldsProps) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+
+  return (
+    <View>
+      <View style={styles.fields}>
+        <View style={styles.field}>
+          <Text style={styles.label}>Name *</Text>
+          <TextInput
+            style={styles.input}
+            value={name}
+            onChangeText={onChangeName}
+            placeholder="e.g. Push Day"
+            placeholderTextColor={T.muted}
+            returnKeyType="next"
+            selectionColor={T.primary}
+          />
+        </View>
+
+        <View style={styles.field}>
+          <Text style={styles.label}>Day Label</Text>
+          <TextInput
+            style={styles.input}
+            value={dayLabel}
+            onChangeText={onChangeDayLabel}
+            placeholder="e.g. Monday, Push Day"
+            placeholderTextColor={T.muted}
+            returnKeyType="next"
+            selectionColor={T.primary}
+          />
+        </View>
+
+        <View style={styles.field}>
+          <Text style={styles.label}>Notes</Text>
+          <TextInput
+            style={[styles.input, styles.notesInput]}
+            value={notes}
+            onChangeText={onChangeNotes}
+            placeholder="Optional notes…"
+            placeholderTextColor={T.muted}
+            multiline
+            returnKeyType="default"
+            selectionColor={T.primary}
+          />
+        </View>
+      </View>
+
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionHeaderText}>Items</Text>
+        {showDragHint && <Text style={styles.sectionHeaderHint}>Hold ☰ to reorder</Text>}
+      </View>
     </View>
   );
 }
@@ -553,6 +659,58 @@ export default function RoutineEditorScreen() {
 
   const isSaving = createRoutine.isPending || updateRoutine.isPending;
 
+  // Both sources collapse into one row shape so a single DraggableFlatList can
+  // own the whole screen (header fields + items + add buttons).
+  const rows: ItemRowVM[] = useMemo(() => {
+    if (isNew) {
+      return pendingItems.map((item) => ({
+        key: item._localId,
+        name: item._displayName,
+        kind: item.kind,
+        targetSummary: formatTarget(asTarget(item.target), typeOf(item.exerciseId), unit),
+        onPress: () => setEditingTarget({ id: item._localId, isPending: true }),
+        onRemove: () =>
+          setPendingItems((prev) => prev.filter((i) => i._localId !== item._localId)),
+      }));
+    }
+    if (!existingRoutine) return [];
+    return existingRoutine.items.map((item) => ({
+      key: item.id,
+      name: item.exerciseName ?? item.disciplineName ?? 'Unknown',
+      kind: item.kind,
+      targetSummary: formatTarget(asTarget(item.target), typeOf(item.exerciseId), unit),
+      onPress: () => setEditingTarget({ id: item.id, isPending: false }),
+      onRemove: () =>
+        removeItem.mutate(
+          { routineId: existingRoutine.id, itemId: item.id },
+          { onError: (err) => Alert.alert('Error', err.message ?? 'Failed to remove item.') },
+        ),
+    }));
+    // exerciseTypeMap feeds typeOf, so summaries restate when exercises load.
+    // removeItem is deliberately omitted — React Query hands back a new mutation
+    // object every render, which would rebuild `rows` mid-drag and unsettle the list.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew, pendingItems, existingRoutine, unit, exerciseTypeMap]);
+
+  function handleDragEnd({ data }: { data: ItemRowVM[] }) {
+    if (isNew) {
+      // Reorder pendingItems to match; handleSave sends them in array order and
+      // the backend assigns orderIndex from the position.
+      const byId = new Map(pendingItems.map((i) => [i._localId, i]));
+      setPendingItems(
+        data
+          .map((row) => byId.get(row.key))
+          .filter((i): i is PendingItem => i !== undefined),
+      );
+      return;
+    }
+    if (!existingRoutine) return;
+    reorderItems.mutate(
+      { routineId: existingRoutine.id, order: data.map((row) => row.key) },
+      { onError: (err) => Alert.alert('Error', err.message ?? 'Failed to reorder items.') },
+    );
+  }
+
   async function handleSave() {
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -669,139 +827,67 @@ export default function RoutineEditorScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView
-        style={{ flex: 1 }}
+      {/* The items list is the page scroller. It must NOT be nested inside a
+          ScrollView — the outer scroller wins the pan gesture and the drag
+          never starts, which is what made the grip handles feel dead. */}
+      <DraggableFlatList
+        data={rows}
+        keyExtractor={(row) => row.key}
+        onDragEnd={handleDragEnd}
+        containerStyle={{ flex: 1 }}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: insets.bottom + 48 }}
-      >
-        <View style={styles.fields}>
-          <View style={styles.field}>
-            <Text style={styles.label}>Name *</Text>
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="e.g. Push Day"
-              placeholderTextColor={T.muted}
-              returnKeyType="next"
-              selectionColor={T.primary}
-            />
+        activationDistance={12}
+        autoscrollThreshold={80}
+        ListHeaderComponent={
+          <RoutineFields
+            name={name}
+            onChangeName={setName}
+            dayLabel={dayLabel}
+            onChangeDayLabel={setDayLabel}
+            notes={notes}
+            onChangeNotes={setNotes}
+            showDragHint={rows.length > 1}
+          />
+        }
+        ListEmptyComponent={
+          <Text style={styles.emptyItemsText}>No items yet. Add exercises or disciplines below.</Text>
+        }
+        ListFooterComponent={
+          <View style={styles.addItemsRow}>
+            <TouchableOpacity
+              style={styles.addItemButton}
+              onPress={() => setShowExercisePicker(true)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="add" size={14} color={T.primary} />
+              <Text style={styles.addItemButtonText}>Add Exercise</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.addItemButton}
+              onPress={() => setShowDisciplinePicker(true)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="add" size={14} color={T.primary} />
+              <Text style={styles.addItemButtonText}>Add Discipline</Text>
+            </TouchableOpacity>
           </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Day Label</Text>
-            <TextInput
-              style={styles.input}
-              value={dayLabel}
-              onChangeText={setDayLabel}
-              placeholder="e.g. Monday, Push Day"
-              placeholderTextColor={T.muted}
-              returnKeyType="next"
-              selectionColor={T.primary}
+        }
+        renderItem={({ item, drag, isActive }: RenderItemParams<ItemRowVM>) => (
+          <ScaleDecorator>
+            <ItemRow
+              name={item.name}
+              kind={item.kind}
+              targetSummary={item.targetSummary}
+              onPress={item.onPress}
+              onRemove={item.onRemove}
+              drag={drag}
+              isActive={isActive}
             />
-          </View>
-
-          <View style={styles.field}>
-            <Text style={styles.label}>Notes</Text>
-            <TextInput
-              style={[styles.input, styles.notesInput]}
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Optional notes…"
-              placeholderTextColor={T.muted}
-              multiline
-              returnKeyType="default"
-              selectionColor={T.primary}
-            />
-          </View>
-        </View>
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionHeaderText}>Items</Text>
-        </View>
-
-        {isNew ? (
-          pendingItems.length > 0 ? (
-            <DraggableFlatList
-              data={pendingItems}
-              keyExtractor={(item) => item._localId}
-              onDragEnd={({ data }) => setPendingItems(data)}
-              scrollEnabled={false}
-              renderItem={({ item, drag, isActive }: RenderItemParams<PendingItem>) => (
-                <ScaleDecorator>
-                  <ItemRow
-                    name={item._displayName}
-                    kind={item.kind}
-                    targetSummary={formatTarget(asTarget(item.target), typeOf(item.exerciseId), unit)}
-                    onPress={() => setEditingTarget({ id: item._localId, isPending: true })}
-                    onRemove={() => setPendingItems((prev) => prev.filter((i) => i._localId !== item._localId))}
-                    drag={drag}
-                    isActive={isActive}
-                  />
-                </ScaleDecorator>
-              )}
-            />
-          ) : (
-            <Text style={styles.emptyItemsText}>No items yet. Add exercises or disciplines below.</Text>
-          )
-        ) : (
-          (existingRoutine?.items ?? []).length > 0 ? (
-            <DraggableFlatList
-              data={existingRoutine?.items ?? []}
-              keyExtractor={(item) => item.id}
-              onDragEnd={({ data }) => {
-                if (!existingRoutine) return;
-                reorderItems.mutate(
-                  { routineId: existingRoutine.id, order: data.map((i) => i.id) },
-                  { onError: (err) => Alert.alert('Error', err.message ?? 'Failed to reorder items.') },
-                );
-              }}
-              scrollEnabled={false}
-              renderItem={({ item, drag, isActive }) => (
-                <ScaleDecorator>
-                  <ItemRow
-                    name={item.exerciseName ?? item.disciplineName ?? 'Unknown'}
-                    kind={item.kind}
-                    targetSummary={formatTarget(asTarget(item.target), typeOf(item.exerciseId), unit)}
-                    onPress={() => setEditingTarget({ id: item.id, isPending: false })}
-                    onRemove={() => {
-                      if (!existingRoutine) return;
-                      removeItem.mutate(
-                        { routineId: existingRoutine.id, itemId: item.id },
-                        { onError: (err) => Alert.alert('Error', err.message ?? 'Failed to remove item.') },
-                      );
-                    }}
-                    drag={drag}
-                    isActive={isActive}
-                  />
-                </ScaleDecorator>
-              )}
-            />
-          ) : (
-            <Text style={styles.emptyItemsText}>No items yet. Add exercises or disciplines below.</Text>
-          )
+          </ScaleDecorator>
         )}
-
-        <View style={styles.addItemsRow}>
-          <TouchableOpacity
-            style={styles.addItemButton}
-            onPress={() => setShowExercisePicker(true)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="add" size={14} color={T.primary} />
-            <Text style={styles.addItemButtonText}>Add Exercise</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.addItemButton}
-            onPress={() => setShowDisciplinePicker(true)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="add" size={14} color={T.primary} />
-            <Text style={styles.addItemButtonText}>Add Discipline</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+      />
 
       <PickExerciseModal
         visible={showExercisePicker}
@@ -899,7 +985,8 @@ function makeStyles(T: ThemeColors) {
   },
   itemRowActive: { backgroundColor: T.surface2 },
 
-  gripHandle: { width: 24, alignItems: 'center' },
+  // Sized as a real touch target — the old 24px-wide strip was hard to grab.
+  gripHandle: { width: 34, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -8 },
   kindBadge: {
     width: 30, height: 30, borderRadius: R.sm,
     backgroundColor: T.surface2, alignItems: 'center', justifyContent: 'center',

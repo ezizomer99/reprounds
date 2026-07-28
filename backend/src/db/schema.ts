@@ -126,12 +126,16 @@ export const partners = pgTable('partners', {
 // on demand from the Workout tab. Routines are not scheduled — there is no
 // recurrence; a session is created ad-hoc when the user chooses to run one.
 export const routines = pgTable('routines', {
-  id:        uuid('id').primaryKey().defaultRandom(),
-  userId:    uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  name:      text('name').notNull(),
-  dayLabel:  text('day_label'),
-  notes:     text('notes'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  id:         uuid('id').primaryKey().defaultRandom(),
+  userId:     uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  name:       text('name').notNull(),
+  dayLabel:   text('day_label'),
+  notes:      text('notes'),
+  // User-defined list position, ascending. New routines get min - 1 so they land
+  // at the top, preserving the newest-first order the list had before this column
+  // existed. Values are per-user and may go negative — only relative order matters.
+  orderIndex: integer('order_index').notNull().default(0),
+  createdAt:  timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   userIdIdx: index('routines_user_id_idx').on(t.userId),
 }));

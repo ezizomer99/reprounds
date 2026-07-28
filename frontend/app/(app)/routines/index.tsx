@@ -1,17 +1,19 @@
 import {
   Alert,
-  FlatList,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
+import type { RenderItemParams } from 'react-native-draggable-flatlist';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import type { RoutineWithItems } from '@app/shared';
-import { useDeleteRoutine, useRoutines } from '../../../src/hooks/useRoutines';
+import { useDeleteRoutine, useReorderRoutines, useRoutines } from '../../../src/hooks/useRoutines';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
@@ -24,36 +26,59 @@ interface RoutineRowProps {
   routine: RoutineWithItems;
   onPress: (id: string) => void;
   onDelete: (id: string, name: string) => void;
+  drag?: () => void;
+  isActive?: boolean;
 }
 
-function RoutineRow({ routine, onPress, onDelete }: RoutineRowProps) {
+function RoutineRow({ routine, onPress, onDelete, drag, isActive }: RoutineRowProps) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const hasMartialArts = routine.items.some((i) => i.kind === 'martial_arts');
 
   return (
-    <TouchableOpacity
-      style={styles.row}
-      onPress={() => onPress(routine.id)}
-      onLongPress={() => onDelete(routine.id, routine.name)}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.iconAvatar, hasMartialArts && styles.iconAvatarMat]}>
-        {hasMartialArts ? (
-          <Ionicons name="flash" size={18} color={T.grappling} />
-        ) : (
-          <Ionicons name="barbell" size={18} color={T.textDim} />
-        )}
-      </View>
-      <View style={styles.rowContent}>
-        <Text style={styles.rowName}>{routine.name}</Text>
-        <Text style={styles.rowMeta}>
-          {routine.items.length} item{routine.items.length !== 1 ? 's' : ''}
-          {routine.dayLabel ? ` · ${routine.dayLabel}` : ''}
-        </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={16} color={T.muted} />
-    </TouchableOpacity>
+    <View style={[styles.row, isActive && styles.rowActive]}>
+      {/* Drag is bound to the handle only, so the row's own long-press (delete)
+          and the handle's long-press (drag) never contend for the gesture. */}
+      <TouchableOpacity
+        onLongPress={() => {
+          if (!drag) return;
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          drag();
+        }}
+        delayLongPress={120}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
+        style={styles.gripHandle}
+        activeOpacity={0.6}
+        disabled={!drag}
+        accessibilityRole="button"
+        accessibilityLabel={`Reorder ${routine.name}`}
+        accessibilityHint="Press and hold, then drag up or down"
+      >
+        <Ionicons name="reorder-three-outline" size={20} color={isActive ? T.primary : T.muted} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.rowMain}
+        onPress={() => onPress(routine.id)}
+        onLongPress={() => onDelete(routine.id, routine.name)}
+        activeOpacity={0.7}
+      >
+        <View style={[styles.iconAvatar, hasMartialArts && styles.iconAvatarMat]}>
+          {hasMartialArts ? (
+            <Ionicons name="flash" size={18} color={T.grappling} />
+          ) : (
+            <Ionicons name="barbell" size={18} color={T.textDim} />
+          )}
+        </View>
+        <View style={styles.rowContent}>
+          <Text style={styles.rowName}>{routine.name}</Text>
+          <Text style={styles.rowMeta}>
+            {routine.items.length} item{routine.items.length !== 1 ? 's' : ''}
+            {routine.dayLabel ? ` · ${routine.dayLabel}` : ''}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={T.muted} />
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -65,6 +90,7 @@ export default function RoutinesScreen() {
   const { isPro, showPaywall } = useProGate();
   const { data: routines, isLoading, isError, error } = useRoutines();
   const deleteRoutine = useDeleteRoutine();
+  const reorderRoutines = useReorderRoutines();
 
   function handleDelete(id: string, name: string) {
     Alert.alert(
@@ -148,17 +174,29 @@ export default function RoutinesScreen() {
       )}
 
       {!isLoading && !isError && (
-        <FlatList
+        <DraggableFlatList
           data={list}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <RoutineRow
-              routine={item}
-              onPress={(id) => router.push({ pathname: '/routines/[id]', params: { id } })}
-              onDelete={handleDelete}
-            />
+          onDragEnd={({ data }) =>
+            reorderRoutines.mutate(
+              { order: data.map((r) => r.id) },
+              { onError: (err) => Alert.alert('Error', err.message ?? 'Failed to reorder routines.') },
+            )
+          }
+          containerStyle={{ flex: 1 }}
+          activationDistance={12}
+          autoscrollThreshold={80}
+          renderItem={({ item, drag, isActive }: RenderItemParams<RoutineWithItems>) => (
+            <ScaleDecorator>
+              <RoutineRow
+                routine={item}
+                onPress={(id) => router.push({ pathname: '/routines/[id]', params: { id } })}
+                onDelete={handleDelete}
+                drag={list.length > 1 ? drag : undefined}
+                isActive={isActive}
+              />
+            </ScaleDecorator>
           )}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
             <View style={styles.emptyBlock}>
               <Text style={styles.emptyText}>No routines yet.</Text>
@@ -190,8 +228,17 @@ function makeStyles(T: ThemeColors) {
     },
 
     row: {
-      flexDirection: 'row', alignItems: 'center', gap: 12,
+      flexDirection: 'row', alignItems: 'center', gap: 4,
       paddingHorizontal: D.pad, paddingVertical: 14,
+      // Opaque, and the divider lives on the row rather than in a separator so
+      // it travels with the row while it is being dragged.
+      backgroundColor: T.bg,
+      borderBottomWidth: 1, borderBottomColor: T.border,
+    },
+    rowActive: { backgroundColor: T.surface2 },
+    rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
+    gripHandle: {
+      width: 34, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -8,
     },
     iconAvatar: {
       width: 40, height: 40, borderRadius: R.sm,
@@ -202,7 +249,6 @@ function makeStyles(T: ThemeColors) {
     rowName: { fontFamily: F.uiMed, fontSize: 15, color: T.text, marginBottom: 2 },
     rowMeta: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
 
-    separator: { height: 1, backgroundColor: T.border, marginLeft: D.pad + 40 + 12 },
     centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
     emptyBlock: { alignItems: 'center', paddingVertical: 48 },
 

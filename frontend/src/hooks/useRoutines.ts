@@ -3,6 +3,7 @@ import type {
   AddRoutineItemRequest,
   CreateRoutineRequest,
   ReorderRoutineItemsRequest,
+  ReorderRoutinesRequest,
   RoutineItemWithDetails,
   RoutineListResponse,
   RoutineWithItems,
@@ -91,14 +92,80 @@ export function useRemoveRoutineItem() {
   });
 }
 
+const ROUTINES_KEY = ['routines'] as const;
+
+type RoutinesCtx = { previous?: RoutineWithItems[] };
+
+// Reorders `list` to match `order`, appending anything added since the drag
+// started so a concurrent insert can't be dropped from the cache.
+function applyOrder<T extends { id: string }>(list: T[], order: string[]): T[] {
+  const byId = new Map(list.map((entry) => [entry.id, entry]));
+  const reordered = order
+    .map((id) => byId.get(id))
+    .filter((entry): entry is T => entry !== undefined);
+  const missing = list.filter((entry) => !order.includes(entry.id));
+  return [...reordered, ...missing];
+}
+
 export function useReorderRoutineItems() {
   const queryClient = useQueryClient();
 
-  return useMutation<void, Error, { routineId: string } & ReorderRoutineItemsRequest>({
+  return useMutation<void, Error, { routineId: string } & ReorderRoutineItemsRequest, RoutinesCtx>({
     mutationFn: ({ routineId, order }) =>
       apiPut<void>(`/routines/${routineId}/items/order`, { order }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['routines'] });
+    // Without this the list re-renders from the stale cache the moment the row
+    // is dropped, so the drag visibly snaps back until the refetch lands.
+    onMutate: async ({ routineId, order }) => {
+      await queryClient.cancelQueries({ queryKey: ROUTINES_KEY });
+      const previous = queryClient.getQueryData<RoutineWithItems[]>(ROUTINES_KEY);
+      if (previous) {
+        queryClient.setQueryData<RoutineWithItems[]>(
+          ROUTINES_KEY,
+          previous.map((routine) =>
+            routine.id === routineId
+              ? {
+                  ...routine,
+                  items: applyOrder(routine.items, order).map((item, i) => ({
+                    ...item,
+                    orderIndex: i,
+                  })),
+                }
+              : routine,
+          ),
+        );
+      }
+      return { previous };
+    },
+    onError: (_e, _vars, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(ROUTINES_KEY, ctx.previous);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ROUTINES_KEY });
+    },
+  });
+}
+
+export function useReorderRoutines() {
+  const queryClient = useQueryClient();
+
+  return useMutation<void, Error, ReorderRoutinesRequest, RoutinesCtx>({
+    mutationFn: ({ order }) => apiPut<void>('/routines/order', { order }),
+    onMutate: async ({ order }) => {
+      await queryClient.cancelQueries({ queryKey: ROUTINES_KEY });
+      const previous = queryClient.getQueryData<RoutineWithItems[]>(ROUTINES_KEY);
+      if (previous) {
+        queryClient.setQueryData<RoutineWithItems[]>(
+          ROUTINES_KEY,
+          applyOrder(previous, order).map((routine, i) => ({ ...routine, orderIndex: i })),
+        );
+      }
+      return { previous };
+    },
+    onError: (_e, _vars, ctx) => {
+      if (ctx?.previous) queryClient.setQueryData(ROUTINES_KEY, ctx.previous);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ROUTINES_KEY });
     },
   });
 }
