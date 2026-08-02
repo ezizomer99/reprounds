@@ -6,7 +6,7 @@ import { F, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../lib/color';
 import { useSessionsInRange } from '../hooks/useSession';
-import { DAY_LABELS, MONTH_NAMES, monthCells, monthRange, toISODate } from '../lib/calendar';
+import { MONTH_NAMES, monthCells, monthRange, toISODate } from '../lib/calendar';
 
 // Fixed 6-week grid so every month renders at the same height — keeps the
 // calendar's FlashList offsets stable for initialScrollIndex.
