@@ -11,7 +11,8 @@ import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
 import { Skeleton } from '../../../src/components/Skeleton';
-import { SessionRow, buildRoutineMap, rowSeparatorMargin, sessionIsMat } from '../../../src/components/SessionRow';
+import { SessionRow, buildRoutineMap, rowSeparatorMargin } from '../../../src/components/SessionRow';
+import { sessionIsMat } from '../../../src/lib/sessionMarkers';
 
 const FREE_HISTORY_DAYS = 30;
 

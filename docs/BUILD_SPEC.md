@@ -247,6 +247,14 @@ null, exempt from the single-active-session rule); `POST /sessions/:id/start`
 flips it to `in_progress` when the day comes. Planned sessions are just rows in
 `sessions` — there is still no recurrence and no projection.
 
+The calendar also **backfills past workouts**: tapping a past day offers "Log a
+workout for this day", which is an ordinary `POST /sessions` with that date and
+no `status` (so it is `in_progress` and *is* subject to the single-active-session
+rule), followed by the normal logging flow; `POST /sessions/:id/complete`
+preserves the past date. Weeks are **Monday-first**, matching week streaks and
+stats. `GET /sessions` list responses carry `volumeKg` and `completedSets` per
+session so day/summary views can show volume without fetching entries.
+
 ### 5.3 Dynamic discipline forms
 
 - Each `disciplines.field_config` is an ordered array of field defs:

@@ -57,6 +57,7 @@ function makeSelectChain() {
     where: () => Chain;
     limit: () => Chain;
     orderBy: () => Chain;
+    groupBy: () => Chain;
     leftJoin: () => Chain;
     innerJoin: () => Chain;
     then: (resolve: (v: unknown[]) => void, reject: (e: unknown) => void) => void;
@@ -66,6 +67,7 @@ function makeSelectChain() {
     where: () => chain,
     limit: () => chain,
     orderBy: () => chain,
+    groupBy: () => chain,
     leftJoin: () => chain,
     innerJoin: () => chain,
     then(resolve, reject) {
@@ -715,6 +717,20 @@ describe('POST /sessions/:id/complete', () => {
     expect(json.session.id).toBe(SESSION_ID);
     expect(json.session.status).toBe('completed');
   });
+
+  it('returns 400 for a malformed backdate', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]); // owner check ✓
+
+    const res = await makeApp().request(`/sessions/${SESSION_ID}/complete`, {
+      method: 'POST',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: '3/7/2026' }),
+    }, env);
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('date must be YYYY-MM-DD');
+    expect(mock.update).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -724,6 +740,7 @@ describe('GET /sessions (list filters)', () => {
   it('accepts a from/to date range', async () => {
     mock.selectQueue.push([fakeSessionRow]); // rows page
     mock.selectQueue.push([]);               // distinct entry kinds
+    mock.selectQueue.push([]);               // volume aggregate
 
     const res = await makeApp().request(
       '/sessions?from=2026-07-01&to=2026-07-31',
@@ -759,6 +776,33 @@ describe('GET /sessions (list filters)', () => {
     expect(res.status).toBe(400);
     expect((await res.json() as { error: string }).error).toBe('Invalid status');
     expect(mock.select).not.toHaveBeenCalled();
+  });
+
+  it('returns volumeKg and completedSets as numbers, not numeric strings', async () => {
+    mock.selectQueue.push([fakeSessionRow]); // rows page
+    mock.selectQueue.push([]);               // distinct entry kinds
+    // Postgres numeric comes back as a string — the route must convert it.
+    mock.selectQueue.push([{ sessionId: SESSION_ID, volumeKg: '1618.5', completedSets: 12 }]);
+
+    const res = await makeApp().request('/sessions', { headers: await bearer() }, env);
+
+    expect(res.status).toBe(200);
+    const json = await res.json() as { sessions: { volumeKg: number; completedSets: number }[] };
+    expect(json.sessions[0].volumeKg).toBe(1618.5);
+    expect(json.sessions[0].completedSets).toBe(12);
+  });
+
+  it('defaults volume and set count to 0 for a session with no completed sets', async () => {
+    mock.selectQueue.push([fakeSessionRow]); // rows page
+    mock.selectQueue.push([]);               // distinct entry kinds
+    mock.selectQueue.push([]);               // aggregate omits sessions with no completed sets
+
+    const res = await makeApp().request('/sessions', { headers: await bearer() }, env);
+
+    expect(res.status).toBe(200);
+    const json = await res.json() as { sessions: { volumeKg: number; completedSets: number }[] };
+    expect(json.sessions[0].volumeKg).toBe(0);
+    expect(json.sessions[0].completedSets).toBe(0);
   });
 });
 

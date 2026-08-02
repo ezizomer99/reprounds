@@ -8,7 +8,10 @@ export const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
-export const DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+// Monday-first, matching the rest of the app: week streaks, My Week, the stats
+// buckets (statsHelpers.mondayOf) and the backend's mat-stats weeks.
+export const DAY_LABELS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
+export const DAY_LABELS_LONG = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 /** `YYYY-MM-DD` from local year / 0-indexed month / day-of-month. */
 export function toISODate(year: number, month0: number, day: number): string {
@@ -22,12 +25,14 @@ export function localTodayISO(): string {
 }
 
 /**
- * The month's day cells as a null-padded Sunday-first grid: leading nulls for
+ * The month's day cells as a null-padded Monday-first grid: leading nulls for
  * the weekday offset of the 1st, then 1..daysInMonth, then trailing nulls to a
  * multiple of 7.
  */
 export function monthCells(year: number, month0: number): (number | null)[] {
-  const firstDayOffset = new Date(year, month0, 1).getDay();
+  // Monday-first: shift Sunday (0) to the end of the week, the same idiom as
+  // statsHelpers.mondayOf and MyWeek.
+  const firstDayOffset = (new Date(year, month0, 1).getDay() + 6) % 7;
   const daysInMonth = new Date(year, month0 + 1, 0).getDate();
   const cells: (number | null)[] = [
     ...Array<null>(firstDayOffset).fill(null),

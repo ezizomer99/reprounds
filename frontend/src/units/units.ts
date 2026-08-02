@@ -18,6 +18,20 @@ export function fmtWeight(kg: number, unit: WeightUnit): string {
   return Number.isInteger(v) ? String(v) : v.toFixed(1);
 }
 
+/**
+ * Format a whole-minute duration as "45 min" / "1h" / "1h 30min" — session
+ * lengths. Distinct from `fmtDuration`, which formats seconds as "m:ss" for
+ * the rest timer.
+ */
+export function fmtMinutes(mins: number): string {
+  if (mins === 0) return '0 min';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h === 0) return `${m} min`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}min`;
+}
+
 /** Format a duration in seconds as "m:ss". */
 export function fmtDuration(secs: number): string {
   const m = Math.floor(secs / 60);
