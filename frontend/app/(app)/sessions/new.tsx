@@ -19,11 +19,17 @@ export default function NewSessionScreen() {
   const { data: routines, isLoading, isError } = useRoutines();
   const createSession = useCreateSession();
 
-  // Arriving with a ?date= (from the calendar) switches the screen into
-  // schedule mode: the session is created as 'planned' on that date and the
-  // user returns to the calendar instead of entering the live logger.
-  const { date: scheduleDate } = useLocalSearchParams<{ date?: string }>();
-  const isScheduling = !!scheduleDate;
+  // Arriving from the calendar with a ?date=:
+  //  - mode omitted  → schedule mode: create a 'planned' session on that future
+  //    date and return to the calendar rather than entering the live logger.
+  //  - mode=log      → backfill mode: the workout already happened, so create a
+  //    normal session dated that day and go straight into the logger.
+  const { date: calendarDate, mode } = useLocalSearchParams<{
+    date?: string;
+    mode?: 'schedule' | 'log';
+  }>();
+  const isBackfill = !!calendarDate && mode === 'log';
+  const isScheduling = !!calendarDate && !isBackfill;
 
   const todayISO = localTodayISO();
 
@@ -33,7 +39,9 @@ export default function NewSessionScreen() {
       const sid = e.body.sessionId;
       Alert.alert(
         'Active Session',
-        'You already have a session in progress.',
+        isBackfill
+          ? 'You already have a session in progress. Finish or discard it before logging a past workout.'
+          : 'You already have a session in progress.',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Resume', onPress: () => router.push({ pathname: '/sessions/[id]', params: { id: sid } } as never) },
@@ -47,16 +55,28 @@ export default function NewSessionScreen() {
       if (isScheduling) {
         await createSession.mutateAsync({
           routineId: routine.id,
-          date: scheduleDate,
+          date: calendarDate,
           kind,
           status: 'planned',
         });
         router.back();
         return;
       }
-      const session = await createSession.mutateAsync({ routineId: routine.id, date: todayISO, kind });
-      router.push({ pathname: '/sessions/[id]', params: { id: session.id } } as never);
+      const session = await createSession.mutateAsync({
+        routineId: routine.id,
+        date: isBackfill ? calendarDate : todayISO,
+        kind,
+      });
+      openLogger(session.id);
     } catch (err) { handleActiveSessionConflict(err); }
+  }
+
+  // Backfill replaces this screen so Back from the logger returns to the
+  // calendar, not to a picker that would happily create a second session.
+  function openLogger(id: string) {
+    const to = { pathname: '/sessions/[id]', params: { id } } as never;
+    if (isBackfill) router.replace(to);
+    else router.push(to);
   }
 
   function handleStartFromRoutine(routine: RoutineWithItems) {
@@ -66,7 +86,7 @@ export default function NewSessionScreen() {
     // routine is run one part at a time, so ask which part to start.
     if (hasGym && hasMat) {
       Alert.alert(
-        isScheduling ? 'Schedule which part?' : 'Start which part?',
+        isScheduling ? 'Schedule which part?' : isBackfill ? 'Log which part?' : 'Start which part?',
         'This routine has both gym and martial-arts items. A session tracks one at a time.',
         [
           { text: 'Gym', onPress: () => startRoutine(routine, 'exercise') },
@@ -82,12 +102,14 @@ export default function NewSessionScreen() {
   async function handleEmptySession() {
     try {
       if (isScheduling) {
-        await createSession.mutateAsync({ date: scheduleDate, status: 'planned' });
+        await createSession.mutateAsync({ date: calendarDate, status: 'planned' });
         router.back();
         return;
       }
-      const session = await createSession.mutateAsync({ date: todayISO });
-      router.push({ pathname: '/sessions/[id]', params: { id: session.id } } as never);
+      const session = await createSession.mutateAsync({
+        date: isBackfill ? calendarDate : todayISO,
+      });
+      openLogger(session.id);
     } catch (err) { handleActiveSessionConflict(err); }
   }
 
@@ -104,14 +126,18 @@ export default function NewSessionScreen() {
         >
           <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{isScheduling ? 'Schedule Session' : 'New Session'}</Text>
+        <Text style={styles.headerTitle}>
+          {isScheduling ? 'Schedule Session' : isBackfill ? 'Log Past Workout' : 'New Session'}
+        </Text>
         <View style={{ width: 40 }} />
       </View>
 
       {isStarting ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={T.primary} />
-          <Text style={styles.startingText}>{isScheduling ? 'Scheduling session…' : 'Starting session…'}</Text>
+          <Text style={styles.startingText}>
+            {isScheduling ? 'Scheduling session…' : 'Starting session…'}
+          </Text>
         </View>
       ) : (
         <FlatList
@@ -124,7 +150,11 @@ export default function NewSessionScreen() {
                   <Ionicons name="add" size={20} color={T.onPrimary} />
                   <View>
                     <Text style={styles.heroCtaTitle}>
-                      {isScheduling ? 'Schedule empty session' : 'Start empty session'}
+                      {isScheduling
+                        ? 'Schedule empty session'
+                        : isBackfill
+                          ? 'Log empty session'
+                          : 'Start empty session'}
                     </Text>
                     <Text style={styles.heroCtaSub}>
                       {isScheduling ? 'Plan a session without a routine' : 'Log without a routine'}

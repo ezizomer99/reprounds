@@ -59,8 +59,9 @@ import { Skeleton } from '../../../src/components/Skeleton';
 import { RoundLogger, BOXING_WEAPONS, MUAY_THAI_WEAPONS } from '../../../src/components/RoundLogger';
 import { PlateCalculator } from '../../../src/components/PlateCalculator';
 import { CalendarPicker } from '../../../src/components/CalendarPicker';
+import { localTodayISO } from '../../../src/lib/calendar';
 import { useUnit } from '../../../src/units/UnitContext';
-import { fmtWeight, kgToUnit, unitToKg, fmtDuration, parseDuration } from '../../../src/units/units';
+import { fmtWeight, kgToUnit, unitToKg, fmtDuration, fmtMinutes, parseDuration } from '../../../src/units/units';
 import { suggestOverload } from '../../../src/lib/overload';
 import { generateWarmupRamp } from '../../../src/lib/warmup';
 import { cancelScheduled, cancelScheduledByKind, scheduleInSeconds } from '../../../src/lib/notifications';
@@ -1474,15 +1475,19 @@ function SessionSettingsSheet({ session, routineName, onSave, onFinish, onDiscar
   const styles = useMemo(() => makeStyles(T), [T]);
   const now = new Date();
 
-  // Parse startedAt into local hours/minutes
+  // A backdated session was created just now to record a workout from an
+  // earlier day, so `startedAt` and "now" are both meaningless as clock times —
+  // they'd give a 0-minute duration. Seed a plausible evening hour to edit
+  // instead of silently saving zero.
+  const isBackdated = session.date !== localTodayISO();
   const startDate = session.startedAt ? new Date(session.startedAt) : now;
   const [name, setName] = useState(session.name ?? routineName ?? '');
   const [notes, setNotes] = useState(session.notes ?? '');
   const [date, setDate] = useState(session.date);
-  const [startH, setStartH] = useState(startDate.getHours());
-  const [startM, setStartM] = useState(startDate.getMinutes());
-  const [endH, setEndH] = useState(now.getHours());
-  const [endM, setEndM] = useState(now.getMinutes());
+  const [startH, setStartH] = useState(isBackdated ? 18 : startDate.getHours());
+  const [startM, setStartM] = useState(isBackdated ? 0 : startDate.getMinutes());
+  const [endH, setEndH] = useState(isBackdated ? 19 : now.getHours());
+  const [endM, setEndM] = useState(isBackdated ? 0 : now.getMinutes());
 
   const durationMinutes = useMemo(() => {
     let mins = (endH * 60 + endM) - (startH * 60 + startM);
@@ -1490,14 +1495,6 @@ function SessionSettingsSheet({ session, routineName, onSave, onFinish, onDiscar
     return mins;
   }, [startH, startM, endH, endM]);
 
-  function formatDuration(mins: number): string {
-    if (mins === 0) return '0 min';
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    if (h === 0) return `${m} min`;
-    if (m === 0) return `${h}h`;
-    return `${h}h ${m}min`;
-  }
 
   function handleClose() {
     onSave(name, notes);
@@ -1559,7 +1556,7 @@ function SessionSettingsSheet({ session, routineName, onSave, onFinish, onDiscar
             </View>
           </View>
           <Text style={styles.settingsDurationHint}>
-            Duration: {formatDuration(durationMinutes)}
+            Duration: {fmtMinutes(durationMinutes)}
           </Text>
 
           {/* Notes */}
@@ -1707,11 +1704,13 @@ export default function SessionScreen() {
 
   useEffect(() => {
     if (!session?.startedAt || session.status !== 'in_progress') return;
+    // Backdated log: the wall-clock elapsed time is meaningless, so don't run.
+    if (session.date < localTodayISO()) return;
     const tick = () => setElapsed(Math.floor((Date.now() - new Date(session.startedAt!).getTime()) / 1000));
     tick();
     const intervalId = setInterval(tick, 1000);
     return () => clearInterval(intervalId);
-  }, [session?.startedAt, session?.status]);
+  }, [session?.startedAt, session?.status, session?.date]);
 
   // A finished session has no next set to rest for — clear any pending
   // "Rest complete" notification (covers finishing mid-rest and reopening a
@@ -1939,6 +1938,9 @@ export default function SessionScreen() {
   const canFinish = doneCount > 0 || hasMartialArts;
   const isActive = session.status !== 'completed';
   const isPlanned = session.status === 'planned';
+  // A workout being logged after the fact: the elapsed timer would count from
+  // the moment the session row was created, which tells the user nothing.
+  const isBackdated = session.status === 'in_progress' && session.date < localTodayISO();
   const scheduledLabel = new Date(session.date + 'T00:00:00').toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -1989,12 +1991,14 @@ export default function SessionScreen() {
 
         {/* Center: scheduled date when planned, timer when live, name when done */}
         <View style={styles.headerCenter}>
-          {isPlanned ? (
+          {isPlanned || isBackdated ? (
             <>
               <Text style={styles.headerDoneLabel} numberOfLines={1}>
                 {scheduledLabel}
               </Text>
-              <Text style={styles.headerScheduledSub}>Scheduled</Text>
+              <Text style={styles.headerScheduledSub}>
+                {isPlanned ? 'Scheduled' : 'Logging past workout'}
+              </Text>
             </>
           ) : isActive ? (
             <Text style={styles.headerTimer}>{formatElapsed(elapsed)}</Text>

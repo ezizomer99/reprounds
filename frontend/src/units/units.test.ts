@@ -1,4 +1,4 @@
-import { kgToUnit, unitToKg, fmtWeight, fmtDuration, parseDuration } from './units';
+import { kgToUnit, unitToKg, fmtWeight, fmtDuration, fmtMinutes, parseDuration } from './units';
 
 describe('kgToUnit / unitToKg', () => {
   it('is identity for kg unit', () => {
@@ -41,6 +41,16 @@ describe('fmtWeight', () => {
 
   it('rounds 1.25 kg to 2.8 lbs', () => {
     expect(fmtWeight(1.25, 'lbs')).toBe('2.8');
+  });
+});
+
+describe('fmtMinutes', () => {
+  it('formats session lengths in hours and minutes', () => {
+    expect(fmtMinutes(0)).toBe('0 min');
+    expect(fmtMinutes(45)).toBe('45 min');
+    expect(fmtMinutes(60)).toBe('1h');
+    expect(fmtMinutes(90)).toBe('1h 30min');
+    expect(fmtMinutes(125)).toBe('2h 5min');
   });
 });
 

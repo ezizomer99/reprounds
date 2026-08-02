@@ -239,6 +239,13 @@ export interface Session {
   entries?: SessionEntry[];
   /** Distinct entry kinds present in this session (set on list responses). */
   kinds?: EntryKind[];
+  /**
+   * Total volume of completed sets, in kg (set on list responses). Lets the
+   * calendar and history show a session's volume without fetching its entries.
+   */
+  volumeKg?: number;
+  /** Number of completed strength sets (set on list responses). */
+  completedSets?: number;
   /** IDs of the training focuses the user ticked as worked on this session. */
   focusIds?: string[];
 }

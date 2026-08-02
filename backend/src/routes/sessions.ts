@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, asc, desc, eq, gte, inArray, isNotNull, lte, max } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, lte, max, sql } from 'drizzle-orm';
 import { createDb } from '../db';
 import {
   disciplines,
@@ -336,6 +336,32 @@ sessionRoutes.get('/', async (c) => {
     set.add(r.kind);
   }
 
+  // Per-session volume of completed sets, so the calendar's day sheet can show
+  // "45 min · 1,618 kg" without fetching every session's entries. SUM skips
+  // NULL products, matching shared/src/calculators/volume.ts, which counts a
+  // null weight or null reps as zero.
+  const volumeRows = ids.length
+    ? await db
+        .select({
+          sessionId: sessionEntries.sessionId,
+          volumeKg: sql<string>`COALESCE(SUM(${strengthSets.weight} * ${strengthSets.reps}), 0)`,
+          completedSets: sql<number>`COUNT(*)::int`,
+        })
+        .from(strengthSets)
+        .innerJoin(sessionEntries, eq(strengthSets.sessionEntryId, sessionEntries.id))
+        .where(and(inArray(sessionEntries.sessionId, ids), eq(strengthSets.completed, true)))
+        .groupBy(sessionEntries.sessionId)
+    : [];
+
+  // `weight` is numeric, so both it and SUM() come back as strings — these must
+  // be converted or the JSON ships a string the client then formats as garbage.
+  const volumeMap = new Map(
+    volumeRows.map((r) => [
+      r.sessionId,
+      { volumeKg: Number(r.volumeKg), completedSets: Number(r.completedSets) },
+    ]),
+  );
+
   const mapped = rows.map((s) => ({
     id: s.id,
     userId: s.userId,
@@ -349,6 +375,9 @@ sessionRoutes.get('/', async (c) => {
     notes: s.notes ?? null,
     createdAt: s.createdAt.toISOString(),
     kinds: [...(kindMap.get(s.id) ?? [])],
+    // Sessions with no completed sets never appear in the aggregate.
+    volumeKg: volumeMap.get(s.id)?.volumeKg ?? 0,
+    completedSets: volumeMap.get(s.id)?.completedSets ?? 0,
   }));
 
   return c.json({ sessions: mapped });
@@ -666,7 +695,12 @@ sessionRoutes.post('/:id/complete', async (c) => {
   if (body.name !== undefined) updates.name = body.name ?? null;
   if (body.durationMinutes !== undefined) updates.durationMinutes = body.durationMinutes ?? null;
   if (body.notes !== undefined) updates.notes = body.notes ?? null;
-  if (body.date !== undefined) updates.date = body.date;
+  // Backdating a finished session is how a past workout gets its real date —
+  // validate it like every other date the API accepts.
+  if (body.date !== undefined) {
+    if (!isIsoDate(body.date)) return c.json({ error: 'date must be YYYY-MM-DD' }, 400);
+    updates.date = body.date;
+  }
 
   await db
     .update(sessions)

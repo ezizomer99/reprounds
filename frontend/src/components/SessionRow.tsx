@@ -23,11 +23,6 @@ export function buildRoutineMap(routines: RoutineWithItems[] | undefined): Map<s
   return map;
 }
 
-/** True when a session contains at least one martial-arts entry. */
-export function sessionIsMat(session: Session): boolean {
-  return session.kinds?.includes('martial_arts') ?? false;
-}
-
 /** Human status for meta lines: a planned session past its date is overdue. */
 export function statusLabel(session: Session): string {
   switch (session.status) {
