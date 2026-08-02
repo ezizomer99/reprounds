@@ -85,7 +85,14 @@ export default function HistoryScreen() {
           <Text style={styles.headerTitle}>History</Text>
           {list.length > 0 && <Text style={styles.headerSub}>{list.length} sessions logged</Text>}
         </View>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.push('/calendar' as never)}
+          accessibilityRole="button"
+          accessibilityLabel="Open calendar"
+        >
+          <Ionicons name="calendar-outline" size={20} color={T.text} />
+        </TouchableOpacity>
       </View>
 
       <View style={styles.filterRow}>

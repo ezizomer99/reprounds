@@ -39,6 +39,7 @@ import { ExerciseFilters, filterByChips, EMPTY_FILTER, type ExerciseChipFilter }
 import {
   useSession,
   useCompleteSession,
+  useStartSession,
   useUpdateSession,
   useDeleteSession,
   useAddSessionEntry,
@@ -1605,6 +1606,7 @@ export default function SessionScreen() {
   const completeSession = useCompleteSession();
   const deleteSession = useDeleteSession();
   const updateSession = useUpdateSession();
+  const startSession = useStartSession();
   const updateEntry = useUpdateSessionEntry();
   const addEntry = useAddSessionEntry();
   const { data: disciplines } = useDisciplines();
@@ -1632,6 +1634,7 @@ export default function SessionScreen() {
   const [showDisciplinePicker, setShowDisciplinePicker] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showReorder, setShowReorder] = useState(false);
+  const [showReschedule, setShowReschedule] = useState(false);
   const [restSeconds, setRestSeconds] = useState<number | null>(null);
   const [restTotal, setRestTotal] = useState(120);
   // Which entry's rest timer is running, so its card can show a stop control.
@@ -1767,7 +1770,9 @@ export default function SessionScreen() {
   }
 
   function handleBack() {
-    if (session?.status !== 'completed') {
+    // Leaving a scheduled (planned) or finished session is normal navigation —
+    // the leave-warning only applies to a live in-progress session.
+    if (session?.status !== 'completed' && session?.status !== 'planned') {
       Alert.alert(
         'Leave Session?',
         'Your session will still be in progress. Use the Resume button to return.',
@@ -1778,6 +1783,39 @@ export default function SessionScreen() {
       );
     } else {
       router.back();
+    }
+  }
+
+  async function handleStartPlanned() {
+    if (!id) return;
+    try {
+      await startSession.mutateAsync({ id });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      const e = err as { status?: number; body?: { sessionId?: string } };
+      if (e?.status === 409 && e?.body?.sessionId) {
+        const sid = e.body.sessionId;
+        Alert.alert(
+          'Active Session',
+          'You already have a session in progress.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Resume', onPress: () => router.push({ pathname: '/sessions/[id]', params: { id: sid } } as never) },
+          ],
+        );
+      } else {
+        Alert.alert('Error', (err as Error).message ?? 'Failed to start session.');
+      }
+    }
+  }
+
+  async function handleReschedule(date: string) {
+    if (!id) return;
+    setShowReschedule(false);
+    try {
+      await updateSession.mutateAsync({ id, date });
+    } catch (err) {
+      Alert.alert('Error', (err as Error).message ?? 'Failed to reschedule session.');
     }
   }
 
@@ -1890,6 +1928,12 @@ export default function SessionScreen() {
   const hasExercise = session.entries.some((e) => e.kind === 'exercise');
   const canFinish = doneCount > 0 || hasMartialArts;
   const isActive = session.status !== 'completed';
+  const isPlanned = session.status === 'planned';
+  const scheduledLabel = new Date(session.date + 'T00:00:00').toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
 
   // Link/unlink an exercise into a superset with the entry above it.
   const sessId = session.id;
@@ -1916,9 +1960,16 @@ export default function SessionScreen() {
           <Ionicons name="close" size={20} color={T.danger} />
         </TouchableOpacity>
 
-        {/* Center: timer or session name when done */}
+        {/* Center: scheduled date when planned, timer when live, name when done */}
         <View style={styles.headerCenter}>
-          {isActive ? (
+          {isPlanned ? (
+            <>
+              <Text style={styles.headerDoneLabel} numberOfLines={1}>
+                {scheduledLabel}
+              </Text>
+              <Text style={styles.headerScheduledSub}>Scheduled</Text>
+            </>
+          ) : isActive ? (
             <Text style={styles.headerTimer}>{formatElapsed(elapsed)}</Text>
           ) : (
             <Text style={styles.headerDoneLabel} numberOfLines={1}>
@@ -1943,26 +1994,61 @@ export default function SessionScreen() {
             <TouchableOpacity style={styles.headerIconBtn} onPress={() => setShowSettings(true)}>
               <Ionicons name="settings-outline" size={20} color={T.textDim} />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.headerIconBtn,
-                styles.headerFinishBtn,
-                (!canFinish || completeSession.isPending) && { opacity: 0.4 },
-              ]}
-              onPress={() => setShowSettings(true)}
-              disabled={!canFinish || completeSession.isPending}
-              accessibilityRole="button"
-              accessibilityLabel="Finish workout"
-            >
-              {completeSession.isPending
-                ? <ActivityIndicator size="small" color={T.onPrimary} />
-                : <Ionicons name="checkmark" size={20} color={T.onPrimary} />}
-            </TouchableOpacity>
+            {/* A planned session can't finish — it must be started first. */}
+            {!isPlanned && (
+              <TouchableOpacity
+                style={[
+                  styles.headerIconBtn,
+                  styles.headerFinishBtn,
+                  (!canFinish || completeSession.isPending) && { opacity: 0.4 },
+                ]}
+                onPress={() => setShowSettings(true)}
+                disabled={!canFinish || completeSession.isPending}
+                accessibilityRole="button"
+                accessibilityLabel="Finish workout"
+              >
+                {completeSession.isPending
+                  ? <ActivityIndicator size="small" color={T.onPrimary} />
+                  : <Ionicons name="checkmark" size={20} color={T.onPrimary} />}
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
           <View style={styles.doneBadge}><Text style={styles.doneBadgeText}>Done</Text></View>
         )}
       </View>
+
+      {/* Pinned bar for a scheduled session: start it or move it. */}
+      {isPlanned && (
+        <View style={styles.plannedBar}>
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            onPress={handleStartPlanned}
+            disabled={startSession.isPending}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Start workout"
+          >
+            <CutCornerView fill={T.primary} style={styles.startCta}>
+              {startSession.isPending ? (
+                <ActivityIndicator size="small" color={T.onPrimary} />
+              ) : (
+                <Ionicons name="play" size={16} color={T.onPrimary} />
+              )}
+              <Text style={styles.startCtaText}>Start workout</Text>
+            </CutCornerView>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.rescheduleBtn}
+            onPress={() => setShowReschedule(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Reschedule workout"
+          >
+            <Ionicons name="calendar-outline" size={16} color={T.textDim} />
+            <Text style={styles.rescheduleText}>Move</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <ScrollView
         style={{ flex: 1 }}
@@ -2145,6 +2231,24 @@ export default function SessionScreen() {
           />
         </View>
       )}
+
+      <Modal
+        visible={showReschedule}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowReschedule(false)}
+      >
+        <TouchableOpacity
+          style={styles.rescheduleOverlay}
+          activeOpacity={1}
+          onPress={() => setShowReschedule(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.rescheduleCard}>
+            <Text style={styles.rescheduleTitle}>Reschedule to</Text>
+            <CalendarPicker value={session.date} onChange={handleReschedule} />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -2186,6 +2290,52 @@ function makeStyles(T: ThemeColors) {
     borderWidth: 1, borderColor: withAlpha(T.primary, 0.3),
   },
   doneBadgeText: { fontFamily: F.uiSemi, fontSize: 13, color: T.primary },
+  headerScheduledSub: { fontFamily: F.uiBold, fontSize: 10, color: T.gold, textTransform: 'uppercase', letterSpacing: 1, marginTop: 1 },
+
+  plannedBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: D.pad,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+  },
+  startCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 13,
+  },
+  startCtaText: { fontFamily: F.uiBold, fontSize: 15, color: T.onPrimary },
+  rescheduleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    borderWidth: 1,
+    borderColor: T.border,
+    borderRadius: R.sm,
+    backgroundColor: T.surface,
+  },
+  rescheduleText: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim },
+  rescheduleOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    padding: D.pad,
+  },
+  rescheduleCard: {
+    backgroundColor: T.bg,
+    borderRadius: R.card,
+    borderWidth: 1,
+    borderColor: T.borderStrong,
+    padding: D.cardPad,
+    gap: 10,
+  },
+  rescheduleTitle: { fontFamily: F.uiSemi, fontSize: 16, color: T.text },
 
   body: { padding: D.pad, gap: D.stack },
 

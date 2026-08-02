@@ -23,7 +23,7 @@ Package manager: **pnpm workspaces**. Always `pnpm install` from root. Each pack
 - `frontend` NEVER imports from `backend`. It only imports from `@app/shared`.
 - `backend` owns the database exclusively — Drizzle schema, migrations, and seed all live here.
 - `shared` is pure TypeScript only — no platform-specific code, no runtime deps beyond what both sides can use.
-- Routines are **started on demand**, not scheduled — there is no calendar, recurrence, or RRULE projection. (The weekly-schedule/`/calendar` feature was removed; routines are reusable plans the user runs whenever.)
+- Routines are **started on demand** or scheduled as **one-off planned sessions** (`sessions.status='planned'`, created from the `/calendar` screen, started via `POST /sessions/:id/start`). There is **still no recurrence**: no RRULE, no schedule-rules tables, no recurrence columns — the removed weekly-schedule layer stays removed. Scheduling = a normal `sessions` row with `status='planned'` on a future date, nothing more.
 - Hyperdrive binding is required in production — never call Neon directly from a Worker.
 - **Never use `@gorhom/bottom-sheet` `BottomSheetModal`** — its `present()` silently no-ops in release builds on RN 0.79 + New Architecture (two fix attempts failed on device, including `enableDynamicSizing={false}`). Use plain RN `Modal` with `presentationStyle="pageSheet"` like every existing dialog. The `BottomSheetModalProvider` in the root layout is vestigial.
 

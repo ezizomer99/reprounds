@@ -3,12 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { F, R, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
-
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
-const DAY_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+import { DAY_LABELS, MONTH_NAMES, monthCells, toISODate } from '../lib/calendar';
 
 // Inline month-grid date picker. `value`/`onChange` use a local `YYYY-MM-DD`
 // string. Extracted from the session logger so every date field (weigh-ins,
@@ -38,17 +33,7 @@ export function CalendarPicker({
       setViewMonth(0);
     } else setViewMonth((m) => m + 1);
   }
-  function toISO(year: number, month: number, day: number): string {
-    return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-  }
-
-  const firstDayOffset = new Date(viewYear, viewMonth, 1).getDay();
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const cells: (number | null)[] = [
-    ...Array<null>(firstDayOffset).fill(null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
-  while (cells.length % 7 !== 0) cells.push(null);
+  const cells = monthCells(viewYear, viewMonth);
 
   const today = new Date();
 
@@ -97,7 +82,7 @@ export function CalendarPicker({
               <TouchableOpacity
                 key={col}
                 style={[styles.calCell, isSelected && styles.calCellSelected]}
-                onPress={() => onChange(toISO(viewYear, viewMonth, day))}
+                onPress={() => onChange(toISODate(viewYear, viewMonth, day))}
                 accessibilityRole="button"
                 accessibilityState={{ selected: isSelected }}
                 accessibilityLabel={`${MONTH_NAMES[viewMonth]} ${day}, ${viewYear}`}

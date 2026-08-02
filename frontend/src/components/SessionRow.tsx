@@ -6,6 +6,7 @@ import type { RoutineWithItems, Session } from '@app/shared';
 import { F, R, D, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../lib/color';
+import { localTodayISO } from '../lib/calendar';
 
 export function formatDateBlock(dateStr: string): { day: string; month: string } {
   const d = new Date(dateStr + 'T00:00:00');
@@ -25,6 +26,20 @@ export function buildRoutineMap(routines: RoutineWithItems[] | undefined): Map<s
 /** True when a session contains at least one martial-arts entry. */
 export function sessionIsMat(session: Session): boolean {
   return session.kinds?.includes('martial_arts') ?? false;
+}
+
+/** Human status for meta lines: a planned session past its date is overdue. */
+export function statusLabel(session: Session): string {
+  switch (session.status) {
+    case 'planned':
+      return session.date < localTodayISO() ? 'Overdue' : 'Scheduled';
+    case 'in_progress':
+      return 'In progress';
+    case 'completed':
+      return 'Completed';
+    case 'skipped':
+      return 'Skipped';
+  }
 }
 
 interface SessionRowProps {
@@ -62,7 +77,7 @@ export function SessionRow({ session, sessionName, routineName, isMat, onPress, 
           <Text style={styles.rowMeta}>
             {duration ?? ''}
             {duration ? ' · ' : ''}
-            {session.status}
+            {statusLabel(session)}
           </Text>
         </View>
         <View style={[styles.kindBadge, isMat && styles.kindBadgeMat]}>

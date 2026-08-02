@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, asc, desc, eq, inArray, isNotNull, max } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, lte, max } from 'drizzle-orm';
 import { createDb } from '../db';
 import {
   disciplines,
@@ -15,7 +15,7 @@ import {
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
 import { disciplineVisible, exerciseVisible } from '../lib/ownership';
-import { isEntryKind, isGiType, isNumberInRange, isSetType } from '@app/shared';
+import { isEntryKind, isGiType, isNumberInRange, isSessionStatus, isSetType } from '@app/shared';
 import type {
   CompleteSessionRequest,
   CreateSessionEntryRequest,
@@ -25,6 +25,7 @@ import type {
   SessionEntryWithSets,
   SessionWithEntries,
   SetSessionFocusesRequest,
+  StartSessionRequest,
   StrengthSet,
   UpdateSessionEntryRequest,
   UpdateSessionRequest,
@@ -42,6 +43,10 @@ function getDb(env: Env['Bindings']) {
 }
 
 const FALLBACK_REST_SECONDS = 120;
+
+function isIsoDate(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+}
 
 // The rest duration an exercise "remembers": the value from the user's most
 // recent session entry for that exercise. A remembered 0 ("Off") counts.
@@ -285,15 +290,30 @@ sessionRoutes.get('/', async (c) => {
   const userId = c.get('userId');
   const db = getDb(c.env);
   const status = c.req.query('status');
+  const from = c.req.query('from');
+  const to = c.req.query('to');
   const limit = Math.min(parseInt(c.req.query('limit') ?? '50', 10), 200);
+
+  if (status !== undefined && !isSessionStatus(status)) {
+    return c.json({ error: 'Invalid status' }, 400);
+  }
+  if (from !== undefined && !isIsoDate(from)) {
+    return c.json({ error: 'from must be YYYY-MM-DD' }, 400);
+  }
+  if (to !== undefined && !isIsoDate(to)) {
+    return c.json({ error: 'to must be YYYY-MM-DD' }, 400);
+  }
 
   const rows = await db
     .select()
     .from(sessions)
     .where(
-      status
-        ? and(eq(sessions.userId, userId), eq(sessions.status, status as 'planned' | 'in_progress' | 'completed' | 'skipped'))
-        : eq(sessions.userId, userId),
+      and(
+        eq(sessions.userId, userId),
+        status ? eq(sessions.status, status) : undefined,
+        from ? gte(sessions.date, from) : undefined,
+        to ? lte(sessions.date, to) : undefined,
+      ),
     )
     .orderBy(desc(sessions.date), desc(sessions.createdAt))
     .limit(limit);
@@ -366,6 +386,14 @@ sessionRoutes.post('/', async (c) => {
     return c.json({ error: 'kind must be exercise or martial_arts' }, 400);
   }
 
+  // Only 'planned' may be requested explicitly — a scheduled one-off workout
+  // that starts later via POST /sessions/:id/start. Every other lifecycle
+  // state is server-assigned.
+  if (body.status !== undefined && body.status !== 'planned') {
+    return c.json({ error: 'status must be planned or omitted' }, 400);
+  }
+  const isPlanned = body.status === 'planned';
+
   // The routine the session is created from must belong to the caller —
   // otherwise the prefill below would read (and echo back) another user's
   // routine structure from a leaked UUID.
@@ -398,14 +426,18 @@ sessionRoutes.post('/', async (c) => {
     routineSeedItems = body.kind ? allItems.filter((i) => i.kind === body.kind) : allItems;
   }
 
-  const [existing] = await db
-    .select({ id: sessions.id })
-    .from(sessions)
-    .where(and(eq(sessions.userId, userId), eq(sessions.status, 'in_progress')))
-    .limit(1);
+  // Scheduling a future workout must not conflict with a live one — only
+  // starting-now sessions are subject to the single-active-session rule.
+  if (!isPlanned) {
+    const [existing] = await db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .where(and(eq(sessions.userId, userId), eq(sessions.status, 'in_progress')))
+      .limit(1);
 
-  if (existing) {
-    return c.json({ error: 'active_session_exists', sessionId: existing.id }, 409);
+    if (existing) {
+      return c.json({ error: 'active_session_exists', sessionId: existing.id }, 409);
+    }
   }
 
   // Seed rest durations for routine exercises without an explicit routine
@@ -433,8 +465,8 @@ sessionRoutes.post('/', async (c) => {
         userId,
         routineId: body.routineId ?? null,
         date: body.date,
-        status: 'in_progress',
-        startedAt: new Date(),
+        status: isPlanned ? 'planned' : 'in_progress',
+        startedAt: isPlanned ? null : new Date(),
         notes: body.notes ?? null,
       })
       .returning();
@@ -518,6 +550,10 @@ sessionRoutes.patch('/:id', async (c) => {
   if ('name' in body) updates.name = body.name ?? null;
   if ('notes' in body) updates.notes = body.notes ?? null;
   if ('durationMinutes' in body) updates.durationMinutes = body.durationMinutes ?? null;
+  if ('date' in body) {
+    if (!isIsoDate(body.date)) return c.json({ error: 'date must be YYYY-MM-DD' }, 400);
+    updates.date = body.date;
+  }
 
   if (Object.keys(updates).length > 0) {
     await db
@@ -549,6 +585,57 @@ sessionRoutes.delete('/:id', async (c) => {
     .where(and(eq(sessions.id, id), eq(sessions.userId, userId)));
 
   return c.json({ success: true });
+});
+
+// POST /sessions/:id/start — flip a planned (scheduled) session live. The
+// single-active-session rule is enforced here, mirroring POST /sessions, so
+// the client's existing 409 conflict handling works for both paths.
+sessionRoutes.post('/:id/start', async (c) => {
+  const userId = c.get('userId');
+  const id = c.req.param('id');
+  const db = getDb(c.env);
+
+  const [existing] = await db
+    .select({ id: sessions.id, status: sessions.status })
+    .from(sessions)
+    .where(and(eq(sessions.id, id), eq(sessions.userId, userId)))
+    .limit(1);
+
+  if (!existing) return c.json({ error: 'Not found' }, 404);
+  if (existing.status !== 'planned') return c.json({ error: 'not_planned' }, 409);
+
+  const [active] = await db
+    .select({ id: sessions.id })
+    .from(sessions)
+    .where(and(eq(sessions.userId, userId), eq(sessions.status, 'in_progress')))
+    .limit(1);
+
+  if (active) {
+    return c.json({ error: 'active_session_exists', sessionId: active.id }, 409);
+  }
+
+  let body: StartSessionRequest = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    // body is optional
+  }
+
+  const updates: Partial<typeof sessions.$inferInsert> = {
+    status: 'in_progress',
+    startedAt: new Date(),
+  };
+  // Client-local today: an overdue planned session snaps to the day it
+  // actually ran.
+  if (isIsoDate(body.date)) updates.date = body.date;
+
+  await db
+    .update(sessions)
+    .set(updates)
+    .where(and(eq(sessions.id, id), eq(sessions.userId, userId)));
+
+  const session = await fetchSessionWithEntries(db, id, userId);
+  return c.json({ session });
 });
 
 // POST /sessions/:id/complete

@@ -468,12 +468,16 @@ export interface CreateSessionRequest {
   // single kind — a session is either weightlifting or martial arts, never both.
   // Required for mixed routines; ignored for empty or single-kind sessions.
   kind?: EntryKind;
+  // Only 'planned' may be requested explicitly (schedule for later, no
+  // startedAt, exempt from the single-active-session rule). Omitted = start now.
+  status?: 'planned';
 }
 
 export interface UpdateSessionRequest {
   name?: string | null;
   notes?: string | null;
   durationMinutes?: number | null;
+  date?: string; // ISO date YYYY-MM-DD — reschedule (planned sessions from the calendar)
 }
 
 export interface CompleteSessionRequest {
@@ -481,6 +485,12 @@ export interface CompleteSessionRequest {
   durationMinutes?: number | null;
   notes?: string | null;
   date?: string; // ISO date YYYY-MM-DD — allows backdating
+}
+
+export interface StartSessionRequest {
+  // Client-local today: an overdue planned session snaps to the day it
+  // actually ran (the server can't know the device's timezone).
+  date?: string; // ISO date YYYY-MM-DD
 }
 
 export interface CreateSessionEntryRequest {

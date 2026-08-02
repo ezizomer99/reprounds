@@ -1,8 +1,10 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useMemo } from 'react';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSessions } from '../hooks/useSession';
 import { mondayOf, weekKey, computeWeekStreak } from '../lib/statsHelpers';
+import { toISODate } from '../lib/calendar';
 import { F, R, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../lib/color';
@@ -27,7 +29,9 @@ function getWeekDays(): WeekDay[] {
       date: d,
       abbrev: d.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 3).toUpperCase(),
       dayNum: d.getDate(),
-      isoDate: d.toISOString().slice(0, 10),
+      // Local date, not toISOString(): UTC formatting shifts the day for
+      // timezones away from UTC.
+      isoDate: toISODate(d.getFullYear(), d.getMonth(), d.getDate()),
     };
   });
 }
@@ -48,6 +52,7 @@ function isToday(d: Date): boolean {
  */
 export function MyWeek() {
   const { T } = useTheme();
+  const router = useRouter();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { data: sessions } = useSessions('completed');
 
@@ -72,7 +77,14 @@ export function MyWeek() {
   }, [sessions]);
 
   return (
-    <View style={styles.card}>
+    // The whole card taps through to the full calendar (history + scheduling).
+    <TouchableOpacity
+      style={styles.card}
+      onPress={() => router.push('/calendar' as never)}
+      activeOpacity={0.8}
+      accessibilityRole="button"
+      accessibilityLabel="Open calendar"
+    >
       <View style={styles.weekHeader}>
         <View style={styles.weekHeaderLeft}>
           <View style={styles.calIconBox}>
@@ -80,6 +92,7 @@ export function MyWeek() {
           </View>
           <Text style={styles.weekTitle}>My Week</Text>
         </View>
+        <Ionicons name="chevron-forward" size={16} color={T.muted} />
       </View>
       <Text style={styles.weekSub}>
         {week.weekCount > 0
@@ -142,7 +155,7 @@ export function MyWeek() {
           </View>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 }
 
