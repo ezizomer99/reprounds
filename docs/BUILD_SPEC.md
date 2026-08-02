@@ -11,11 +11,15 @@ went beyond it, the canonical, current definitions live in code:
 `backend/src/db/schema.ts` (tables), `backend/src/index.ts` + `backend/src/routes/`
 (API), and `shared/src/types/` (contract).
 
-> **Removed: calendar / recurrence.** The weekly-schedule + calendar layer
-> (RRULE projection, the `/calendar` and `/schedule-rules` endpoints, the three
-> edit modes) was removed. Routines are reusable plans the user **starts on
-> demand** from the Workout tab; sessions are created ad-hoc. Do not re-add
-> recurrence columns or a calendar.
+> **Removed: recurrence. Amended: calendar (2026-08).** The weekly-schedule
+> layer (RRULE projection, the `/schedule-rules` endpoint, the three edit
+> modes) was removed — do not re-add recurrence columns or RRULE. Routines are
+> reusable plans the user **starts on demand** from the Workout tab. The
+> shipped product later added a **simpler calendar** (`/calendar` screen):
+> a scrolling month view driven entirely by the existing `sessions` table,
+> where users create **one-off planned sessions** (`status='planned'`, a
+> dormant enum value from the original build) on a date and start them via
+> `POST /sessions/:id/start` when the day comes. No new tables, no recurrence.
 
 ---
 
@@ -229,12 +233,19 @@ Indexes worth adding: `sessions(user_id, date)`, `session_entries(session_id)`, 
 
 Setup gotchas to handle: needs a **Web OAuth client ID** (used on both platforms) + an iOS client ID; register **both debug and release SHA-1 fingerprints** in Google Cloud Console or release builds break silently.
 
-### 5.2 Routines are started on demand — *(recurring schedule removed)*
+### 5.2 Routines are started on demand — *(recurring schedule removed; one-off scheduling amended 2026-08)*
 
 Routines are reusable plans, not scheduled events. From the Workout tab the user
 picks a routine (or "empty session") and a `sessions` row is created ad-hoc,
-prefilling entries/sets from the routine's items. There is no calendar, no RRULE,
-and no `/calendar` or `/schedule-rules` endpoint.
+prefilling entries/sets from the routine's items. There is no RRULE and no
+`/schedule-rules` endpoint.
+
+*[amended 2026-08]* The `/calendar` screen lets the user schedule a **one-off**
+workout on a date: `POST /sessions` with `status:'planned'` creates a normal
+session row (entries/sets seeded from the routine immediately, `started_at`
+null, exempt from the single-active-session rule); `POST /sessions/:id/start`
+flips it to `in_progress` when the day comes. Planned sessions are just rows in
+`sessions` — there is still no recurrence and no projection.
 
 ### 5.3 Dynamic discipline forms
 

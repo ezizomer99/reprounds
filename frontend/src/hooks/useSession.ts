@@ -17,6 +17,7 @@ import type {
   UpdateStrengthSetRequest,
 } from '@app/shared';
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../lib/api';
+import { localTodayISO } from '../lib/calendar';
 
 const sessionKey = (id: string) => ['session', id] as const;
 
@@ -48,6 +49,40 @@ export function useSessions(status?: string) {
 export function useActiveSession() {
   const { data, ...rest } = useSessions('in_progress');
   return { activeSession: data?.[0] ?? null, ...rest };
+}
+
+/**
+ * Sessions inside an inclusive local-date range (one calendar month). The key
+ * stays under the ['sessions'] root so every existing mutation invalidation
+ * (create/start/complete/delete/reschedule) refreshes calendar months too.
+ */
+export function useSessionsInRange(from: string, to: string, enabled = true) {
+  return useQuery<Session[], Error>({
+    queryKey: ['sessions', 'range', from, to],
+    queryFn: async () => {
+      const data = await apiGet<SessionListResponse>(`/sessions?from=${from}&to=${to}&limit=200`);
+      return data.sessions;
+    },
+    enabled,
+  });
+}
+
+/**
+ * Flip a planned (scheduled) session live. Sends the client-local today so an
+ * overdue planned session snaps to the day it actually runs. 409s surface as
+ * ApiError: `active_session_exists` (with body.sessionId) or `not_planned`.
+ */
+export function useStartSession() {
+  const queryClient = useQueryClient();
+  return useMutation<SessionWithEntries, Error, { id: string }>({
+    mutationFn: ({ id }) =>
+      apiPost<{ session: SessionWithEntries }>(`/sessions/${id}/start`, { date: localTodayISO() })
+        .then((r) => r.session),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['session', variables.id] });
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+    },
+  });
 }
 
 export function useDeleteSession() {

@@ -18,7 +18,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import type { RenderItemParams } from 'react-native-draggable-flatlist';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import Animated, { FadeIn, LinearTransition, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type {
@@ -39,6 +39,7 @@ import { ExerciseFilters, filterByChips, EMPTY_FILTER, type ExerciseChipFilter }
 import {
   useSession,
   useCompleteSession,
+  useStartSession,
   useUpdateSession,
   useDeleteSession,
   useAddSessionEntry,
@@ -293,82 +294,6 @@ function PickDisciplineModal({ visible, onClose, onPick }: {
           />
         )}
       </View>
-    </Modal>
-  );
-}
-
-// ─── Reorder entries modal ────────────────────────────────────────────────────
-
-function ReorderEntriesModal({ visible, onClose, session }: {
-  visible: boolean;
-  onClose: () => void;
-  session: SessionWithEntries;
-}) {
-  const { T } = useTheme();
-  const styles = useMemo(() => makeStyles(T), [T]);
-  const reorderEntries = useReorderSessionEntries();
-  // Local order so a drag settles instantly; the mutation's optimistic update
-  // keeps the screen behind the modal in sync.
-  const [ordered, setOrdered] = useState<SessionEntryWithSets[]>(session.entries);
-
-  useEffect(() => {
-    if (visible) setOrdered(session.entries);
-    // Re-sync only when opening — mid-drag server refetches must not yank rows.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible]);
-
-  return (
-    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      {/* Modals open a new native window on Android, so the drag gestures need
-          their own GestureHandlerRootView — the app root's doesn't reach here. */}
-      <GestureHandlerRootView style={styles.modal}>
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>Reorder</Text>
-          <TouchableOpacity onPress={onClose}>
-            <Text style={styles.modalDone}>Done</Text>
-          </TouchableOpacity>
-        </View>
-        <Text style={styles.reorderHint}>Hold and drag to change the order.</Text>
-        <DraggableFlatList
-          data={ordered}
-          keyExtractor={(e) => e.id}
-          containerStyle={{ flex: 1 }}
-          contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 32 }}
-          onDragEnd={({ data }) => {
-            setOrdered(data);
-            reorderEntries.mutate(
-              { sessionId: session.id, order: data.map((e) => e.id) },
-              { onError: (err) => Alert.alert('Error', err.message || 'Failed to reorder.') },
-            );
-          }}
-          renderItem={({ item, drag, isActive }: RenderItemParams<SessionEntryWithSets>) => (
-            <ScaleDecorator>
-              <TouchableOpacity
-                style={[styles.reorderRow, isActive && styles.reorderRowActive]}
-                onLongPress={drag}
-                delayLongPress={150}
-                activeOpacity={0.9}
-              >
-                <Ionicons
-                  name="reorder-three-outline"
-                  size={20}
-                  color={isActive ? T.primary : T.muted}
-                />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.reorderName} numberOfLines={1}>
-                    {item.exerciseName ?? item.disciplineName ?? 'Entry'}
-                  </Text>
-                  <Text style={styles.reorderMeta}>
-                    {item.kind === 'exercise'
-                      ? `${item.sets.length} ${item.sets.length === 1 ? 'set' : 'sets'}`
-                      : 'Martial arts'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            </ScaleDecorator>
-          )}
-        />
-      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -779,7 +704,7 @@ function LastTime({ exerciseId }: { exerciseId: string }) {
 
 // ─── Strength entry card ──────────────────────────────────────────────────────
 
-function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingActive, onPR, exerciseType, exerciseMeta, sessionActive }: {
+function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingActive, onPR, exerciseType, exerciseMeta, sessionActive, collapsed = false, onToggleCollapse, onDrag }: {
   entry: SessionEntryWithSets;
   sessionId: string;
   onStartRest: (restSecs: number) => void;
@@ -789,6 +714,10 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
   exerciseType?: 'strength' | 'conditioning';
   exerciseMeta?: { equipment: string | null; bodyPart: string | null };
   sessionActive?: boolean;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+  /** Provided only while collapsed — long-pressing the header starts a drag. */
+  onDrag?: () => void;
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
@@ -947,50 +876,80 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
   // set mutations until the refetch swaps in the real entry.
   const isOptimisticEntry = entry.id.startsWith('optimistic-');
 
+  const doneSets = entry.sets.filter((s) => s.completed).length;
+
   return (
-    <View style={styles.entryCard}>
+    <Animated.View style={styles.entryCard} layout={LinearTransition.duration(200)}>
       <View style={styles.entryHead}>
         <TouchableOpacity
           style={styles.entryNameBtn}
-          onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowEntryMenu(true); }}
-          disabled={entryMutationPending}
+          onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onToggleCollapse?.(); }}
+          onLongPress={onDrag}
+          delayLongPress={150}
           accessibilityRole="button"
-          accessibilityLabel="Exercise options"
+          accessibilityState={{ expanded: !collapsed }}
+          accessibilityLabel={`${entry.exerciseName ?? 'Exercise'}, ${collapsed ? 'collapsed' : 'expanded'}`}
         >
-          <Text style={styles.entryName} numberOfLines={1}>{entry.exerciseName ?? 'Exercise'}</Text>
-          <Ionicons name="chevron-down" size={12} color={T.textDim} />
+          <Chevron collapsed={collapsed} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.entryName} numberOfLines={1}>{entry.exerciseName ?? 'Exercise'}</Text>
+            {collapsed && (
+              <Text style={styles.entryProgress}>
+                {doneSets}/{entry.sets.length} done
+              </Text>
+            )}
+          </View>
         </TouchableOpacity>
         <View style={styles.entryHeadRight}>
-          <TouchableOpacity
-            onPress={() => setShowRestSheet(true)}
-            style={styles.restChip}
-            accessibilityRole="button"
-            accessibilityLabel={`Rest timer, ${restChipLabel}, tap to change`}
-          >
-            <Text style={styles.restChipText}>Rest: {restChipLabel}</Text>
-          </TouchableOpacity>
-          {sessionActive && restSeconds > 0 && (
-            <TouchableOpacity
-              onPress={() => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                if (restingActive) onStopRest();
-                else onStartRest(restSeconds);
-              }}
-              style={[styles.restPlayBtn, restingActive && styles.restPlayBtnActive]}
-              disabled={isOptimisticEntry}
-              accessibilityRole="button"
-              accessibilityLabel={restingActive ? 'Stop rest timer' : 'Start rest timer'}
-            >
-              <Ionicons
-                name={restingActive ? 'stop' : 'play'}
-                size={12}
-                color={restingActive ? T.primary : T.textDim}
-              />
-            </TouchableOpacity>
+          {!collapsed && (
+            <>
+              <TouchableOpacity
+                onPress={() => setShowRestSheet(true)}
+                style={styles.restChip}
+                accessibilityRole="button"
+                accessibilityLabel={`Rest timer, ${restChipLabel}, tap to change`}
+              >
+                <Text style={styles.restChipText}>Rest: {restChipLabel}</Text>
+              </TouchableOpacity>
+              {sessionActive && restSeconds > 0 && (
+                <TouchableOpacity
+                  onPress={() => {
+                    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    if (restingActive) onStopRest();
+                    else onStartRest(restSeconds);
+                  }}
+                  style={[styles.restPlayBtn, restingActive && styles.restPlayBtnActive]}
+                  disabled={isOptimisticEntry}
+                  accessibilityRole="button"
+                  accessibilityLabel={restingActive ? 'Stop rest timer' : 'Start rest timer'}
+                >
+                  <Ionicons
+                    name={restingActive ? 'stop' : 'play'}
+                    size={12}
+                    color={restingActive ? T.primary : T.textDim}
+                  />
+                </TouchableOpacity>
+              )}
+            </>
           )}
-          <View style={styles.gymBadge}><Text style={styles.gymBadgeText}>Gym</Text></View>
+          {collapsed
+            ? <View style={styles.gymDotBadge} />
+            : <View style={styles.gymBadge}><Text style={styles.gymBadgeText}>Gym</Text></View>}
+          <TouchableOpacity
+            style={styles.entryMenuBtn}
+            onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowEntryMenu(true); }}
+            disabled={entryMutationPending}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel="Exercise options"
+          >
+            <Ionicons name="ellipsis-vertical" size={16} color={T.textDim} />
+          </TouchableOpacity>
         </View>
       </View>
+
+      {!collapsed && (
+      <Animated.View style={styles.entryBody} entering={FadeIn.duration(140)}>
       {entry.exerciseId && <LastTime exerciseId={entry.exerciseId} />}
 
       {sessionActive && overload && !overloadDismissed && (
@@ -1082,7 +1041,10 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
           </>
         )}
       </TouchableOpacity>
+      </Animated.View>
+      )}
 
+      {/* Overlays stay mounted while collapsed — the ⋮ menu works either way. */}
       {menuSet && (
         <SetActionsMenu
           set={menuSet}
@@ -1125,18 +1087,37 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
           updateEntry.mutate({ sessionId, entryId: entry.id, exerciseId: e.id });
         }}
       />
-    </View>
+    </Animated.View>
+  );
+}
+
+// ─── Collapse chevron ─────────────────────────────────────────────────────────
+
+/** Chevron that rotates between pointing right (collapsed) and down (open). */
+function Chevron({ collapsed }: { collapsed: boolean }) {
+  const { T } = useTheme();
+  const style = useAnimatedStyle(() => ({
+    transform: [{ rotate: withTiming(collapsed ? '-90deg' : '0deg', { duration: 180 }) }],
+  }));
+  return (
+    <Animated.View style={style}>
+      <Ionicons name="chevron-down" size={14} color={T.textDim} />
+    </Animated.View>
   );
 }
 
 // ─── Martial arts entry card ──────────────────────────────────────────────────
 
-function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, sessionActive }: {
+function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, sessionActive, collapsed = false, onToggleCollapse, onDrag }: {
   entry: SessionEntryWithSets;
   sessionId: string;
   disciplines: Discipline[];
   elapsedSeconds?: number;
   sessionActive?: boolean;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+  /** Provided only while collapsed — long-pressing the header starts a drag. */
+  onDrag?: () => void;
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
@@ -1159,17 +1140,45 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
     setDetails((prev) => ({ ...prev, [key]: value }));
   }
 
+  // Collapsed summary: how much has been logged so far.
+  const roundCount = isRoundsSession(details) ? details.rounds.length : 0;
+  const summary = roundCount > 0
+    ? `${roundCount} round${roundCount !== 1 ? 's' : ''} logged`
+    : 'Nothing logged yet';
+
+  const head = (name: string) => (
+    <View style={styles.entryHead}>
+      <TouchableOpacity
+        style={styles.entryNameBtn}
+        onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onToggleCollapse?.(); }}
+        onLongPress={onDrag}
+        delayLongPress={150}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: !collapsed }}
+        accessibilityLabel={`${name}, ${collapsed ? 'collapsed' : 'expanded'}`}
+      >
+        <Chevron collapsed={collapsed} />
+        <View style={{ flex: 1 }}>
+          <Text style={styles.entryName} numberOfLines={1}>{name}</Text>
+          {collapsed && <Text style={styles.entryProgress}>{summary}</Text>}
+        </View>
+      </TouchableOpacity>
+      {collapsed ? (
+        <View style={[styles.gymDotBadge, { backgroundColor: T.grappling }]} />
+      ) : (
+        <View style={[styles.gymBadge, { backgroundColor: withAlpha(T.grappling, 0.15), borderColor: withAlpha(T.grappling, 0.3) }]}>
+          <Text style={[styles.gymBadgeText, { color: T.grappling }]}>Martial Arts</Text>
+        </View>
+      )}
+    </View>
+  );
+
   if (!discipline) {
     return (
-      <View style={styles.entryCard}>
-        <View style={styles.entryHead}>
-          <Text style={styles.entryName}>{entry.disciplineName ?? 'Discipline'}</Text>
-          <View style={[styles.gymBadge, { backgroundColor: withAlpha(T.grappling, 0.15), borderColor: withAlpha(T.grappling, 0.3) }]}>
-            <Text style={[styles.gymBadgeText, { color: T.grappling }]}>Martial Arts</Text>
-          </View>
-        </View>
-        <ActivityIndicator style={{ margin: 12 }} color={T.primary} />
-      </View>
+      <Animated.View style={styles.entryCard} layout={LinearTransition.duration(200)}>
+        {head(entry.disciplineName ?? 'Discipline')}
+        {!collapsed && <ActivityIndicator style={{ margin: 12 }} color={T.primary} />}
+      </Animated.View>
     );
   }
 
@@ -1182,14 +1191,11 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
     : BOXING_WEAPONS;
 
   return (
-    <View style={styles.entryCard}>
-      <View style={styles.entryHead}>
-        <Text style={styles.entryName}>{discipline.name}</Text>
-        <View style={[styles.gymBadge, { backgroundColor: withAlpha(T.grappling, 0.15), borderColor: withAlpha(T.grappling, 0.3) }]}>
-          <Text style={[styles.gymBadgeText, { color: T.grappling }]}>Martial Arts</Text>
-        </View>
-      </View>
+    <Animated.View style={styles.entryCard} layout={LinearTransition.duration(200)}>
+      {head(discipline.name)}
 
+      {!collapsed && (
+      <Animated.View style={styles.entryBody} entering={FadeIn.duration(140)}>
       {useStructured ? (
         <RoundLogger
           category={discipline.category}
@@ -1295,7 +1301,9 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
           ? <ActivityIndicator size="small" color={T.onPrimary} />
           : <Text style={styles.maSaveBtnText}>{justSaved ? 'Saved ✓' : 'Save'}</Text>}
       </TouchableOpacity>
-    </View>
+      </Animated.View>
+      )}
+    </Animated.View>
   );
 }
 
@@ -1605,6 +1613,8 @@ export default function SessionScreen() {
   const completeSession = useCompleteSession();
   const deleteSession = useDeleteSession();
   const updateSession = useUpdateSession();
+  const startSession = useStartSession();
+  const reorderEntries = useReorderSessionEntries();
   const updateEntry = useUpdateSessionEntry();
   const addEntry = useAddSessionEntry();
   const { data: disciplines } = useDisciplines();
@@ -1631,7 +1641,10 @@ export default function SessionScreen() {
   const [showExercisePicker, setShowExercisePicker] = useState(false);
   const [showDisciplinePicker, setShowDisciplinePicker] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showReorder, setShowReorder] = useState(false);
+  const [showReschedule, setShowReschedule] = useState(false);
+  // Collapsed entry ids. Collapsed cards shrink to a name + progress row and
+  // become draggable, so reordering happens in place instead of in a modal.
+  const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(new Set());
   const [restSeconds, setRestSeconds] = useState<number | null>(null);
   const [restTotal, setRestTotal] = useState(120);
   // Which entry's rest timer is running, so its card can show a stop control.
@@ -1767,7 +1780,9 @@ export default function SessionScreen() {
   }
 
   function handleBack() {
-    if (session?.status !== 'completed') {
+    // Leaving a scheduled (planned) or finished session is normal navigation —
+    // the leave-warning only applies to a live in-progress session.
+    if (session?.status !== 'completed' && session?.status !== 'planned') {
       Alert.alert(
         'Leave Session?',
         'Your session will still be in progress. Use the Resume button to return.',
@@ -1778,6 +1793,39 @@ export default function SessionScreen() {
       );
     } else {
       router.back();
+    }
+  }
+
+  async function handleStartPlanned() {
+    if (!id) return;
+    try {
+      await startSession.mutateAsync({ id });
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      const e = err as { status?: number; body?: { sessionId?: string } };
+      if (e?.status === 409 && e?.body?.sessionId) {
+        const sid = e.body.sessionId;
+        Alert.alert(
+          'Active Session',
+          'You already have a session in progress.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Resume', onPress: () => router.push({ pathname: '/sessions/[id]', params: { id: sid } } as never) },
+          ],
+        );
+      } else {
+        Alert.alert('Error', (err as Error).message ?? 'Failed to start session.');
+      }
+    }
+  }
+
+  async function handleReschedule(date: string) {
+    if (!id) return;
+    setShowReschedule(false);
+    try {
+      await updateSession.mutateAsync({ id, date });
+    } catch (err) {
+      Alert.alert('Error', (err as Error).message ?? 'Failed to reschedule session.');
     }
   }
 
@@ -1890,6 +1938,29 @@ export default function SessionScreen() {
   const hasExercise = session.entries.some((e) => e.kind === 'exercise');
   const canFinish = doneCount > 0 || hasMartialArts;
   const isActive = session.status !== 'completed';
+  const isPlanned = session.status === 'planned';
+  const scheduledLabel = new Date(session.date + 'T00:00:00').toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+
+  const entryIds = session.entries.map((e) => e.id);
+  const allCollapsed = entryIds.length > 0 && entryIds.every((eid) => collapsedIds.has(eid));
+
+  function toggleCollapsed(entryId: string) {
+    setCollapsedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(entryId)) next.delete(entryId);
+      else next.add(entryId);
+      return next;
+    });
+  }
+
+  function toggleCollapseAll() {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setCollapsedIds(allCollapsed ? new Set() : new Set(entryIds));
+  }
 
   // Link/unlink an exercise into a superset with the entry above it.
   const sessId = session.id;
@@ -1916,9 +1987,16 @@ export default function SessionScreen() {
           <Ionicons name="close" size={20} color={T.danger} />
         </TouchableOpacity>
 
-        {/* Center: timer or session name when done */}
+        {/* Center: scheduled date when planned, timer when live, name when done */}
         <View style={styles.headerCenter}>
-          {isActive ? (
+          {isPlanned ? (
+            <>
+              <Text style={styles.headerDoneLabel} numberOfLines={1}>
+                {scheduledLabel}
+              </Text>
+              <Text style={styles.headerScheduledSub}>Scheduled</Text>
+            </>
+          ) : isActive ? (
             <Text style={styles.headerTimer}>{formatElapsed(elapsed)}</Text>
           ) : (
             <Text style={styles.headerDoneLabel} numberOfLines={1}>
@@ -1933,66 +2011,124 @@ export default function SessionScreen() {
             {session.entries.length > 1 && (
               <TouchableOpacity
                 style={styles.headerIconBtn}
-                onPress={() => setShowReorder(true)}
+                onPress={toggleCollapseAll}
                 accessibilityRole="button"
-                accessibilityLabel="Reorder exercises"
+                accessibilityLabel={allCollapsed ? 'Expand all exercises' : 'Collapse all exercises'}
               >
-                <Ionicons name="swap-vertical-outline" size={20} color={T.textDim} />
+                <Ionicons
+                  name={allCollapsed ? 'chevron-expand-outline' : 'chevron-collapse-outline'}
+                  size={20}
+                  color={T.textDim}
+                />
               </TouchableOpacity>
             )}
             <TouchableOpacity style={styles.headerIconBtn} onPress={() => setShowSettings(true)}>
               <Ionicons name="settings-outline" size={20} color={T.textDim} />
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.headerIconBtn,
-                styles.headerFinishBtn,
-                (!canFinish || completeSession.isPending) && { opacity: 0.4 },
-              ]}
-              onPress={() => setShowSettings(true)}
-              disabled={!canFinish || completeSession.isPending}
-              accessibilityRole="button"
-              accessibilityLabel="Finish workout"
-            >
-              {completeSession.isPending
-                ? <ActivityIndicator size="small" color={T.onPrimary} />
-                : <Ionicons name="checkmark" size={20} color={T.onPrimary} />}
-            </TouchableOpacity>
+            {/* A planned session can't finish — it must be started first. */}
+            {!isPlanned && (
+              <TouchableOpacity
+                style={[
+                  styles.headerIconBtn,
+                  styles.headerFinishBtn,
+                  (!canFinish || completeSession.isPending) && { opacity: 0.4 },
+                ]}
+                onPress={() => setShowSettings(true)}
+                disabled={!canFinish || completeSession.isPending}
+                accessibilityRole="button"
+                accessibilityLabel="Finish workout"
+              >
+                {completeSession.isPending
+                  ? <ActivityIndicator size="small" color={T.onPrimary} />
+                  : <Ionicons name="checkmark" size={20} color={T.onPrimary} />}
+              </TouchableOpacity>
+            )}
           </View>
         ) : (
           <View style={styles.doneBadge}><Text style={styles.doneBadgeText}>Done</Text></View>
         )}
       </View>
 
-      <ScrollView
-        style={{ flex: 1 }}
+      {/* Pinned bar for a scheduled session: start it or move it. */}
+      {isPlanned && (
+        <View style={styles.plannedBar}>
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            onPress={handleStartPlanned}
+            disabled={startSession.isPending}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Start workout"
+          >
+            <CutCornerView fill={T.primary} style={styles.startCta}>
+              {startSession.isPending ? (
+                <ActivityIndicator size="small" color={T.onPrimary} />
+              ) : (
+                <Ionicons name="play" size={16} color={T.onPrimary} />
+              )}
+              <Text style={styles.startCtaText}>Start workout</Text>
+            </CutCornerView>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.rescheduleBtn}
+            onPress={() => setShowReschedule(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Reschedule workout"
+          >
+            <Ionicons name="calendar-outline" size={16} color={T.textDim} />
+            <Text style={styles.rescheduleText}>Move</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <DraggableFlatList
+        data={session.entries}
+        keyExtractor={(entry) => entry.id}
+        containerStyle={{ flex: 1 }}
         keyboardShouldPersistTaps="handled"
+        // Sessions hold a handful of entries, and set inputs keep uncommitted
+        // local text — so keep every card mounted rather than virtualizing.
+        removeClippedSubviews={false}
+        initialNumToRender={50}
+        windowSize={21}
+        onDragEnd={({ data }) => {
+          const order = data.map((e) => e.id);
+          if (order.every((id, i) => session.entries[i]?.id === id)) return;
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          reorderEntries.mutate(
+            { sessionId: session.id, order },
+            { onError: (err) => Alert.alert('Error', err.message || 'Failed to reorder.') },
+          );
+        }}
         contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + (restSeconds !== null ? 140 : 48) }]}
-      >
-        {session.entries.length === 0 && (
-          <View style={styles.emptyEntries}>
-            <Text style={styles.emptyTitle}>No exercises yet</Text>
-            <Text style={styles.emptySub}>Add exercises or disciplines below.</Text>
+        ListHeaderComponent={
+          <View style={styles.listHeader}>
+            {session.entries.length === 0 && (
+              <View style={styles.emptyEntries}>
+                <Text style={styles.emptyTitle}>No exercises yet</Text>
+                <Text style={styles.emptySub}>Add exercises or disciplines below.</Text>
+              </View>
+            )}
+
+            {sessionVolume > 0 && (
+              <View style={styles.summaryBar}>
+                <View style={styles.summaryStat}>
+                  <Text style={styles.summaryNum}>{doneCount}</Text>
+                  <Text style={styles.summaryKey}>sets done</Text>
+                </View>
+                <View style={styles.summaryDivider} />
+                <View style={styles.summaryStat}>
+                  <Text style={styles.summaryNum}>{Math.round(kgToUnit(sessionVolume, unit)).toLocaleString()}</Text>
+                  <Text style={styles.summaryKey}>{unit} volume</Text>
+                </View>
+              </View>
+            )}
+
+            {hasMartialArts && <FocusChecklistCard session={session} isActive={isActive} />}
           </View>
-        )}
-
-        {sessionVolume > 0 && (
-          <View style={styles.summaryBar}>
-            <View style={styles.summaryStat}>
-              <Text style={styles.summaryNum}>{doneCount}</Text>
-              <Text style={styles.summaryKey}>sets done</Text>
-            </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryStat}>
-              <Text style={styles.summaryNum}>{Math.round(kgToUnit(sessionVolume, unit)).toLocaleString()}</Text>
-              <Text style={styles.summaryKey}>{unit} volume</Text>
-            </View>
-          </View>
-        )}
-
-        {hasMartialArts && <FocusChecklistCard session={session} isActive={isActive} />}
-
-        {session.entries.map((entry, i) => {
+        }
+        renderItem={({ item: entry, getIndex, drag, isActive: isDragging }: RenderItemParams<SessionEntryWithSets>) => {
+          const i = getIndex() ?? 0;
           const prev = session.entries[i - 1];
           const next = session.entries[i + 1];
           const linkedAbove =
@@ -2002,52 +2138,66 @@ export default function SessionScreen() {
             entry.supersetGroup != null &&
             (entry.supersetGroup === prev?.supersetGroup || entry.supersetGroup === next?.supersetGroup);
           const canLink = isActive && entry.kind === 'exercise' && prev?.kind === 'exercise';
+          const isCollapsed = collapsedIds.has(entry.id);
+          // Only a collapsed card can be dragged — an expanded one is full of
+          // inputs a long-press would fight with.
+          const dragHandler = isCollapsed && session.entries.length > 1 ? drag : undefined;
 
           return (
-            <View key={entry.id}>
-              {canLink && (
-                <TouchableOpacity
-                  style={styles.supersetLink}
-                  onPress={() => toggleSuperset(prev, entry, linkedAbove)}
-                  activeOpacity={0.7}
-                >
-                  <Ionicons
-                    name={linkedAbove ? 'link' : 'link-outline'}
-                    size={13}
-                    color={linkedAbove ? T.primary : T.muted}
-                  />
-                  <Text style={[styles.supersetLinkText, linkedAbove && { color: T.primary }]}>
-                    {linkedAbove ? 'Superset' : 'Superset with above'}
-                  </Text>
-                </TouchableOpacity>
-              )}
-              <View style={grouped ? styles.supersetGrouped : undefined}>
-                {entry.kind === 'exercise' ? (
-                  <StrengthEntryCard
-                    entry={entry}
-                    sessionId={session.id}
-                    onStartRest={(secs) => handleStartRest(entry.id, secs)}
-                    onStopRest={handleStopRest}
-                    restingActive={restEntryId === entry.id && restSeconds !== null}
-                    onPR={handlePR}
-                    exerciseType={entry.exerciseId ? exerciseTypeMap.get(entry.exerciseId) : undefined}
-                    exerciseMeta={entry.exerciseId ? exerciseMetaMap.get(entry.exerciseId) : undefined}
-                    sessionActive={isActive}
-                  />
-                ) : (
-                  <MartialArtsEntryCard
-                    entry={entry}
-                    sessionId={session.id}
-                    disciplines={disciplines ?? []}
-                    elapsedSeconds={elapsed}
-                    sessionActive={isActive}
-                  />
+            <ScaleDecorator activeScale={1.03}>
+              <View style={styles.entryItem}>
+                {/* Superset links describe adjacency, which is meaningless mid-drag. */}
+                {canLink && !isDragging && (
+                  <TouchableOpacity
+                    style={styles.supersetLink}
+                    onPress={() => toggleSuperset(prev, entry, linkedAbove)}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={linkedAbove ? 'link' : 'link-outline'}
+                      size={13}
+                      color={linkedAbove ? T.primary : T.muted}
+                    />
+                    <Text style={[styles.supersetLinkText, linkedAbove && { color: T.primary }]}>
+                      {linkedAbove ? 'Superset' : 'Superset with above'}
+                    </Text>
+                  </TouchableOpacity>
                 )}
+                <View style={[grouped ? styles.supersetGrouped : undefined, isDragging && styles.entryDragging]}>
+                  {entry.kind === 'exercise' ? (
+                    <StrengthEntryCard
+                      entry={entry}
+                      sessionId={session.id}
+                      onStartRest={(secs) => handleStartRest(entry.id, secs)}
+                      onStopRest={handleStopRest}
+                      restingActive={restEntryId === entry.id && restSeconds !== null}
+                      onPR={handlePR}
+                      exerciseType={entry.exerciseId ? exerciseTypeMap.get(entry.exerciseId) : undefined}
+                      exerciseMeta={entry.exerciseId ? exerciseMetaMap.get(entry.exerciseId) : undefined}
+                      sessionActive={isActive}
+                      collapsed={isCollapsed}
+                      onToggleCollapse={() => toggleCollapsed(entry.id)}
+                      onDrag={dragHandler}
+                    />
+                  ) : (
+                    <MartialArtsEntryCard
+                      entry={entry}
+                      sessionId={session.id}
+                      disciplines={disciplines ?? []}
+                      elapsedSeconds={elapsed}
+                      sessionActive={isActive}
+                      collapsed={isCollapsed}
+                      onToggleCollapse={() => toggleCollapsed(entry.id)}
+                      onDrag={dragHandler}
+                    />
+                  )}
+                </View>
               </View>
-            </View>
+            </ScaleDecorator>
           );
-        })}
-
+        }}
+        ListFooterComponent={
+          <View style={styles.listFooter}>
         {session.status !== 'completed' && (
           <View style={styles.addEntryRow}>
             {/* A session is either weightlifting or martial arts — never both.
@@ -2066,7 +2216,9 @@ export default function SessionScreen() {
             )}
           </View>
         )}
-      </ScrollView>
+          </View>
+        }
+      />
 
       {/* Floating rest timer */}
       {restSeconds !== null && (
@@ -2116,14 +2268,6 @@ export default function SessionScreen() {
         }}
       />
 
-      {session && (
-        <ReorderEntriesModal
-          visible={showReorder}
-          onClose={() => setShowReorder(false)}
-          session={session}
-        />
-      )}
-
       {showSettings && session && (
         <SessionSettingsSheet
           session={session}
@@ -2145,6 +2289,24 @@ export default function SessionScreen() {
           />
         </View>
       )}
+
+      <Modal
+        visible={showReschedule}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowReschedule(false)}
+      >
+        <TouchableOpacity
+          style={styles.rescheduleOverlay}
+          activeOpacity={1}
+          onPress={() => setShowReschedule(false)}
+        >
+          <TouchableOpacity activeOpacity={1} style={styles.rescheduleCard}>
+            <Text style={styles.rescheduleTitle}>Reschedule to</Text>
+            <CalendarPicker value={session.date} onChange={handleReschedule} />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -2186,8 +2348,56 @@ function makeStyles(T: ThemeColors) {
     borderWidth: 1, borderColor: withAlpha(T.primary, 0.3),
   },
   doneBadgeText: { fontFamily: F.uiSemi, fontSize: 13, color: T.primary },
+  headerScheduledSub: { fontFamily: F.uiBold, fontSize: 10, color: T.gold, textTransform: 'uppercase', letterSpacing: 1, marginTop: 1 },
 
-  body: { padding: D.pad, gap: D.stack },
+  plannedBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: D.pad,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: T.border,
+  },
+  startCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 13,
+  },
+  startCtaText: { fontFamily: F.uiBold, fontSize: 15, color: T.onPrimary },
+  rescheduleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    borderWidth: 1,
+    borderColor: T.border,
+    borderRadius: R.sm,
+    backgroundColor: T.surface,
+  },
+  rescheduleText: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim },
+  rescheduleOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'center',
+    padding: D.pad,
+  },
+  rescheduleCard: {
+    backgroundColor: T.bg,
+    borderRadius: R.card,
+    borderWidth: 1,
+    borderColor: T.borderStrong,
+    padding: D.cardPad,
+    gap: 10,
+  },
+  rescheduleTitle: { fontFamily: F.uiSemi, fontSize: 16, color: T.text },
+
+  // No `gap` here: drag offsets are measured per cell, so spacing has to live
+  // inside the cells (entryItem) rather than between them.
+  body: { padding: D.pad },
 
   emptyEntries: { alignItems: 'center', paddingVertical: 48 },
   summaryBar: {
@@ -2215,9 +2425,21 @@ function makeStyles(T: ThemeColors) {
     gap: 9,
   },
   entryHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  entryName: { fontFamily: F.uiSemi, fontSize: 17, color: T.text, letterSpacing: -0.2, flex: 1 },
-  entryNameBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 4, marginRight: 8 },
+  // The card's own `gap` only separates head from body, so the body carries the
+  // same spacing for its own rows.
+  entryBody: { gap: 9 },
+  entryName: { fontFamily: F.uiSemi, fontSize: 17, color: T.text, letterSpacing: -0.2 },
+  entryNameBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 7, marginRight: 8 },
   entryHeadRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  // Collapsed summary line under the name ("3/6 done").
+  entryProgress: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 2 },
+  entryMenuBtn: { width: 26, height: 26, alignItems: 'center', justifyContent: 'center' },
+  // Collapsed cards trade the kind badge for a single colored dot.
+  gymDotBadge: { width: 7, height: 7, borderRadius: 4, backgroundColor: T.primary },
+  entryItem: { marginBottom: D.stack },
+  entryDragging: { opacity: 0.95 },
+  listHeader: { gap: D.stack, marginBottom: D.stack },
+  listFooter: { marginTop: 4 },
   restChip: {
     paddingHorizontal: 8, paddingVertical: 2, borderRadius: R.chip,
     backgroundColor: T.surface2, borderWidth: 1, borderColor: T.borderStrong,
@@ -2470,23 +2692,6 @@ function makeStyles(T: ThemeColors) {
   modalCancel: { fontFamily: F.uiMed, fontSize: 16, color: T.textDim },
   modalDone: { fontFamily: F.uiSemi, fontSize: 16, color: T.primary },
 
-  // Reorder entries modal
-  reorderHint: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, paddingHorizontal: 24, marginBottom: 12 },
-  reorderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: T.surface,
-    borderWidth: 1,
-    borderColor: T.border,
-    borderRadius: R.sm,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginBottom: 8,
-  },
-  reorderRowActive: { borderColor: T.primary, backgroundColor: T.surface2 },
-  reorderName: { fontFamily: F.uiSemi, fontSize: 15, color: T.text },
-  reorderMeta: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 1 },
   modalSearch: {
     backgroundColor: T.surface, borderWidth: 1, borderColor: T.border,
     borderRadius: R.sm, paddingHorizontal: 14, paddingVertical: 10,

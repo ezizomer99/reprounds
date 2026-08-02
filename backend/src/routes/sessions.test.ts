@@ -716,3 +716,235 @@ describe('POST /sessions/:id/complete', () => {
     expect(json.session.status).toBe('completed');
   });
 });
+
+// ---------------------------------------------------------------------------
+// GET /sessions — list filters
+// ---------------------------------------------------------------------------
+describe('GET /sessions (list filters)', () => {
+  it('accepts a from/to date range', async () => {
+    mock.selectQueue.push([fakeSessionRow]); // rows page
+    mock.selectQueue.push([]);               // distinct entry kinds
+
+    const res = await makeApp().request(
+      '/sessions?from=2026-07-01&to=2026-07-31',
+      { headers: await bearer() },
+      env,
+    );
+
+    expect(res.status).toBe(200);
+    const json = await res.json() as { sessions: { id: string }[] };
+    expect(json.sessions).toHaveLength(1);
+    expect(json.sessions[0].id).toBe(SESSION_ID);
+  });
+
+  it('returns 400 without touching the DB when from is malformed', async () => {
+    const res = await makeApp().request(
+      '/sessions?from=7%2F1%2F2026',
+      { headers: await bearer() },
+      env,
+    );
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('from must be YYYY-MM-DD');
+    expect(mock.select).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 without touching the DB when status is not a session status', async () => {
+    const res = await makeApp().request(
+      '/sessions?status=bogus',
+      { headers: await bearer() },
+      env,
+    );
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('Invalid status');
+    expect(mock.select).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /sessions — planned (scheduled) creation
+// ---------------------------------------------------------------------------
+describe('POST /sessions with status planned', () => {
+  it('returns 400 for any explicit status other than planned', async () => {
+    const res = await makeApp().request('/sessions', {
+      method: 'POST',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: '2026-08-16', status: 'completed' }),
+    }, env);
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('status must be planned or omitted');
+    expect(mock.select).not.toHaveBeenCalled();
+  });
+
+  it('creates a planned session with null startedAt, skipping the active-session guard', async () => {
+    const plannedRow = {
+      ...fakeSessionRow,
+      status: 'planned' as const,
+      date: '2026-08-16',
+    };
+    mock.insertedRow = plannedRow;
+
+    const insertedValues: Array<Record<string, unknown>> = [];
+    mock.transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        select: makeSelectChain,
+        insert: () => ({
+          values: (v: Record<string, unknown>) => {
+            insertedValues.push(v);
+            return { returning: async () => [mock.insertedRow] };
+          },
+        }),
+        update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
+        delete: () => ({ where: () => Promise.resolve() }),
+      }),
+    );
+
+    // Queue holds ONLY the post-insert fetch — if the active-session guard ran,
+    // it would pop the session row as its own result and the test would fail.
+    mock.selectQueue.push([plannedRow]); // fetchSessionWithEntries: session row
+    mock.selectQueue.push([]);           // entries (empty)
+
+    const res = await makeApp().request('/sessions', {
+      method: 'POST',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: '2026-08-16', status: 'planned' }),
+    }, env);
+
+    expect(res.status).toBe(201);
+    expect(insertedValues).toHaveLength(1);
+    expect(insertedValues[0].status).toBe('planned');
+    expect(insertedValues[0].startedAt).toBeNull();
+    const json = await res.json() as { session: { status: string } };
+    expect(json.session.status).toBe('planned');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /sessions/:id/start
+// ---------------------------------------------------------------------------
+describe('POST /sessions/:id/start', () => {
+  it('returns 404 when the session is not owned by the caller', async () => {
+    mock.selectQueue.push([]); // owner check: not found
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/start`,
+      { method: 'POST', headers: await bearer() },
+      env,
+    );
+
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 409 not_planned for a session that is not planned', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID, status: 'completed' }]);
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/start`,
+      { method: 'POST', headers: await bearer() },
+      env,
+    );
+
+    expect(res.status).toBe(409);
+    expect((await res.json() as { error: string }).error).toBe('not_planned');
+    expect(mock.update).not.toHaveBeenCalled();
+  });
+
+  it('returns 409 active_session_exists when another session is in progress', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID, status: 'planned' }]);
+    mock.selectQueue.push([{ id: 'active-sess' }]); // active-session guard hit
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/start`,
+      { method: 'POST', headers: await bearer() },
+      env,
+    );
+
+    expect(res.status).toBe(409);
+    const json = await res.json() as { error: string; sessionId: string };
+    expect(json.error).toBe('active_session_exists');
+    expect(json.sessionId).toBe('active-sess');
+    expect(mock.update).not.toHaveBeenCalled();
+  });
+
+  it('flips a planned session to in_progress and snaps the date to client today', async () => {
+    const startedRow = {
+      ...fakeSessionRow,
+      status: 'in_progress' as const,
+      date: '2026-08-02',
+      startedAt: new Date('2026-08-02T09:30:00Z'),
+    };
+
+    let capturedSet: Record<string, unknown> | null = null;
+    mock.update.mockImplementation(() => ({
+      set: (v: Record<string, unknown>) => {
+        capturedSet = v;
+        return { where: () => Promise.resolve() };
+      },
+    }));
+
+    mock.selectQueue.push([{ id: SESSION_ID, status: 'planned' }]); // owner check ✓
+    mock.selectQueue.push([]);            // no active session
+    mock.selectQueue.push([startedRow]);  // fetchSessionWithEntries: session row
+    mock.selectQueue.push([]);            // entries (empty)
+
+    const res = await makeApp().request(`/sessions/${SESSION_ID}/start`, {
+      method: 'POST',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: '2026-08-02' }),
+    }, env);
+
+    expect(res.status).toBe(200);
+    expect(capturedSet).not.toBeNull();
+    expect(capturedSet!.status).toBe('in_progress');
+    expect(capturedSet!.startedAt).toBeInstanceOf(Date);
+    expect(capturedSet!.date).toBe('2026-08-02');
+    const json = await res.json() as { session: { status: string } };
+    expect(json.session.status).toBe('in_progress');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /sessions/:id — reschedule
+// ---------------------------------------------------------------------------
+describe('PATCH /sessions/:id date', () => {
+  it('updates the session date when valid', async () => {
+    let capturedSet: Record<string, unknown> | null = null;
+    mock.update.mockImplementation(() => ({
+      set: (v: Record<string, unknown>) => {
+        capturedSet = v;
+        return { where: () => Promise.resolve() };
+      },
+    }));
+
+    const movedRow = { ...fakeSessionRow, status: 'planned' as const, date: '2026-08-20' };
+    mock.selectQueue.push([{ id: SESSION_ID }]); // owner check ✓
+    mock.selectQueue.push([movedRow]);           // fetchSessionWithEntries: session row
+    mock.selectQueue.push([]);                   // entries (empty)
+
+    const res = await makeApp().request(`/sessions/${SESSION_ID}`, {
+      method: 'PATCH',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: '2026-08-20' }),
+    }, env);
+
+    expect(res.status).toBe(200);
+    expect(capturedSet).not.toBeNull();
+    expect(capturedSet!.date).toBe('2026-08-20');
+  });
+
+  it('returns 400 for a malformed date', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]); // owner check ✓
+
+    const res = await makeApp().request(`/sessions/${SESSION_ID}`, {
+      method: 'PATCH',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: '8/20/2026' }),
+    }, env);
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('date must be YYYY-MM-DD');
+    expect(mock.update).not.toHaveBeenCalled();
+  });
+});

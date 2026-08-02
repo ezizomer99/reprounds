@@ -1,5 +1,5 @@
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,6 +8,7 @@ import { useCreateSession } from '../../../src/hooks/useSession';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { CutCornerView } from '../../../src/components/CutCornerView';
+import { localTodayISO } from '../../../src/lib/calendar';
 import type { EntryKind, RoutineWithItems } from '@app/shared';
 
 export default function NewSessionScreen() {
@@ -18,7 +19,13 @@ export default function NewSessionScreen() {
   const { data: routines, isLoading, isError } = useRoutines();
   const createSession = useCreateSession();
 
-  const todayISO = new Date().toISOString().split('T')[0];
+  // Arriving with a ?date= (from the calendar) switches the screen into
+  // schedule mode: the session is created as 'planned' on that date and the
+  // user returns to the calendar instead of entering the live logger.
+  const { date: scheduleDate } = useLocalSearchParams<{ date?: string }>();
+  const isScheduling = !!scheduleDate;
+
+  const todayISO = localTodayISO();
 
   function handleActiveSessionConflict(err: unknown) {
     const e = err as { status?: number; body?: { sessionId?: string } };
@@ -37,6 +44,16 @@ export default function NewSessionScreen() {
 
   async function startRoutine(routine: RoutineWithItems, kind?: EntryKind) {
     try {
+      if (isScheduling) {
+        await createSession.mutateAsync({
+          routineId: routine.id,
+          date: scheduleDate,
+          kind,
+          status: 'planned',
+        });
+        router.back();
+        return;
+      }
       const session = await createSession.mutateAsync({ routineId: routine.id, date: todayISO, kind });
       router.push({ pathname: '/sessions/[id]', params: { id: session.id } } as never);
     } catch (err) { handleActiveSessionConflict(err); }
@@ -49,7 +66,7 @@ export default function NewSessionScreen() {
     // routine is run one part at a time, so ask which part to start.
     if (hasGym && hasMat) {
       Alert.alert(
-        'Start which part?',
+        isScheduling ? 'Schedule which part?' : 'Start which part?',
         'This routine has both gym and martial-arts items. A session tracks one at a time.',
         [
           { text: 'Gym', onPress: () => startRoutine(routine, 'exercise') },
@@ -64,6 +81,11 @@ export default function NewSessionScreen() {
 
   async function handleEmptySession() {
     try {
+      if (isScheduling) {
+        await createSession.mutateAsync({ date: scheduleDate, status: 'planned' });
+        router.back();
+        return;
+      }
       const session = await createSession.mutateAsync({ date: todayISO });
       router.push({ pathname: '/sessions/[id]', params: { id: session.id } } as never);
     } catch (err) { handleActiveSessionConflict(err); }
@@ -82,14 +104,14 @@ export default function NewSessionScreen() {
         >
           <Ionicons name="chevron-back" size={22} color={T.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>New Session</Text>
+        <Text style={styles.headerTitle}>{isScheduling ? 'Schedule Session' : 'New Session'}</Text>
         <View style={{ width: 40 }} />
       </View>
 
       {isStarting ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={T.primary} />
-          <Text style={styles.startingText}>Starting session…</Text>
+          <Text style={styles.startingText}>{isScheduling ? 'Scheduling session…' : 'Starting session…'}</Text>
         </View>
       ) : (
         <FlatList
@@ -101,8 +123,12 @@ export default function NewSessionScreen() {
                 <CutCornerView fill={T.primary} style={styles.heroCta}>
                   <Ionicons name="add" size={20} color={T.onPrimary} />
                   <View>
-                    <Text style={styles.heroCtaTitle}>Start empty session</Text>
-                    <Text style={styles.heroCtaSub}>Log without a routine</Text>
+                    <Text style={styles.heroCtaTitle}>
+                      {isScheduling ? 'Schedule empty session' : 'Start empty session'}
+                    </Text>
+                    <Text style={styles.heroCtaSub}>
+                      {isScheduling ? 'Plan a session without a routine' : 'Log without a routine'}
+                    </Text>
                   </View>
                 </CutCornerView>
               </TouchableOpacity>
