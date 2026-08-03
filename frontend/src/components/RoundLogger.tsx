@@ -25,8 +25,11 @@ import {
   GRAPPLING_POSITIONS,
   GRAPPLING_SUBMISSIONS,
   FREE_CUSTOM_TECHNIQUE_LIMIT,
+  NOTES_MAX_LENGTH,
+  ROUND_MINUTES_RANGE,
   submissionLabel,
 } from '@app/shared';
+import { parseNumberInRangeResult } from '../lib/parseNumber';
 import { PartnerPicker } from './PartnerPicker';
 import { Chip } from './ui/Chip';
 import { Stepper } from './ui/Stepper';
@@ -277,11 +280,16 @@ export function RoundLogger({
                   value={
                     round.durationSeconds != null ? String(Math.round(round.durationSeconds / 60)) : ''
                   }
-                  onChangeText={(t) =>
+                  onChangeText={(t) => {
+                    const { value, invalid } = parseNumberInRangeResult(t, ROUND_MINUTES_RANGE);
+                    // keyboardType is only a hint — paste, hardware keyboards
+                    // and comma-decimal locales all get past it, and
+                    // Math.round(NaN) put a NaN straight into the round.
+                    if (invalid) return;
                     updateRound(round.id, {
-                      durationSeconds: t.trim() === '' ? null : Math.round(Number(t) * 60),
-                    })
-                  }
+                      durationSeconds: value === null ? null : Math.round(value * 60),
+                    });
+                  }}
                   keyboardType="number-pad"
                   placeholder="0"
                   placeholderTextColor={T.muted}
@@ -342,6 +350,7 @@ export function RoundLogger({
             placeholder="Round notes (optional)"
             placeholderTextColor={T.muted}
             multiline
+            maxLength={NOTES_MAX_LENGTH}
           />
         </View>
       ))}
@@ -366,6 +375,7 @@ export function RoundLogger({
           placeholder="What did you drill or learn?"
           placeholderTextColor={T.muted}
           multiline
+          maxLength={NOTES_MAX_LENGTH}
           textAlignVertical="top"
         />
       </View>

@@ -11,6 +11,7 @@ const mock = vi.hoisted(() => ({
   delete: vi.fn(),
   transaction: vi.fn(),
   selectQueue: [] as unknown[][],
+  limits: [] as (number | undefined)[],
   insertedRow: null as unknown,
 }));
 
@@ -55,7 +56,7 @@ function makeSelectChain() {
   type Chain = {
     from: () => Chain;
     where: () => Chain;
-    limit: () => Chain;
+    limit: (n?: number) => Chain;
     orderBy: () => Chain;
     groupBy: () => Chain;
     leftJoin: () => Chain;
@@ -65,7 +66,12 @@ function makeSelectChain() {
   const chain: Chain = {
     from: () => chain,
     where: () => chain,
-    limit: () => chain,
+    // Recorded so the ?limit= clamp can be asserted — an unclamped NaN reached
+    // Drizzle as an invalid bind param.
+    limit: (n?: number) => {
+      mock.limits.push(n);
+      return chain;
+    },
     orderBy: () => chain,
     groupBy: () => chain,
     leftJoin: () => chain,
@@ -104,6 +110,7 @@ const fakeSessionRow = {
 
 beforeEach(() => {
   mock.selectQueue.length = 0;
+  mock.limits.length = 0;
   mock.insertedRow = null;
   for (const fn of [
     mock.findFirst, mock.select, mock.selectDistinct,
@@ -592,6 +599,46 @@ describe('POST /sessions/:id/entries/:entryId/sets', () => {
     expect((await res.json() as { error: string }).error).toBe('Invalid rpe');
     expect(mock.insert).not.toHaveBeenCalled();
   });
+
+  // weight went entirely unvalidated, so a NaN or a lb/kg mix-up landed in the
+  // column and skewed every volume and 1RM aggregate computed from it.
+  it('returns 400 for a negative weight', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]); // session owned ✓
+    mock.selectQueue.push([{ id: ENTRY_ID }]);   // entry found ✓
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/entries/${ENTRY_ID}/sets`,
+      {
+        method: 'POST',
+        headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setNumber: 1, weight: -20 }),
+      },
+      env,
+    );
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('Invalid weight');
+    expect(mock.insert).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 for an implausibly large weight', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID }]); // session owned ✓
+    mock.selectQueue.push([{ id: ENTRY_ID }]);   // entry found ✓
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/entries/${ENTRY_ID}/sets`,
+      {
+        method: 'POST',
+        headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ setNumber: 1, weight: 100_000 }),
+      },
+      env,
+    );
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('Invalid weight');
+    expect(mock.insert).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -752,6 +799,41 @@ describe('GET /sessions (list filters)', () => {
     const json = await res.json() as { sessions: { id: string }[] };
     expect(json.sessions).toHaveLength(1);
     expect(json.sessions[0].id).toBe(SESSION_ID);
+  });
+
+  // Math.min(parseInt('abc'), 200) is NaN, which Drizzle passed through as an
+  // invalid bind param instead of falling back to the default page size.
+  it('falls back to the default page size when limit is not a number', async () => {
+    mock.selectQueue.push([fakeSessionRow]);
+    mock.selectQueue.push([]);
+    mock.selectQueue.push([]);
+
+    const res = await makeApp().request('/sessions?limit=abc', { headers: await bearer() }, env);
+
+    expect(res.status).toBe(200);
+    expect(mock.limits[0]).toBe(50);
+  });
+
+  it('caps limit at 200', async () => {
+    mock.selectQueue.push([fakeSessionRow]);
+    mock.selectQueue.push([]);
+    mock.selectQueue.push([]);
+
+    const res = await makeApp().request('/sessions?limit=5000', { headers: await bearer() }, env);
+
+    expect(res.status).toBe(200);
+    expect(mock.limits[0]).toBe(200);
+  });
+
+  it('honours a limit inside the allowed range', async () => {
+    mock.selectQueue.push([fakeSessionRow]);
+    mock.selectQueue.push([]);
+    mock.selectQueue.push([]);
+
+    const res = await makeApp().request('/sessions?limit=120', { headers: await bearer() }, env);
+
+    expect(res.status).toBe(200);
+    expect(mock.limits[0]).toBe(120);
   });
 
   it('returns 400 without touching the DB when from is malformed', async () => {

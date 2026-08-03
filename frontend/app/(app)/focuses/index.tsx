@@ -10,12 +10,12 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { Discipline, DisciplineCat, FocusStatus, FocusWithStats } from '@app/shared';
+import { NAME_MAX_LENGTH, NOTES_MAX_LENGTH } from '@app/shared';
 import { useDisciplines } from '../../../src/hooks/useDisciplines';
 import {
   useCreateFocus,
@@ -140,6 +140,7 @@ function FocusFormModal({ visible, onClose, editing }: {
             autoFocus={!editing}
             returnKeyType="next"
             selectionColor={T.primary}
+            maxLength={NAME_MAX_LENGTH}
           />
         </View>
 
@@ -152,6 +153,7 @@ function FocusFormModal({ visible, onClose, editing }: {
             placeholder="Details, drills, or reminders…"
             placeholderTextColor={T.muted}
             multiline
+            maxLength={NOTES_MAX_LENGTH}
             textAlignVertical="top"
             selectionColor={T.primary}
           />
@@ -333,7 +335,7 @@ export default function FocusesScreen() {
   }
 
   return (
-    <Animated.View style={styles.screen} entering={FadeInDown.duration(280).springify()}>
+    <View style={styles.screen}>
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.back()}
@@ -431,7 +433,7 @@ export default function FocusesScreen() {
       )}
 
       <FocusFormModal visible={showForm} editing={editing} onClose={() => setShowForm(false)} />
-    </Animated.View>
+    </View>
   );
 }
 

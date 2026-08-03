@@ -22,12 +22,16 @@ try {
 }
 
 const ANDROID_CHANNEL = 'default';
-let permission: boolean | null = null;
+// Only a granted permission is cached. Caching `false` meant that declining the
+// OS prompt once, then granting the permission in system settings, left the app
+// insisting "Permission required" until it was force-quit — getPermissionsAsync
+// is a cheap local call, so re-asking after a denial costs nothing.
+let permissionGranted = false;
 
-/** Request notification permission once (and set up the Android channel). */
+/** Request notification permission (and set up the Android channel). */
 export async function ensureNotificationPermission(): Promise<boolean> {
   if (!Notifications || Platform.OS === 'web') return false;
-  if (permission !== null) return permission;
+  if (permissionGranted) return true;
   try {
     const current = await Notifications.getPermissionsAsync();
     let granted = current.granted;
@@ -42,10 +46,9 @@ export async function ensureNotificationPermission(): Promise<boolean> {
         sound: 'default',
       });
     }
-    permission = granted;
+    permissionGranted = granted;
     return granted;
   } catch {
-    permission = false;
     return false;
   }
 }

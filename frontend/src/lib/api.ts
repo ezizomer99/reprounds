@@ -45,73 +45,75 @@ async function toApiError(response: Response): Promise<Error & { status: number;
   return err;
 }
 
-export async function apiGet<T>(path: string): Promise<T> {
-  const headers = await buildHeaders(true);
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'GET',
-    headers,
-  });
+/**
+ * React Native's fetch has no default timeout, so a half-open socket (a
+ * captive-portal wifi, a dropped mobile handover) leaves the promise pending
+ * forever and the screen stuck on a spinner. Abort after this long instead.
+ *
+ * 15s is long enough for a cold Worker plus a Hyperdrive round-trip on a slow
+ * connection, short enough to surface before the user gives up.
+ */
+const REQUEST_TIMEOUT_MS = 15_000;
 
-  if (!response.ok) {
-    throw await toApiError(response);
-  }
-
-  return response.json() as Promise<T>;
+/**
+ * Timeouts carry status 0 so the shared retry predicate (which only refuses to
+ * retry 4xx) treats them as retryable, and so the global 401 handler doesn't
+ * mistake an abort for an expired session.
+ */
+function toTimeoutError(): Error & { status: number; body: unknown } {
+  const err = new Error('The request timed out. Check your connection.') as Error & {
+    status: number;
+    body: unknown;
+  };
+  err.status = 0;
+  err.body = undefined;
+  return err;
 }
 
-export async function apiPost<T>(path: string, body: unknown): Promise<T> {
-  const headers = await buildHeaders(true);
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers: await buildHeaders(true),
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (controller.signal.aborted) throw toTimeoutError();
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!response.ok) {
     throw await toApiError(response);
   }
 
-  return response.json() as Promise<T>;
+  // DELETE handlers return 204/an empty body; response.json() would throw.
+  if (method === 'DELETE') return undefined as T;
+  return (await response.json()) as T;
 }
 
-export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
-  const headers = await buildHeaders(true);
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'PATCH',
-    headers,
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    throw await toApiError(response);
-  }
-
-  return response.json() as Promise<T>;
+export function apiGet<T>(path: string): Promise<T> {
+  return request<T>('GET', path);
 }
 
-export async function apiPut<T>(path: string, body: unknown): Promise<T> {
-  const headers = await buildHeaders(true);
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'PUT',
-    headers,
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    throw await toApiError(response);
-  }
-
-  return response.json() as Promise<T>;
+export function apiPost<T>(path: string, body: unknown): Promise<T> {
+  return request<T>('POST', path, body);
 }
 
-export async function apiDelete(path: string): Promise<void> {
-  const headers = await buildHeaders(true);
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'DELETE',
-    headers,
-  });
+export function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  return request<T>('PATCH', path, body);
+}
 
-  if (!response.ok) {
-    throw await toApiError(response);
-  }
+export function apiPut<T>(path: string, body: unknown): Promise<T> {
+  return request<T>('PUT', path, body);
+}
+
+export function apiDelete(path: string): Promise<void> {
+  return request<void>('DELETE', path);
 }

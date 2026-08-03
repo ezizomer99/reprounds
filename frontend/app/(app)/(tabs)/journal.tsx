@@ -1,10 +1,9 @@
 import { Alert, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useDeleteSession, useSessions } from '../../../src/hooks/useSession';
+import { MAX_SESSIONS_PAGE, useDeleteSession, useSessions } from '../../../src/hooks/useSession';
 import { useRoutines } from '../../../src/hooks/useRoutines';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
@@ -30,7 +29,7 @@ export default function JournalTab() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { isPro, showPaywall } = useProGate();
-  const { data: sessions, isLoading, isError, error, refetch, isRefetching } = useSessions('completed');
+  const { data: sessions, isLoading, isError, error, refetch, isRefetching } = useSessions('completed', MAX_SESSIONS_PAGE);
   const { data: routines } = useRoutines();
   const deleteSession = useDeleteSession();
   const [filter, setFilter] = useState<Filter>('all');
@@ -71,7 +70,7 @@ export default function JournalTab() {
   }
 
   return (
-    <Animated.View style={styles.screen} entering={FadeInDown.duration(280).springify()}>
+    <View style={styles.screen}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Journal</Text>
         {list.length > 0 && (
@@ -171,7 +170,7 @@ export default function JournalTab() {
           showsVerticalScrollIndicator={false}
         />
       )}
-    </Animated.View>
+    </View>
   );
 }
 

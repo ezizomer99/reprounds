@@ -16,6 +16,7 @@ import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { NOTES_MAX_LENGTH } from '@app/shared';
 import {
   useCreateWeightLog,
   useDeleteWeightLog,
@@ -238,6 +239,7 @@ function AddWeightModal({ onClose }: { onClose: () => void }) {
             placeholder="Optional"
             placeholderTextColor={T.muted}
             multiline
+            maxLength={NOTES_MAX_LENGTH}
             textAlignVertical="top"
           />
 

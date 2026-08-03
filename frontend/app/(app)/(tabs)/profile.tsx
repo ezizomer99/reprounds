@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { statusCodes } from '@react-native-google-signin/google-signin';
 import { useCurrentUser, useSignIn } from '../../../src/hooks/useAuth';
-import { useSessions } from '../../../src/hooks/useSession';
+import { MAX_SESSIONS_PAGE, useSessions } from '../../../src/hooks/useSession';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -52,12 +52,14 @@ export default function ProfileTab() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { data: user } = useCurrentUser();
-  const { data: sessions } = useSessions('completed');
+  const { data: sessions, isLoading: sessionsLoading } = useSessions('completed', MAX_SESSIONS_PAGE);
   const { signInWithGoogle } = useSignIn();
   const [googleLinking, setGoogleLinking] = useState(false);
 
   const isGuest = user?.isGuest ?? false;
-  const completedCount = sessions?.length ?? 0;
+  // '—' rather than a hard 0 while loading: the old placeholder read as "you
+  // have never trained".
+  const completedCount = sessionsLoading && !sessions ? '—' : String(sessions?.length ?? 0);
   const displayName = user?.name ?? user?.email ?? 'Athlete';
   const firstName = isGuest ? 'Guest' : displayName.split(' ')[0];
 

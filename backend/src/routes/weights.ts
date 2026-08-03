@@ -4,7 +4,7 @@ import { createDb } from '../db';
 import { weightLogs } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
-import { isNumberInRange } from '@app/shared';
+import { isNumberInRange, WEIGHT_KG_RANGE } from '@app/shared';
 import type {
   CreateWeightLogRequest,
   UpdateWeightLogRequest,
@@ -54,7 +54,7 @@ weightRoutes.post('/', async (c) => {
     return c.json({ error: 'Invalid request body' }, 400);
   }
 
-  if (!body.date || !isNumberInRange(body.weightKg, 0, 1000)) {
+  if (!body.date || !isNumberInRange(body.weightKg, WEIGHT_KG_RANGE.min, WEIGHT_KG_RANGE.max)) {
     return c.json({ error: 'date and a weightKg between 0 and 1000 are required' }, 400);
   }
 
@@ -100,7 +100,7 @@ weightRoutes.patch('/:id', async (c) => {
     return c.json({ error: 'Invalid request body' }, 400);
   }
 
-  if (body.weightKg !== undefined && !isNumberInRange(body.weightKg, 0, 1000)) {
+  if (body.weightKg !== undefined && !isNumberInRange(body.weightKg, WEIGHT_KG_RANGE.min, WEIGHT_KG_RANGE.max)) {
     return c.json({ error: 'weightKg must be between 0 and 1000' }, 400);
   }
 

@@ -5,7 +5,7 @@ import { fights } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
 import { disciplineVisible } from '../lib/ownership';
-import { isFightMethod, isFightResult, isNumberInRange } from '@app/shared';
+import { FIGHT_ROUND_RANGE, isFightMethod, isFightResult, isNumberInRange } from '@app/shared';
 import type {
   CreateFightRequest,
   Fight,
@@ -100,7 +100,7 @@ fightRoutes.post('/', async (c) => {
   if (body.method != null && !isFightMethod(body.method)) {
     return c.json({ error: 'Invalid method' }, 400);
   }
-  if (body.round != null && !isNumberInRange(body.round, 1, 100)) {
+  if (body.round != null && !isNumberInRange(body.round, FIGHT_ROUND_RANGE.min, FIGHT_ROUND_RANGE.max)) {
     return c.json({ error: 'Invalid round' }, 400);
   }
 
@@ -144,7 +144,7 @@ fightRoutes.patch('/:id', async (c) => {
   if (body.method != null && !isFightMethod(body.method)) {
     return c.json({ error: 'Invalid method' }, 400);
   }
-  if (body.round != null && !isNumberInRange(body.round, 1, 100)) {
+  if (body.round != null && !isNumberInRange(body.round, FIGHT_ROUND_RANGE.min, FIGHT_ROUND_RANGE.max)) {
     return c.json({ error: 'Invalid round' }, 400);
   }
 
