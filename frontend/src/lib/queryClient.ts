@@ -91,9 +91,7 @@ export let asyncPersister: ReturnType<typeof createAsyncStoragePersister> | null
 
 if (offlineReady) {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const NetInfo = require('@react-native-community/netinfo').default;
     // Drive React Query's online state from the device network status so
     // mutations pause while offline and resume on reconnect.

@@ -140,6 +140,7 @@ function FocusFormModal({ visible, onClose, editing }: {
             autoFocus={!editing}
             returnKeyType="next"
             selectionColor={T.primary}
+            maxLength={NAME_MAX_LENGTH}
           />
         </View>
 
