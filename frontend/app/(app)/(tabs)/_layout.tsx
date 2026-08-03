@@ -1,4 +1,11 @@
-import { Dimensions, Easing, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  Easing,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import type { BottomTabNavigationOptions } from '@react-navigation/bottom-tabs';
 import { useMemo } from 'react';
@@ -9,36 +16,46 @@ import { useActiveSession } from '../../../src/hooks/useSession';
 import { BrandedHeader } from '../../../src/components/BrandedHeader';
 import { CutCornerView } from '../../../src/components/CutCornerView';
 
-const SCREEN_WIDTH = Dimensions.get('window').width;
-
 // Direction-aware slide between tabs: a scene's progress is -1 when it sits
 // left of the focused tab, 0 when focused, +1 when right, so the outgoing and
 // incoming scenes slide in opposite directions matching the tab order.
-const slideTransition = {
-  animation: 'shift',
-  transitionSpec: {
-    animation: 'timing',
-    config: { duration: 250, easing: Easing.out(Easing.cubic) },
-  },
-  sceneStyleInterpolator: ({ current }) => ({
-    sceneStyle: {
-      transform: [
-        {
-          translateX: current.progress.interpolate({
-            inputRange: [-1, 0, 1],
-            outputRange: [-SCREEN_WIDTH, 0, SCREEN_WIDTH],
-          }),
-        },
-      ],
+//
+// Built per-render off the live window width rather than a module-level
+// Dimensions.get() so the slide distance still matches the screen after a
+// rotation or a foldable unfolding.
+//
+// Note: tab screens must NOT carry their own `entering` animation. A scene is
+// mounted lazily on first visit, so an entering animation fires *during* this
+// slide and the page appears to rise from below before sliding.
+function makeSlideTransition(width: number) {
+  return {
+    animation: 'shift',
+    transitionSpec: {
+      animation: 'timing',
+      config: { duration: 250, easing: Easing.out(Easing.cubic) },
     },
-  }),
-} satisfies BottomTabNavigationOptions;
+    sceneStyleInterpolator: ({ current }) => ({
+      sceneStyle: {
+        transform: [
+          {
+            translateX: current.progress.interpolate({
+              inputRange: [-1, 0, 1],
+              outputRange: [-width, 0, width],
+            }),
+          },
+        ],
+      },
+    }),
+  } satisfies BottomTabNavigationOptions;
+}
 
 export default function TabLayout() {
   const router = useRouter();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { activeSession } = useActiveSession();
+  const { width } = useWindowDimensions();
+  const slideTransition = useMemo(() => makeSlideTransition(width), [width]);
 
   return (
     <View style={{ flex: 1 }}>

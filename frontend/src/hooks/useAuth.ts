@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import type { User } from '@app/shared';
 import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/api';
+import { clearPersistedCache, isSessionExpired, markSessionActive } from '../lib/queryClient';
 import {
   clearSessionToken,
   setSessionToken,
@@ -22,21 +23,20 @@ interface AuthResponse {
 }
 
 export function useCurrentUser() {
+  // 401 handling lives in the shared QueryCache onError (src/lib/queryClient.ts)
+  // so it applies to every endpoint, not just this one. Retry is left to the
+  // global predicate too, which already refuses to retry 4xx — the old
+  // `retry: false` meant one flaky network blip signed the user out.
+  //
+  // `enabled` stops this from re-firing (and re-401ing) after the session has
+  // been retired; the guard then settles on "no user" and redirects.
   return useQuery<User, Error>({
     queryKey: ['auth', 'me'],
     queryFn: async () => {
-      try {
-        const data = await apiGet<MeResponse>('/auth/me');
-        return data.user;
-      } catch (err) {
-        const status = (err as Error & { status?: number }).status;
-        if (status === 401) {
-          await clearSessionToken();
-        }
-        throw err;
-      }
+      const data = await apiGet<MeResponse>('/auth/me');
+      return data.user;
     },
-    retry: false,
+    enabled: !isSessionExpired(),
   });
 }
 
@@ -71,6 +71,7 @@ export function useSignIn() {
     const data = await apiPost<AuthResponse>('/auth/google', { idToken, guestToken });
     await setSessionToken(data.sessionToken);
     await clearGuestData();
+    markSessionActive();
     queryClient.setQueryData<User>(['auth', 'me'], data.user);
   }
 
@@ -79,6 +80,7 @@ export function useSignIn() {
     const data = await apiPost<AuthResponse>('/auth/guest', { deviceId });
     await setSessionToken(data.sessionToken);
     await setGuestUserId(data.user.id);
+    markSessionActive();
     queryClient.setQueryData<User>(['auth', 'me'], data.user);
   }
 
@@ -92,6 +94,7 @@ export function useSignIn() {
     });
     await setSessionToken(data.sessionToken);
     await clearGuestData();
+    markSessionActive();
     queryClient.setQueryData<User>(['auth', 'me'], data.user);
   }
 
@@ -100,6 +103,7 @@ export function useSignIn() {
     const data = await apiPost<AuthResponse>('/auth/login', { email, password, guestToken });
     await setSessionToken(data.sessionToken);
     await clearGuestData();
+    markSessionActive();
     queryClient.setQueryData<User>(['auth', 'me'], data.user);
   }
 
@@ -107,20 +111,20 @@ export function useSignIn() {
 }
 
 export function useSignOut() {
-  const queryClient = useQueryClient();
-
+  // Note: deliberately does NOT call clearGuestData(). This same function backs
+  // the "Exit Guest Mode" button in settings, and dropping the deviceId would
+  // mint a brand-new guest user on the next sign-in — permanently orphaning
+  // that guest's entire training history.
   async function signOut(): Promise<void> {
     await clearSessionToken();
     try { await GoogleSignin.signOut(); } catch { /* ignore if not signed in via Google */ }
-    queryClient.clear();
+    await clearPersistedCache();
   }
 
   return { signOut };
 }
 
 export function useDeleteAccount() {
-  const queryClient = useQueryClient();
-
   // Permanently deletes the account server-side, then clears all local session
   // state — mirrors signOut so the device is left in a clean signed-out state.
   async function deleteAccount(): Promise<void> {
@@ -128,7 +132,7 @@ export function useDeleteAccount() {
     await clearSessionToken();
     await clearGuestData();
     try { await GoogleSignin.signOut(); } catch { /* ignore if not signed in via Google */ }
-    queryClient.clear();
+    await clearPersistedCache();
   }
 
   return { deleteAccount };

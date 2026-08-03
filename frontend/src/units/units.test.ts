@@ -1,4 +1,13 @@
-import { kgToUnit, unitToKg, fmtWeight, fmtDuration, fmtMinutes, parseDuration } from './units';
+import { WEIGHT_KG_RANGE } from '@app/shared';
+import {
+  kgToUnit,
+  unitToKg,
+  fmtWeight,
+  fmtDuration,
+  fmtMinutes,
+  parseDuration,
+  weightInputRange,
+} from './units';
 
 describe('kgToUnit / unitToKg', () => {
   it('is identity for kg unit', () => {
@@ -114,5 +123,20 @@ describe('parseDuration', () => {
     for (const secs of [0, 65, 120, 3600]) {
       expect(parseDuration(fmtDuration(secs))).toBe(secs);
     }
+  });
+});
+
+describe('weightInputRange', () => {
+  it('passes the kg bounds straight through for kg', () => {
+    expect(weightInputRange('kg')).toEqual(WEIGHT_KG_RANGE);
+  });
+
+  // Validating typed input against the raw kg bound would reject a legitimate
+  // 300 lb lift, so the bound is converted rather than the value.
+  it('converts the upper bound for lbs', () => {
+    const range = weightInputRange('lbs');
+    expect(range.min).toBe(0);
+    expect(range.max).toBeCloseTo(WEIGHT_KG_RANGE.max * 2.2046226218, 5);
+    expect(range.max).toBeGreaterThan(300);
   });
 });

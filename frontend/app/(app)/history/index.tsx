@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useDeleteSession, useSessions } from '../../../src/hooks/useSession';
+import { MAX_SESSIONS_PAGE, useDeleteSession, useSessions } from '../../../src/hooks/useSession';
 import { useRoutines } from '../../../src/hooks/useRoutines';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
@@ -31,7 +31,7 @@ export default function HistoryScreen() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { isPro, showPaywall } = useProGate();
-  const { data: sessions, isLoading, isError, error, refetch, isRefetching } = useSessions('completed');
+  const { data: sessions, isLoading, isError, error, refetch, isRefetching } = useSessions('completed', MAX_SESSIONS_PAGE);
   const { data: routines, refetch: refetchRoutines } = useRoutines();
   const deleteSession = useDeleteSession();
   const [filter, setFilter] = useState<Filter>('all');

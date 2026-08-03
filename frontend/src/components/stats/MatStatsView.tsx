@@ -9,6 +9,7 @@ import { useMatStats } from '../../hooks/useStats';
 import { useProGate } from '../../hooks/useProGate';
 import { weeksAgoMonday } from '../../lib/statsHelpers';
 import { Skeleton } from '../Skeleton';
+import { InlineError } from '../InlineError';
 import { F, R, ThemeColors } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeContext';
 import { withAlpha } from '../../lib/color';
@@ -57,7 +58,7 @@ export function MatStatsView() {
   const { isPro, showPaywall } = useProGate();
 
   const since = useMemo(() => weeksAgoMonday(WEEKS), []);
-  const { data, isLoading } = useMatStats(since, WEEKS);
+  const { data, isLoading, isError, refetch } = useMatStats(since, WEEKS);
 
   const barData = useMemo(
     () =>
@@ -100,6 +101,12 @@ export function MatStatsView() {
       Object.keys(grap.positions ?? {}).length > 0);
   const hasStriking = !!strik && (strik.rounds > 0 || strik.totalStrikes > 0);
   const isEmpty = !isLoading && (data?.totals.sessions ?? 0) === 0;
+
+  // One guard above all four loading branches: a failed fetch used to render as
+  // an all-zeroes view, indistinguishable from "you haven't trained".
+  if (isError) {
+    return <InlineError message="Couldn't load your mat stats." onRetry={() => void refetch()} />;
+  }
 
   return (
     <>

@@ -1,8 +1,6 @@
 import '../global.css';
-import { QueryClient, QueryClientProvider, onlineManager } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
-import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
-import { NativeModules } from 'react-native';
 import { Slot } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
@@ -30,61 +28,12 @@ import { NotificationsProvider } from '../src/notifications/NotificationsContext
 import { SubscriptionProvider } from '../src/context/SubscriptionContext';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { GOOGLE_WEB_CLIENT_ID } from '../src/lib/config';
+import { asyncPersister, queryClient } from '../src/lib/queryClient';
 
 GoogleSignin.configure({
   webClientId: GOOGLE_WEB_CLIENT_ID,
   iosClientId: process.env.EXPO_PUBLIC_IOS_CLIENT_ID,
 });
-
-// Offline persistence relies on the native AsyncStorage + NetInfo modules,
-// which only exist after an EAS build that includes them. Statically importing
-// them throws at module evaluation on an older dev client, so detect the native
-// modules first and require them lazily — falling back to an in-memory client.
-const offlineReady = Boolean(NativeModules.RNCAsyncStorage && NativeModules.RNCNetInfo);
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      // Workout data doesn't change second-to-second; serve cached data across
-      // remounts/tab switches instead of refetching every time.
-      staleTime: 60_000,
-      // Long enough to survive an offline app restart (must exceed persist maxAge).
-      gcTime: 24 * 60 * 60_000,
-      refetchOnReconnect: true,
-      retry: (failureCount, error) => {
-        // Don't retry client errors (auth/validation); they won't succeed on retry.
-        const status = (error as { status?: number })?.status;
-        if (status !== undefined && status >= 400 && status < 500) return false;
-        return failureCount < 2;
-      },
-    },
-    mutations: {
-      // Queue writes made offline and fire them when connectivity returns.
-      networkMode: 'offlineFirst',
-      retry: 2,
-    },
-  },
-});
-
-let asyncPersister: ReturnType<typeof createAsyncStoragePersister> | null = null;
-if (offlineReady) {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const NetInfo = require('@react-native-community/netinfo').default;
-    // Drive React Query's online state from the device network status so
-    // mutations pause while offline and resume on reconnect.
-    onlineManager.setEventListener((setOnline) =>
-      NetInfo.addEventListener((state: { isConnected: boolean | null }) =>
-        setOnline(Boolean(state.isConnected)),
-      ),
-    );
-    asyncPersister = createAsyncStoragePersister({ storage: AsyncStorage });
-  } catch {
-    asyncPersister = null;
-  }
-}
 
 function AppShell() {
   const { isDark } = useTheme();
@@ -102,7 +51,7 @@ function AppShell() {
 }
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     SpaceGrotesk_400Regular,
     SpaceGrotesk_500Medium,
     SpaceGrotesk_600SemiBold,
@@ -113,7 +62,9 @@ export default function RootLayout() {
     Archivo_800ExtraBold,
   });
 
-  if (!fontsLoaded) return null;
+  // Render with system fonts if a font fails to load. Gating purely on
+  // `fontsLoaded` meant any font error was a permanently blank app.
+  if (!fontsLoaded && !fontError) return null;
 
   const tree = (
     <ThemeProvider>

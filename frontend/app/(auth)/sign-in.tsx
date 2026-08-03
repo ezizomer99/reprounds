@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { NAME_MAX_LENGTH } from '@app/shared';
 import { statusCodes } from '@react-native-google-signin/google-signin';
 import { useState, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -165,6 +166,7 @@ export default function SignInScreen() {
                   value={name}
                   onChangeText={setName}
                   autoCapitalize="words"
+                  maxLength={NAME_MAX_LENGTH}
                   editable={!isLoading}
                   returnKeyType="next"
                 />

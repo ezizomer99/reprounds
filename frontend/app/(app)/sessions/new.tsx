@@ -47,7 +47,12 @@ export default function NewSessionScreen() {
           { text: 'Resume', onPress: () => router.push({ pathname: '/sessions/[id]', params: { id: sid } } as never) },
         ],
       );
+      return;
     }
+    // Anything that isn't the active-session conflict used to fall through
+    // silently: a 500, a dropped connection or a request timeout left the user
+    // tapping "Start" with no response at all.
+    Alert.alert('Error', (err as Error).message ?? 'Failed to start the session.');
   }
 
   async function startRoutine(routine: RoutineWithItems, kind?: EntryKind) {

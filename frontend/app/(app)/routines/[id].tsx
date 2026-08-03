@@ -37,7 +37,16 @@ import {
   useUpdateRoutineItem,
 } from '../../../src/hooks/useRoutines';
 import { useUnit } from '../../../src/units/UnitContext';
-import { fmtWeight, unitToKg, fmtDuration, parseDuration, type WeightUnit } from '../../../src/units/units';
+import { NAME_MAX_LENGTH, NOTES_MAX_LENGTH, REPS_RANGE } from '@app/shared';
+import {
+  fmtWeight,
+  unitToKg,
+  fmtDuration,
+  parseDuration,
+  weightInputRange,
+  type WeightUnit,
+} from '../../../src/units/units';
+import { parseIntInRangeResult, parseNumberInRangeResult } from '../../../src/lib/parseNumber';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -203,6 +212,7 @@ function RoutineFields({
             value={name}
             onChangeText={onChangeName}
             placeholder="e.g. Push Day"
+            maxLength={NAME_MAX_LENGTH}
             placeholderTextColor={T.muted}
             returnKeyType="next"
             selectionColor={T.primary}
@@ -231,6 +241,7 @@ function RoutineFields({
             placeholder="Optional notes…"
             placeholderTextColor={T.muted}
             multiline
+            maxLength={NOTES_MAX_LENGTH}
             returnKeyType="default"
             selectionColor={T.primary}
           />
@@ -327,9 +338,11 @@ function PlanSetRow({ row, index, type, onChange, onCycleType, onRemove }: {
               style={styles.planCellValue}
               value={weight}
               onChangeText={setWeight}
-              onBlur={() =>
-                onChange({ weight: weight.trim() === '' ? null : unitToKg(Number(weight), unit) })
-              }
+              onBlur={() => {
+                const { value, invalid } = parseNumberInRangeResult(weight, weightInputRange(unit));
+                if (invalid) return;
+                onChange({ weight: value === null ? null : unitToKg(value, unit) });
+              }}
               placeholder="—"
               placeholderTextColor={T.muted}
               keyboardType="decimal-pad"
@@ -342,7 +355,13 @@ function PlanSetRow({ row, index, type, onChange, onCycleType, onRemove }: {
               style={styles.planCellValue}
               value={reps}
               onChangeText={setReps}
-              onBlur={() => onChange({ reps: reps.trim() === '' ? null : parseInt(reps, 10) })}
+              onBlur={() => {
+                // parseInt('12kg') was 12 and parseInt('abc') was NaN — both
+                // went straight into the routine plan.
+                const { value, invalid } = parseIntInRangeResult(reps, REPS_RANGE);
+                if (invalid) return;
+                onChange({ reps: value });
+              }}
               placeholder="—"
               placeholderTextColor={T.muted}
               keyboardType="number-pad"

@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useRecentNotes } from '../../hooks/useNotes';
 import { Skeleton } from '../Skeleton';
+import { InlineError } from '../InlineError';
 import { F, R, ThemeColors } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeContext';
 import { withAlpha } from '../../lib/color';
@@ -20,7 +21,7 @@ export function RecentNotesCard() {
   const router = useRouter();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const { data, isLoading } = useRecentNotes(3);
+  const { data, isLoading, isError, refetch } = useRecentNotes(3);
 
   const groups = data?.groups ?? [];
 
@@ -48,6 +49,8 @@ export function RecentNotesCard() {
           <Skeleton width="100%" height={48} radius={8} />
           <Skeleton width="100%" height={48} radius={8} />
         </View>
+      ) : isError ? (
+        <InlineError message="Couldn't load your recent notes." onRetry={() => void refetch()} />
       ) : groups.length === 0 ? (
         <Text style={styles.emptyText}>
           Notes you add to sessions and rounds will show up here.

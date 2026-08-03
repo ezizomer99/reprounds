@@ -1,6 +1,20 @@
+import { WEIGHT_KG_RANGE, type NumericRange } from '@app/shared';
+
 export type WeightUnit = 'kg' | 'lbs';
 
 const LB_PER_KG = 2.2046226218;
+
+/**
+ * The acceptable range for a weight *typed in the display unit*. Validating
+ * raw input against the kg range would reject a legitimate 300 lb lift, so
+ * convert the bound rather than the value.
+ */
+export function weightInputRange(unit: WeightUnit): NumericRange {
+  return {
+    min: kgToUnit(WEIGHT_KG_RANGE.min, unit),
+    max: kgToUnit(WEIGHT_KG_RANGE.max, unit),
+  };
+}
 
 /** Convert a stored kg value to the user's display unit. */
 export function kgToUnit(kg: number, unit: WeightUnit): number {

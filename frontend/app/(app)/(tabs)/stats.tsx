@@ -5,14 +5,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useState, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { BarChart } from 'react-native-gifted-charts';
 import Body from 'react-native-body-highlighter';
-import { useSessions } from '../../../src/hooks/useSession';
+import { MAX_SESSIONS_PAGE, useSessions } from '../../../src/hooks/useSession';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { mondayOf, sessionsThisWeek, avgPerWeek, getWeeklyBarData } from '../../../src/lib/statsHelpers';
 import { useMuscleSummary, useTopLifts } from '../../../src/hooks/useStats';
@@ -37,11 +36,12 @@ export default function StatsTab() {
   const [muscleView, setMuscleView] = useState<'front' | 'back'>('front');
   const [statsView, setStatsView] = useState<'gym' | 'mat'>('gym');
 
-  const { data: sessions, isLoading, isError, refetch } = useSessions('completed');
+  const { data: sessions, isLoading, isError, refetch } = useSessions('completed', MAX_SESSIONS_PAGE);
 
   const thisWeekMonday = useMemo(() => mondayOf(new Date()).toISOString().slice(0, 10), []);
-  const { data: muscleData } = useMuscleSummary(thisWeekMonday);
-  const { data: topLiftsData } = useTopLifts();
+  const { data: muscleData, isError: muscleError, refetch: refetchMuscles } =
+    useMuscleSummary(thisWeekMonday);
+  const { data: topLiftsData, isError: topLiftsError, refetch: refetchTopLifts } = useTopLifts();
 
   const thisWeek = useMemo(() => (sessions ? sessionsThisWeek(sessions) : 0), [sessions]);
   const avg = useMemo(() => (sessions ? avgPerWeek(sessions) : 0), [sessions]);
@@ -56,7 +56,7 @@ export default function StatsTab() {
   const hasMuscles = bodyData.length > 0;
 
   return (
-    <Animated.View style={styles.screen} entering={FadeInDown.duration(280).springify()}>
+    <View style={styles.screen}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Stats</Text>
       </View>
@@ -183,7 +183,12 @@ export default function StatsTab() {
             </View>
           </View>
 
-          {hasMuscles ? (
+          {muscleError ? (
+            <InlineError
+              message="Couldn't load your muscle breakdown."
+              onRetry={() => void refetchMuscles()}
+            />
+          ) : hasMuscles ? (
             <View style={styles.bodyContainer}>
               <Body
                 data={bodyData}
@@ -270,7 +275,12 @@ export default function StatsTab() {
           </View>
 
           {isPro ? (
-            !topLiftsData ? (
+            topLiftsError ? (
+              <InlineError
+                message="Couldn't load your top lifts."
+                onRetry={() => void refetchTopLifts()}
+              />
+            ) : !topLiftsData ? (
               <View style={{ gap: 8, marginTop: 4 }}>
                 {Array.from({ length: 3 }).map((_, i) => (
                   <Skeleton key={i} width="100%" height={40} radius={8} />
@@ -338,7 +348,7 @@ export default function StatsTab() {
           </View>
         </TouchableOpacity>
       </ScrollView>
-    </Animated.View>
+    </View>
   );
 }
 

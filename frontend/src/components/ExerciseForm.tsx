@@ -9,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import type { ActivityType, Exercise } from '@app/shared';
-import { FREE_CUSTOM_EXERCISE_LIMIT } from '@app/shared';
+import { FREE_CUSTOM_EXERCISE_LIMIT, NAME_MAX_LENGTH } from '@app/shared';
 import { useCreateExercise, useExercises } from '../hooks/useExercises';
 import { useCurrentUser } from '../hooks/useAuth';
 import { useProGate } from '../hooks/useProGate';
@@ -95,6 +95,7 @@ export function ExerciseForm({ initialName = '', submitLabel, onCreated }: Exerc
           value={name}
           onChangeText={setName}
           placeholder="e.g. Bench Press"
+          maxLength={NAME_MAX_LENGTH}
           placeholderTextColor={T.muted}
           autoFocus
           returnKeyType="next"

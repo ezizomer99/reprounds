@@ -26,6 +26,14 @@ Package manager: **pnpm workspaces**. Always `pnpm install` from root. Each pack
 - Routines are **started on demand** or scheduled as **one-off planned sessions** (`sessions.status='planned'`, created from the `/calendar` screen, started via `POST /sessions/:id/start`). There is **still no recurrence**: no RRULE, no schedule-rules tables, no recurrence columns — the removed weekly-schedule layer stays removed. Scheduling = a normal `sessions` row with `status='planned'` on a future date, nothing more.
 - Hyperdrive binding is required in production — never call Neon directly from a Worker.
 - **Never use `@gorhom/bottom-sheet` `BottomSheetModal`** — its `present()` silently no-ops in release builds on RN 0.79 + New Architecture (two fix attempts failed on device, including `enableDynamicSizing={false}`). Use plain RN `Modal` with `presentationStyle="pageSheet"` like every existing dialog. The `BottomSheetModalProvider` in the root layout is vestigial.
+- **Tab screens must not carry their own `entering` animation.** `(tabs)/_layout.tsx` already slides scenes horizontally, and bottom-tabs mounts each screen lazily — so a screen-level `FadeInDown` fires *during* that slide on the first visit to a tab and the page appears to rise from underneath before sliding. Same applies to pushed stack screens, which get the platform's slide-from-right.
+
+---
+
+## Known gaps
+
+- **Writes are not idempotent.** Mutations run `networkMode: 'offlineFirst'` with a retry predicate, and `resumePausedMutations()` replays whatever was queued offline. A POST that reached Postgres but whose response was lost will be retried and insert a second row. The window is narrow and the blast radius is one duplicate row the user can delete, so the fix (a client-generated idempotency key plus a unique index and upsert on every write endpoint) is deliberately deferred. Revisit if it's ever reported.
+- **`GET /sessions` has no cursor pagination**, only `limit` (default 50, max 200). Aggregate call sites pass `MAX_SESSIONS_PAGE`, so streaks and lifetime counts are correct to 200 sessions and silently truncate past that. `GET /notes` has the cursor implementation to copy when this needs fixing properly.
 
 ---
 

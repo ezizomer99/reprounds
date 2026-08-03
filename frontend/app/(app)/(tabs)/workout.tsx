@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
@@ -19,6 +18,7 @@ import { useRoutines } from '../../../src/hooks/useRoutines';
 import { InlineError } from '../../../src/components/InlineError';
 import { CutCornerView } from '../../../src/components/CutCornerView';
 import { MyWeek } from '../../../src/components/MyWeek';
+import { Skeleton } from '../../../src/components/Skeleton';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -69,11 +69,16 @@ export default function WorkoutTab() {
   const styles = useMemo(() => makeStyles(T), [T]);
   const { data: user } = useCurrentUser();
   const { isError: sessionsError, refetch: refetchSessions } = useSessions('completed');
-  const { data: routines, isError: routinesError, refetch: refetchRoutines } = useRoutines();
+  const {
+    data: routines,
+    isLoading: routinesLoading,
+    isError: routinesError,
+    refetch: refetchRoutines,
+  } = useRoutines();
   const hasError = sessionsError || routinesError;
 
   return (
-    <Animated.View style={styles.screen} entering={FadeInDown.duration(280).springify()}>
+    <View style={styles.screen}>
       <View style={styles.header}>
         <Text style={styles.greeting}>{greeting(user?.name ?? null)}</Text>
         <Text style={styles.todayLabel}>{todayLabel()}</Text>
@@ -130,7 +135,14 @@ export default function WorkoutTab() {
           </TouchableOpacity>
         </View>
 
-        {routines && routines.length > 0 ? (
+        {routinesLoading ? (
+          // Was falling through to the "No routines yet" empty state on a cold
+          // load, telling users with routines that they had none.
+          <View style={[styles.routinesList, { flexDirection: 'row', gap: 12 }]}>
+            <Skeleton width={150} height={96} radius={R.sm} />
+            <Skeleton width={150} height={96} radius={R.sm} />
+          </View>
+        ) : routines && routines.length > 0 ? (
           <FlatList
             data={routines}
             keyExtractor={(t) => t.id}
@@ -161,7 +173,7 @@ export default function WorkoutTab() {
           </View>
         )}
       </ScrollView>
-    </Animated.View>
+    </View>
   );
 }
 

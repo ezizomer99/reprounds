@@ -15,7 +15,17 @@ import {
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
 import { disciplineVisible, exerciseVisible } from '../lib/ownership';
-import { isEntryKind, isGiType, isNumberInRange, isSessionStatus, isSetType } from '@app/shared';
+import {
+  isEntryKind,
+  isGiType,
+  isNumberInRange,
+  isSessionStatus,
+  isSetType,
+  REPS_RANGE,
+  RIR_RANGE,
+  RPE_RANGE,
+  WEIGHT_KG_RANGE,
+} from '@app/shared';
 import type {
   CompleteSessionRequest,
   CreateSessionEntryRequest,
@@ -275,13 +285,28 @@ function validateEntryKind(body: {
 function validateSetFields(body: {
   setType?: unknown;
   reps?: unknown;
+  weight?: unknown;
   rpe?: unknown;
   rir?: unknown;
 }): string | null {
   if (body.setType !== undefined && !isSetType(body.setType)) return 'Invalid setType';
-  if (body.reps != null && !isNumberInRange(body.reps, 0, 10_000)) return 'Invalid reps';
-  if (body.rpe != null && !isNumberInRange(body.rpe, 0, 10)) return 'Invalid rpe';
-  if (body.rir != null && !isNumberInRange(body.rir, 0, 100)) return 'Invalid rir';
+  if (body.reps != null && !isNumberInRange(body.reps, REPS_RANGE.min, REPS_RANGE.max)) {
+    return 'Invalid reps';
+  }
+  // weight was previously unchecked, so a NaN or a lb/kg mix-up went straight
+  // into the column and skewed every volume and 1RM aggregate off it.
+  if (
+    body.weight != null &&
+    !isNumberInRange(body.weight, WEIGHT_KG_RANGE.min, WEIGHT_KG_RANGE.max)
+  ) {
+    return 'Invalid weight';
+  }
+  if (body.rpe != null && !isNumberInRange(body.rpe, RPE_RANGE.min, RPE_RANGE.max)) {
+    return 'Invalid rpe';
+  }
+  if (body.rir != null && !isNumberInRange(body.rir, RIR_RANGE.min, RIR_RANGE.max)) {
+    return 'Invalid rir';
+  }
   return null;
 }
 
@@ -292,7 +317,13 @@ sessionRoutes.get('/', async (c) => {
   const status = c.req.query('status');
   const from = c.req.query('from');
   const to = c.req.query('to');
-  const limit = Math.min(parseInt(c.req.query('limit') ?? '50', 10), 200);
+  // parseInt returns NaN for a junk ?limit=, and Math.min(NaN, 200) is NaN,
+  // which reaches Drizzle's .limit() as an invalid bind param. Fall back to the
+  // default instead.
+  const requestedLimit = parseInt(c.req.query('limit') ?? '', 10);
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(Math.max(requestedLimit, 1), 200)
+    : 50;
 
   if (status !== undefined && !isSessionStatus(status)) {
     return c.json({ error: 'Invalid status' }, 400);

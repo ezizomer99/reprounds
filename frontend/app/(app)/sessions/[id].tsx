@@ -30,7 +30,15 @@ import type {
   SetType,
   StrengthSet,
 } from '@app/shared';
-import { FREE_CUSTOM_EXERCISE_LIMIT, isRoundsSession, totalVolume } from '@app/shared';
+import {
+  FREE_CUSTOM_EXERCISE_LIMIT,
+  isRoundsSession,
+  NOTES_MAX_LENGTH,
+  REPS_RANGE,
+  REST_SECONDS_RANGE,
+  RPE_RANGE,
+  totalVolume,
+} from '@app/shared';
 import { useExercises } from '../../../src/hooks/useExercises';
 import { useDisciplines } from '../../../src/hooks/useDisciplines';
 import { useProGate } from '../../../src/hooks/useProGate';
@@ -61,7 +69,26 @@ import { PlateCalculator } from '../../../src/components/PlateCalculator';
 import { CalendarPicker } from '../../../src/components/CalendarPicker';
 import { localTodayISO } from '../../../src/lib/calendar';
 import { useUnit } from '../../../src/units/UnitContext';
-import { fmtWeight, kgToUnit, unitToKg, fmtDuration, fmtMinutes, parseDuration } from '../../../src/units/units';
+import {
+  fmtWeight,
+  kgToUnit,
+  unitToKg,
+  fmtDuration,
+  fmtMinutes,
+  parseDuration,
+  weightInputRange,
+} from '../../../src/units/units';
+import {
+  clearActiveRest,
+  getActiveRest,
+  setActiveRest,
+  updateActiveRestNotifId,
+} from '../../../src/lib/restTimerStore';
+import {
+  parseIntInRangeResult,
+  parseNumberInRange,
+  parseNumberInRangeResult,
+} from '../../../src/lib/parseNumber';
 import { suggestOverload } from '../../../src/lib/overload';
 import { generateWarmupRamp } from '../../../src/lib/warmup';
 import { cancelScheduled, cancelScheduledByKind, scheduleInSeconds } from '../../../src/lib/notifications';
@@ -91,6 +118,25 @@ const SET_TYPE_SHORT: Record<SetType, string> = {
   failure: 'FAIL',
   amrap:   'AMRAP',
 };
+
+/**
+ * Next free setNumber for an entry. Must be derived from the highest existing
+ * number, not `sets.length`: the backend deletes a set without renumbering its
+ * siblings, so deleting set 2 of 3 leaves [1, 3] with length 2 — and
+ * `length + 1` then hands the next set a duplicate 3. The list is ordered by
+ * setNumber server-side, so duplicates order non-deterministically and
+ * visibly swap places between refetches.
+ */
+/**
+ * Bound for free-form numeric fields in a discipline's field_config (rounds
+ * rolled, submissions landed, …). Deliberately generous — the schema doesn't
+ * declare per-field ranges — but finite, so NaN and Infinity can't get through.
+ */
+const MA_NUMBER_RANGE = { min: 0, max: 100_000 };
+
+function nextSetNumber(sets: readonly StrengthSet[]): number {
+  return sets.reduce((max, s) => Math.max(max, s.setNumber), 0) + 1;
+}
 
 function formatElapsed(secs: number): string {
   const h = Math.floor(secs / 3600);
@@ -327,6 +373,36 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   const [rpe, setRpe] = useState(set.rpe !== null ? String(set.rpe) : '');
   const [notes, setNotes] = useState(set.notes ?? '');
   const [showNote, setShowNote] = useState(false);
+  // Which cells currently hold something unusable, so they can be flagged
+  // instead of silently discarding the value.
+  const [badFields, setBadFields] = useState<Record<string, boolean>>({});
+
+  const markField = (key: string, bad: boolean) =>
+    setBadFields((prev) => (prev[key] === bad ? prev : { ...prev, [key]: bad }));
+
+  // The cached set is the source of truth after a rollback. Without this the
+  // query cache reverted but the TextInput kept showing the rejected text, so
+  // a value the server refused looked saved. Skipped while the field has focus
+  // so a background refetch can't stomp what's being typed.
+  const focusedField = useRef<string | null>(null);
+  useEffect(() => {
+    if (focusedField.current !== 'reps') setReps(set.reps !== null ? String(set.reps) : '');
+    if (focusedField.current !== 'duration') setDuration(set.reps !== null ? fmtDuration(set.reps) : '');
+  }, [set.reps]);
+  useEffect(() => {
+    if (focusedField.current !== 'weight') {
+      setWeight(set.weight !== null ? fmtWeight(set.weight, unit) : '');
+    }
+  }, [set.weight, unit]);
+  useEffect(() => {
+    if (focusedField.current !== 'rpe') setRpe(set.rpe !== null ? String(set.rpe) : '');
+  }, [set.rpe]);
+
+  const onFieldFocus = (key: string) => () => { focusedField.current = key; };
+  const onFieldBlur = (key: string, handler: () => void) => () => {
+    if (focusedField.current === key) focusedField.current = null;
+    handler();
+  };
 
   function handleBlurNotes() {
     if (isOptimistic) return;
@@ -335,28 +411,42 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
 
   function handleBlurReps() {
     if (isOptimistic) return;
-    const parsed = reps.trim() === '' ? null : Number(reps);
-    updateSet.mutate({ sessionId, entryId, setId: set.id, reps: isNaN(parsed as number) ? null : parsed });
+    const { value, invalid } = parseIntInRangeResult(reps, REPS_RANGE);
+    markField('reps', invalid);
+    // Don't send a value the API will reject — the optimistic update would
+    // paint it on screen and the rollback would be invisible.
+    if (invalid) return;
+    updateSet.mutate({ sessionId, entryId, setId: set.id, reps: value });
   }
 
   function handleBlurWeight() {
     if (isOptimistic) return;
-    const parsed = weight.trim() === '' ? null : Number(weight);
-    const kg = parsed === null || isNaN(parsed) ? null : unitToKg(parsed, unit);
-    updateSet.mutate({ sessionId, entryId, setId: set.id, weight: kg });
+    const { value, invalid } = parseNumberInRangeResult(weight, weightInputRange(unit));
+    markField('weight', invalid);
+    if (invalid) return;
+    updateSet.mutate({
+      sessionId,
+      entryId,
+      setId: set.id,
+      weight: value === null ? null : unitToKg(value, unit),
+    });
   }
 
   function handleBlurDuration() {
     if (isOptimistic) return;
     const secs = parseDuration(duration);
-    if (secs !== null) setDuration(fmtDuration(secs));
+    markField('duration', duration.trim() !== '' && secs === null);
+    if (duration.trim() !== '' && secs === null) return;
+    setDuration(secs !== null ? fmtDuration(secs) : '');
     updateSet.mutate({ sessionId, entryId, setId: set.id, reps: secs });
   }
 
   function handleBlurRpe() {
     if (isOptimistic) return;
-    const parsed = rpe.trim() === '' ? null : Number(rpe);
-    updateSet.mutate({ sessionId, entryId, setId: set.id, rpe: isNaN(parsed as number) ? null : parsed });
+    const { value, invalid } = parseNumberInRangeResult(rpe, RPE_RANGE);
+    markField('rpe', invalid);
+    if (invalid) return;
+    updateSet.mutate({ sessionId, entryId, setId: set.id, rpe: value });
   }
 
   const isDone = set.completed;
@@ -365,8 +455,8 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   function toggleComplete() {
     if (isOptimistic) return;
     const next = !isDone;
-    const wKg = isTime || weight.trim() === '' ? null
-      : (() => { const v = unitToKg(Number(weight), unit); return isNaN(v) ? null : v; })();
+    const parsedWeight = parseNumberInRange(weight, weightInputRange(unit));
+    const wKg = isTime || parsedWeight === null ? null : unitToKg(parsedWeight, unit);
     if (next) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     updateSet.mutate(
       { sessionId, entryId, setId: set.id, completed: next },
@@ -406,12 +496,13 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
       </View>
 
       {isTime ? (
-        <View style={[styles.cell, { flex: 2 }, isDone && styles.cellDone]}>
+        <View style={[styles.cell, { flex: 2 }, isDone && styles.cellDone, badFields.duration && styles.cellInvalid]}>
           <TextInput
             style={styles.cellValue}
             value={duration}
             onChangeText={setDuration}
-            onBlur={handleBlurDuration}
+            onFocus={onFieldFocus('duration')}
+            onBlur={onFieldBlur('duration', handleBlurDuration)}
             placeholder="0:00"
             placeholderTextColor={T.muted}
             keyboardType="default"
@@ -424,12 +515,13 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
         </View>
       ) : (
         <>
-          <View style={[styles.cell, isDone && styles.cellDone]}>
+          <View style={[styles.cell, isDone && styles.cellDone, badFields.weight && styles.cellInvalid]}>
             <TextInput
               style={styles.cellValue}
               value={weight}
               onChangeText={setWeight}
-              onBlur={handleBlurWeight}
+              onFocus={onFieldFocus('weight')}
+              onBlur={onFieldBlur('weight', handleBlurWeight)}
               placeholder="—"
               placeholderTextColor={T.muted}
               keyboardType="decimal-pad"
@@ -441,12 +533,13 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
             <Text style={styles.cellUnit} maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}>{unit}</Text>
           </View>
 
-          <View style={[styles.cell, isDone && styles.cellDone]}>
+          <View style={[styles.cell, isDone && styles.cellDone, badFields.reps && styles.cellInvalid]}>
             <TextInput
               style={styles.cellValue}
               value={reps}
               onChangeText={setReps}
-              onBlur={handleBlurReps}
+              onFocus={onFieldFocus('reps')}
+              onBlur={onFieldBlur('reps', handleBlurReps)}
               placeholder="—"
               placeholderTextColor={T.muted}
               keyboardType="number-pad"
@@ -459,12 +552,13 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
           </View>
 
           {!isWarm && (
-            <View style={[styles.cellRpe, isDone && styles.cellDone]}>
+            <View style={[styles.cellRpe, isDone && styles.cellDone, badFields.rpe && styles.cellInvalid]}>
               <TextInput
                 style={[styles.cellValue, { fontSize: 15 }]}
                 value={rpe}
                 onChangeText={setRpe}
-                onBlur={handleBlurRpe}
+                onFocus={onFieldFocus('rpe')}
+                onBlur={onFieldBlur('rpe', handleBlurRpe)}
                 placeholder="—"
                 placeholderTextColor={T.muted}
                 keyboardType="decimal-pad"
@@ -501,6 +595,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
         placeholder="Note…"
         placeholderTextColor={T.muted}
         multiline
+        maxLength={NOTES_MAX_LENGTH}
         textAlignVertical="top"
         /* Notes stay editable even after the set is completed */
       />
@@ -573,8 +668,10 @@ function RestTimerSheet({ current, onSelect, onClose }: {
   const styles = useMemo(() => makeStyles(T), [T]);
   const isPreset = REST_PRESETS.some((p) => p.value === current);
   const [custom, setCustom] = useState(current !== null && !isPreset ? String(current) : '');
-  const customParsed = Number(custom.trim());
-  const customValid = custom.trim() !== '' && Number.isInteger(customParsed) && customParsed > 0 && customParsed <= 600;
+  // Already validated correctly before the shared helper existed; routed
+  // through it so the 1-600s bound lives in one place with the others.
+  const customParsed = parseIntInRangeResult(custom, REST_SECONDS_RANGE).value;
+  const customValid = customParsed !== null;
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
@@ -605,7 +702,7 @@ function RestTimerSheet({ current, onSelect, onClose }: {
             <TouchableOpacity
               style={[styles.restCustomSet, !customValid && { opacity: 0.4 }]}
               disabled={!customValid}
-              onPress={() => { onSelect(customParsed); onClose(); }}
+              onPress={() => { if (customParsed !== null) { onSelect(customParsed); onClose(); } }}
               accessibilityRole="button"
               accessibilityLabel="Set custom rest duration"
             >
@@ -775,7 +872,7 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
 
   function handleAddWarmup() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    addSet.mutate({ sessionId, entryId: entry.id, setNumber: entry.sets.length + 1, setType: 'warmup', completed: false });
+    addSet.mutate({ sessionId, entryId: entry.id, setNumber: nextSetNumber(entry.sets), setType: 'warmup', completed: false });
   }
 
   // Warm-up generation seeds from the first working set's weight, falling back
@@ -793,7 +890,7 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
       // Sequential so setNumber ordering is stable within the warm-up section.
       for (let i = 0; i < ramp.length; i++) {
         await addSet.mutateAsync({
-          sessionId, entryId: entry.id, setNumber: entry.sets.length + 1 + i,
+          sessionId, entryId: entry.id, setNumber: nextSetNumber(entry.sets) + i,
           setType: 'warmup', reps: ramp[i].reps, weight: ramp[i].weightKg, completed: false,
         });
       }
@@ -817,7 +914,7 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
         const count = Math.min(Math.max(lastSessionWorking.length, 1), 5);
         for (let i = 0; i < count; i++) {
           await addSet.mutateAsync({
-            sessionId, entryId: entry.id, setNumber: entry.sets.length + 1 + i, setType: 'normal',
+            sessionId, entryId: entry.id, setNumber: nextSetNumber(entry.sets) + i, setType: 'normal',
             reps: lastSessionWorking[i]?.reps ?? null, weight: overload.weightKg, completed: false,
           });
         }
@@ -835,14 +932,14 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
     // matching set in the last session so a fresh exercise isn't blank.
     const source = working[working.length - 1] ?? lastSessionWorking[working.length] ?? null;
     addSet.mutate({
-      sessionId, entryId: entry.id, setNumber: entry.sets.length + 1, setType: 'normal',
+      sessionId, entryId: entry.id, setNumber: nextSetNumber(entry.sets), setType: 'normal',
       reps: source?.reps ?? null, weight: source?.weight ?? null, completed: false,
     });
   }
 
   function handleDuplicate(set: StrengthSet) {
     addSet.mutate({
-      sessionId, entryId: entry.id, setNumber: entry.sets.length + 1, setType: set.setType,
+      sessionId, entryId: entry.id, setNumber: nextSetNumber(entry.sets), setType: set.setType,
       reps: set.reps, weight: set.weight, completed: false,
     });
   }
@@ -1126,12 +1223,22 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
   const discipline = disciplines.find((d) => d.id === entry.disciplineId);
   const [details, setDetails] = useState<Record<string, unknown>>((entry.details as Record<string, unknown>) ?? {});
   const [justSaved, setJustSaved] = useState(false);
+  // Raw text for numeric detail fields while they're being typed.
+  const [numberText, setNumberText] = useState<Record<string, string>>({});
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+    },
+    [],
+  );
 
   const handleSave = useCallback(async () => {
     try {
       await updateEntry.mutateAsync({ sessionId, entryId: entry.id, details });
       setJustSaved(true);
-      setTimeout(() => setJustSaved(false), 1500);
+      savedTimerRef.current = setTimeout(() => setJustSaved(false), 1500);
     } catch (err) {
       Alert.alert('Error', (err as Error).message ?? 'Failed to save.');
     }
@@ -1248,8 +1355,24 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
               <Text style={styles.maLabel}>{field.label}</Text>
               <TextInput
                 style={styles.maInput}
-                value={details[field.key] != null ? String(details[field.key]) : ''}
-                onChangeText={(t) => setField(field.key, t.trim() === '' ? null : Number(t))}
+                // Backed by a raw-text buffer while editing. Deriving the value
+                // straight from the parsed number meant a keystroke that didn't
+                // parse yet ("1.", or a locale comma) round-tripped through
+                // Number() as NaN, which rendered as the literal text "NaN" and
+                // serialized into the PATCH body.
+                value={numberText[field.key] ?? (details[field.key] != null ? String(details[field.key]) : '')}
+                onChangeText={(t) => {
+                  setNumberText((prev) => ({ ...prev, [field.key]: t }));
+                  const { value, invalid } = parseNumberInRangeResult(t, MA_NUMBER_RANGE);
+                  if (!invalid) setField(field.key, value);
+                }}
+                onBlur={() =>
+                  setNumberText((prev) => {
+                    const next = { ...prev };
+                    delete next[field.key];
+                    return next;
+                  })
+                }
                 keyboardType="decimal-pad"
                 returnKeyType="done"
                 placeholder="0"
@@ -1283,6 +1406,7 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
                 value={(details[field.key] as string | undefined) ?? ''}
                 onChangeText={(t) => setField(field.key, t)}
                 multiline
+                maxLength={NOTES_MAX_LENGTH}
                 textAlignVertical="top"
                 placeholderTextColor={T.muted}
               />
@@ -1568,6 +1692,7 @@ function SessionSettingsSheet({ session, routineName, onSave, onFinish, onDiscar
             placeholder="Add comment"
             placeholderTextColor={T.muted}
             multiline
+            maxLength={NOTES_MAX_LENGTH}
             textAlignVertical="top"
           />
 
@@ -1642,18 +1767,24 @@ export default function SessionScreen() {
   // Collapsed entry ids. Collapsed cards shrink to a name + progress row and
   // become draggable, so reordering happens in place instead of in a modal.
   const [collapsedIds, setCollapsedIds] = useState<ReadonlySet<string>>(new Set());
-  const [restSeconds, setRestSeconds] = useState<number | null>(null);
-  const [restTotal, setRestTotal] = useState(120);
+  // Seeded from the module-level store so a rest period started before backing
+  // out to another screen is still running when this screen remounts.
+  const restoredRest = useRef(getActiveRest(id)).current;
+  const [restSeconds, setRestSeconds] = useState<number | null>(
+    restoredRest ? Math.max(0, Math.ceil((restoredRest.endsAt - Date.now()) / 1000)) : null,
+  );
+  const [restTotal, setRestTotal] = useState(restoredRest?.total ?? 120);
   // Which entry's rest timer is running, so its card can show a stop control.
-  const [restEntryId, setRestEntryId] = useState<string | null>(null);
+  const [restEntryId, setRestEntryId] = useState<string | null>(restoredRest?.entryId ?? null);
   // Absolute wall-clock time (epoch ms) the rest period ends. The visible
   // countdown is derived from this, not decremented tick-by-tick, so it stays
   // aligned with the scheduled "Rest complete" notification even when the app
   // is backgrounded (JS timers freeze while the notification fires on time).
-  const [restEndsAt, setRestEndsAt] = useState<number | null>(null);
+  const [restEndsAt, setRestEndsAt] = useState<number | null>(restoredRest?.endsAt ?? null);
   const [elapsed, setElapsed] = useState(0);
   const [prBanner, setPrBanner] = useState<string | null>(null);
   const prTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const finishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
 
   // Derive the visible rest countdown from the absolute end time. The interval
@@ -1666,6 +1797,7 @@ export default function SessionScreen() {
   // hold the pill at 0:00 briefly, then auto-dismiss it.
   function finishRestCountdown(alreadyAlerted: boolean) {
     setRestEndsAt(null);
+    clearActiveRest();
     if (restZeroFiredRef.current) return;
     restZeroFiredRef.current = true;
     if (!alreadyAlerted) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1716,20 +1848,45 @@ export default function SessionScreen() {
   // "Rest complete" notification (covers finishing mid-rest and reopening a
   // completed session after the app was killed).
   useEffect(() => {
-    if (session?.status === 'completed') void cancelScheduledByKind('rest');
+    if (session?.status === 'completed') {
+      void cancelScheduledByKind('rest');
+      clearActiveRest();
+    }
   }, [session?.status]);
+
+  // Timers that outlive the screen otherwise: the rest pill's auto-dismiss and
+  // the PR banner both setState after unmount, and the celebration's deferred
+  // router.back() (below) could pop a screen the user had already navigated to.
+  useEffect(
+    () => () => {
+      if (restDismissRef.current) clearTimeout(restDismissRef.current);
+      if (prTimerRef.current) clearTimeout(prTimerRef.current);
+      if (finishTimerRef.current) clearTimeout(finishTimerRef.current);
+    },
+    [],
+  );
 
   // Schedule a local notification for when the rest timer ends, so it still
   // fires (with sound/vibration) if the app is backgrounded.
-  const restNotifId = useRef<string | null>(null);
-  async function armRestNotification(secs: number) {
-    await cancelScheduled(restNotifId.current);
-    restNotifId.current = await scheduleInSeconds(
-      secs,
-      'Rest complete',
-      'Time for your next set.',
-      { kind: 'rest' },
-    );
+  const restNotifId = useRef<string | null>(restoredRest?.notifId ?? null);
+  // Serialize arming. Two fast +15s taps used to run this concurrently: both
+  // read the same restNotifId before either wrote back, so the first schedule
+  // was never cancelled and fired as an orphan ding 15s early.
+  const armChain = useRef<Promise<void>>(Promise.resolve());
+  function armRestNotification(secs: number) {
+    armChain.current = armChain.current.then(async () => {
+      const previous = restNotifId.current;
+      restNotifId.current = null;
+      await cancelScheduled(previous);
+      restNotifId.current = await scheduleInSeconds(
+        secs,
+        'Rest complete',
+        'Time for your next set.',
+        { kind: 'rest' },
+      );
+      updateActiveRestNotifId(restNotifId.current);
+    });
+    void armChain.current;
   }
 
   function handleStartRest(entryId: string, secs: number) {
@@ -1739,16 +1896,19 @@ export default function SessionScreen() {
       restDismissRef.current = null;
     }
     restZeroFiredRef.current = false;
+    const endsAt = Date.now() + secs * 1000;
     setRestEntryId(entryId);
     setRestTotal(secs);
     setRestSeconds(secs);
-    setRestEndsAt(Date.now() + secs * 1000);
+    setRestEndsAt(endsAt);
+    setActiveRest({ sessionId: id, entryId, endsAt, total: secs, notifId: restNotifId.current });
     armRestNotification(secs);
   }
 
   function handleStopRest() {
     void cancelScheduled(restNotifId.current);
     restNotifId.current = null;
+    clearActiveRest();
     if (restDismissRef.current) {
       clearTimeout(restDismissRef.current);
       restDismissRef.current = null;
@@ -1765,9 +1925,19 @@ export default function SessionScreen() {
     // aligned; re-arm the notification for the newly-remaining duration.
     const newEnd = restEndsAt + 15 * 1000;
     const remaining = Math.max(0, Math.ceil((newEnd - Date.now()) / 1000));
+    const newTotal = restTotal + 15;
     setRestEndsAt(newEnd);
-    setRestTotal((t) => t + 15);
+    setRestTotal(newTotal);
     setRestSeconds(remaining);
+    if (restEntryId) {
+      setActiveRest({
+        sessionId: id,
+        entryId: restEntryId,
+        endsAt: newEnd,
+        total: newTotal,
+        notifId: restNotifId.current,
+      });
+    }
     armRestNotification(remaining);
   }
 
@@ -1842,7 +2012,10 @@ export default function SessionScreen() {
       setShowSettings(false);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setShowCelebration(true);
-      setTimeout(() => router.back(), 1800);
+      // Held in a ref and cleared on unmount: if the user taps back during the
+      // celebration this would otherwise fire a second router.back() and pop
+      // them off whatever screen they'd already reached.
+      finishTimerRef.current = setTimeout(() => router.back(), 1800);
     } catch (err) {
       Alert.alert('Error', (err as Error).message ?? 'Failed to complete session.');
     }
@@ -1852,8 +2025,11 @@ export default function SessionScreen() {
     if (!id) return;
     try {
       await updateSession.mutateAsync({ id, name: name.trim() || null, notes: notes.trim() || null });
-    } catch {
-      // silent — non-critical
+    } catch (err) {
+      // Was swallowed as "non-critical", which meant a failed rename or a lost
+      // session note closed the sheet looking like it had saved.
+      Alert.alert('Error', (err as Error).message ?? 'Failed to save session details.');
+      return;
     }
     setShowSettings(false);
   }
@@ -2562,6 +2738,9 @@ function makeStyles(T: ThemeColors) {
     paddingHorizontal: 6,
   },
   cellDone: { backgroundColor: 'transparent', borderColor: 'transparent' },
+  // The value in this cell couldn't be saved — flag it rather than dropping it
+  // silently, which is what used to happen.
+  cellInvalid: { borderColor: T.danger, backgroundColor: withAlpha(T.danger, 0.08) },
   cellRpe: {
     width: 56,
     height: D.rowH - 12,

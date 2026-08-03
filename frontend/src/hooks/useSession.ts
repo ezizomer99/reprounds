@@ -16,10 +16,20 @@ import type {
   UpdateSessionRequest,
   UpdateStrengthSetRequest,
 } from '@app/shared';
+import * as Crypto from 'expo-crypto';
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../lib/api';
 import { localTodayISO } from '../lib/calendar';
 
 const sessionKey = (id: string) => ['session', id] as const;
+
+/**
+ * Id for a row that exists only in the optimistic cache until the server
+ * assigns a real one. Was `optimistic-${Date.now()}`, which collided whenever
+ * two rows were added in the same millisecond — and they routinely are, since
+ * warm-up generation and "add N sets" fire the mutation in a loop. Colliding
+ * ids made `patchEntry` update both rows at once.
+ */
+const optimisticId = () => `optimistic-${Crypto.randomUUID()}`;
 
 /** Immutably replace one entry within a cached session. */
 function patchEntry(
@@ -35,16 +45,29 @@ function patchEntry(
 
 type SessionCtx = { previous?: SessionWithEntries };
 
-export function useSessions(status?: string) {
+/**
+ * The backend defaults to 50 rows and caps at 200. Callers that aggregate over
+ * history — streaks, weekly averages, lifetime counts — were silently working
+ * off the 50 most recent sessions and quietly going wrong for anyone training
+ * regularly for more than a couple of months. `limit` is part of the query key
+ * so a 200-row fetch and a 50-row fetch can't share a cache entry.
+ */
+export function useSessions(status?: string, limit?: number) {
   return useQuery<Session[], Error>({
-    queryKey: ['sessions', status],
+    queryKey: ['sessions', status, limit],
     queryFn: async () => {
-      const path = status ? `/sessions?status=${status}` : '/sessions';
-      const data = await apiGet<SessionListResponse>(path);
+      const params = new URLSearchParams();
+      if (status) params.set('status', status);
+      if (limit !== undefined) params.set('limit', String(limit));
+      const qs = params.toString();
+      const data = await apiGet<SessionListResponse>(`/sessions${qs ? `?${qs}` : ''}`);
       return data.sessions;
     },
   });
 }
+
+/** Backend maximum for a single /sessions page. */
+export const MAX_SESSIONS_PAGE = 200;
 
 export function useActiveSession() {
   const { data, ...rest } = useSessions('in_progress');
@@ -216,7 +239,7 @@ export function useAddSessionEntry() {
       const previous = queryClient.getQueryData<SessionWithEntries>(key);
       if (previous) {
         const tempEntry: SessionEntryWithSets = {
-          id: `optimistic-${Date.now()}`,
+          id: optimisticId(),
           sessionId,
           kind: body.kind,
           exerciseId: body.exerciseId ?? null,
@@ -298,7 +321,7 @@ export function useAddStrengthSet() {
       const previous = queryClient.getQueryData<SessionWithEntries>(key);
       if (previous) {
         const tempSet: StrengthSet = {
-          id: `optimistic-${Date.now()}`,
+          id: optimisticId(),
           sessionEntryId: entryId,
           setNumber: body.setNumber,
           setType: body.setType ?? 'normal',

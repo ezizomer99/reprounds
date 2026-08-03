@@ -16,7 +16,7 @@ import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { Fight, FightMethod, FightResult, RankPromotion } from '@app/shared';
-import { isRoundsSession } from '@app/shared';
+import { FIGHT_ROUND_RANGE, isRoundsSession, NAME_MAX_LENGTH, NOTES_MAX_LENGTH } from '@app/shared';
 import { useDisciplineHistory, useDisciplines } from '../../../src/hooks/useDisciplines';
 import { fightRecord, useCreateFight, useDeleteFight, useFights } from '../../../src/hooks/useFights';
 import { useCreatePromotion, useDeletePromotion, usePromotions } from '../../../src/hooks/usePromotions';
@@ -25,6 +25,7 @@ import { CalendarPicker } from '../../../src/components/CalendarPicker';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
+import { parseIntInRange } from '../../../src/lib/parseNumber';
 
 function formatDate(dateStr: string): { day: string; month: string; year: string } {
   const d = new Date(dateStr + 'T00:00:00');
@@ -363,7 +364,7 @@ function AddFightModal({ disciplineId, onClose }: { disciplineId: string; onClos
         opponent: opponent.trim() || null,
         result,
         method,
-        round: round.trim() ? Number(round) : null,
+        round: parseIntInRange(round, FIGHT_ROUND_RANGE),
         notes: notes.trim() || null,
       });
       onClose();
@@ -404,6 +405,7 @@ function AddFightModal({ disciplineId, onClose }: { disciplineId: string; onClos
             placeholder="Name (optional)"
             placeholderTextColor={T.muted}
             autoCapitalize="words"
+            maxLength={NAME_MAX_LENGTH}
           />
 
           <Text style={styles.sheetLabel}>Date</Text>
@@ -433,6 +435,7 @@ function AddFightModal({ disciplineId, onClose }: { disciplineId: string; onClos
             placeholder="e.g. 2"
             placeholderTextColor={T.muted}
             keyboardType="number-pad"
+            maxLength={3}
           />
 
           <Text style={styles.sheetLabel}>Notes</Text>
@@ -444,6 +447,7 @@ function AddFightModal({ disciplineId, onClose }: { disciplineId: string; onClos
             placeholderTextColor={T.muted}
             multiline
             textAlignVertical="top"
+            maxLength={NOTES_MAX_LENGTH}
           />
 
           <TouchableOpacity
@@ -549,6 +553,7 @@ function AddPromotionModal({ disciplineId, onClose }: { disciplineId: string; on
             placeholder="e.g. Blue belt, 1st kyu"
             placeholderTextColor={T.muted}
             autoCapitalize="words"
+            maxLength={NAME_MAX_LENGTH}
           />
 
           <Text style={styles.sheetLabel}>Stripes</Text>
@@ -579,6 +584,7 @@ function AddPromotionModal({ disciplineId, onClose }: { disciplineId: string; on
             placeholderTextColor={T.muted}
             multiline
             textAlignVertical="top"
+            maxLength={NOTES_MAX_LENGTH}
           />
 
           <TouchableOpacity

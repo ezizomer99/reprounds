@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   Pressable,
@@ -12,6 +13,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useCreatePartner, usePartners } from '../hooks/usePartners';
+import { NAME_MAX_LENGTH } from '@app/shared';
+import { InlineError } from './InlineError';
 import { useTheme } from '../theme/ThemeContext';
 import { F, R, ThemeColors } from '../theme/colors';
 
@@ -33,7 +36,7 @@ export function PartnerPicker({
   const styles = useMemo(() => makeStyles(T), [T]);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const { data: partners, isLoading } = usePartners();
+  const { data: partners, isLoading, isError, refetch } = usePartners();
   const createPartner = useCreatePartner();
 
   const selected = partners?.find((p) => p.id === value) ?? null;
@@ -51,10 +54,16 @@ export function PartnerPicker({
   async function handleCreate() {
     const name = query.trim();
     if (!name) return;
-    const partner = await createPartner.mutateAsync({ name });
-    onChange(partner.id);
-    setQuery('');
-    setOpen(false);
+    try {
+      const partner = await createPartner.mutateAsync({ name });
+      onChange(partner.id);
+      setQuery('');
+      setOpen(false);
+    } catch (err) {
+      // Neither caller awaits this, so a rejection here used to be an unhandled
+      // promise rejection and the sheet just sat there with no feedback.
+      Alert.alert('Error', (err as Error).message ?? 'Failed to add training partner.');
+    }
   }
 
   function handleSelect(id: string) {
@@ -94,6 +103,7 @@ export function PartnerPicker({
               placeholderTextColor={T.muted}
               autoCapitalize="words"
               returnKeyType="done"
+              maxLength={NAME_MAX_LENGTH}
               onSubmitEditing={canCreate ? handleCreate : undefined}
             />
           </View>
@@ -117,6 +127,8 @@ export function PartnerPicker({
             <View style={styles.centered}>
               <ActivityIndicator color={T.primary} />
             </View>
+          ) : isError ? (
+            <InlineError message="Couldn't load your partners." onRetry={() => void refetch()} />
           ) : (
             <FlatList
               data={filtered}

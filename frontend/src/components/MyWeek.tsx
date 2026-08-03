@@ -2,7 +2,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useSessions } from '../hooks/useSession';
+import { MAX_SESSIONS_PAGE, useSessions } from '../hooks/useSession';
 import { mondayOf, weekKey, computeWeekStreak } from '../lib/statsHelpers';
 import { toISODate } from '../lib/calendar';
 import { F, R, ThemeColors } from '../theme/colors';
@@ -54,7 +54,7 @@ export function MyWeek() {
   const { T } = useTheme();
   const router = useRouter();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const { data: sessions } = useSessions('completed');
+  const { data: sessions } = useSessions('completed', MAX_SESSIONS_PAGE);
 
   const weekDays = useMemo(getWeekDays, []);
 

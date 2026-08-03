@@ -5,7 +5,7 @@ import { rankPromotions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
 import { disciplineVisible } from '../lib/ownership';
-import { isNumberInRange } from '@app/shared';
+import { isNumberInRange, STRIPES_RANGE } from '@app/shared';
 import type {
   CreateRankPromotionRequest,
   RankPromotion,
@@ -63,7 +63,7 @@ promotionRoutes.post('/', async (c) => {
   if (!body.disciplineId || !body.date || !rank) {
     return c.json({ error: 'disciplineId, date, and rank are required' }, 400);
   }
-  if (body.stripes != null && !isNumberInRange(body.stripes, 0, 20)) {
+  if (body.stripes != null && !isNumberInRange(body.stripes, STRIPES_RANGE.min, STRIPES_RANGE.max)) {
     return c.json({ error: 'Invalid stripes' }, 400);
   }
 
@@ -99,7 +99,7 @@ promotionRoutes.patch('/:id', async (c) => {
     return c.json({ error: 'Invalid request body' }, 400);
   }
 
-  if (body.stripes != null && !isNumberInRange(body.stripes, 0, 20)) {
+  if (body.stripes != null && !isNumberInRange(body.stripes, STRIPES_RANGE.min, STRIPES_RANGE.max)) {
     return c.json({ error: 'Invalid stripes' }, 400);
   }
   if (body.disciplineId !== undefined && !(await disciplineVisible(db, body.disciplineId, userId))) {
