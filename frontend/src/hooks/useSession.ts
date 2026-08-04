@@ -19,6 +19,8 @@ import type {
 import * as Crypto from 'expo-crypto';
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../lib/api';
 import { localTodayISO } from '../lib/calendar';
+import { cancelScheduledByKind } from '../lib/notifications';
+import { clearActiveRestForSession } from '../lib/restTimerStore';
 
 const sessionKey = (id: string) => ['session', id] as const;
 
@@ -108,11 +110,32 @@ export function useStartSession() {
   });
 }
 
+/**
+ * Mark a planned session as skipped — the workout was scheduled and didn't
+ * happen. Reversible: useStartSession accepts a skipped session, so changing
+ * your mind still leads into the logger. 409s as `not_planned`.
+ */
+export function useSkipSession() {
+  const queryClient = useQueryClient();
+  return useMutation<SessionWithEntries, Error, { id: string }>({
+    mutationFn: ({ id }) =>
+      apiPost<{ session: SessionWithEntries }>(`/sessions/${id}/skip`, {}).then((r) => r.session),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['session', variables.id] });
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+    },
+  });
+}
+
 export function useDeleteSession() {
   const queryClient = useQueryClient();
   return useMutation<void, Error, { id: string }>({
     mutationFn: ({ id }) => apiDelete(`/sessions/${id}`),
-    onSuccess: () => {
+    onSuccess: (_data, { id }) => {
+      // A rest period running for the session being deleted has nothing left to
+      // count down to, but its notification is armed against the wall clock and
+      // would still fire.
+      if (clearActiveRestForSession(id)) void cancelScheduledByKind('rest');
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       queryClient.invalidateQueries({ queryKey: ['session'] });
     },

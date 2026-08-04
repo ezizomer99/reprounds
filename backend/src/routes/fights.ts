@@ -5,7 +5,15 @@ import { fights } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
 import { disciplineVisible } from '../lib/ownership';
-import { FIGHT_ROUND_RANGE, isFightMethod, isFightResult, isNumberInRange } from '@app/shared';
+import {
+  FIGHT_ROUND_RANGE,
+  isFightMethod,
+  isFightResult,
+  isNumberInRange,
+  NAME_MAX_LENGTH,
+  NOTES_MAX_LENGTH,
+} from '@app/shared';
+import { isIsoDate, isUuid, isWithinLength } from '../lib/validate';
 import type {
   CreateFightRequest,
   Fight,
@@ -40,6 +48,10 @@ fightRoutes.get('/', async (c) => {
   const userId = c.get('userId');
   const disciplineId = c.req.query('disciplineId');
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+
+  if (disciplineId !== undefined && !isUuid(disciplineId)) {
+    return c.json({ error: 'Invalid disciplineId' }, 400);
+  }
 
   const where = disciplineId
     ? and(eq(fights.userId, userId), eq(fights.disciplineId, disciplineId))
@@ -94,6 +106,18 @@ fightRoutes.post('/', async (c) => {
   if (!body.disciplineId || !body.date || !body.result) {
     return c.json({ error: 'disciplineId, date, and result are required' }, 400);
   }
+  if (!isUuid(body.disciplineId)) {
+    return c.json({ error: 'Invalid disciplineId' }, 400);
+  }
+  if (!isIsoDate(body.date)) {
+    return c.json({ error: 'date must be YYYY-MM-DD' }, 400);
+  }
+  if (!isWithinLength(body.opponent, NAME_MAX_LENGTH)) {
+    return c.json({ error: `opponent must be ${NAME_MAX_LENGTH} characters or fewer` }, 400);
+  }
+  if (!isWithinLength(body.notes, NOTES_MAX_LENGTH)) {
+    return c.json({ error: `notes must be ${NOTES_MAX_LENGTH} characters or fewer` }, 400);
+  }
   if (!isFightResult(body.result)) {
     return c.json({ error: 'Invalid result' }, 400);
   }
@@ -147,6 +171,15 @@ fightRoutes.patch('/:id', async (c) => {
   if (body.round != null && !isNumberInRange(body.round, FIGHT_ROUND_RANGE.min, FIGHT_ROUND_RANGE.max)) {
     return c.json({ error: 'Invalid round' }, 400);
   }
+  if (body.date !== undefined && !isIsoDate(body.date)) {
+    return c.json({ error: 'date must be YYYY-MM-DD' }, 400);
+  }
+  if (!isWithinLength(body.opponent, NAME_MAX_LENGTH)) {
+    return c.json({ error: `opponent must be ${NAME_MAX_LENGTH} characters or fewer` }, 400);
+  }
+  if (!isWithinLength(body.notes, NOTES_MAX_LENGTH)) {
+    return c.json({ error: `notes must be ${NOTES_MAX_LENGTH} characters or fewer` }, 400);
+  }
 
   const updates: Partial<typeof fights.$inferInsert> = {};
   if (body.date !== undefined) updates.date = body.date;
@@ -155,6 +188,12 @@ fightRoutes.patch('/:id', async (c) => {
   if ('method' in body) updates.method = body.method ?? null;
   if ('round' in body) updates.round = body.round ?? null;
   if ('notes' in body) updates.notes = body.notes?.trim() || null;
+
+  // Drizzle throws on .set({}) — an empty PATCH body was a 500. The weights and
+  // promotions handlers have always guarded this; fights was the odd one out.
+  if (Object.keys(updates).length === 0) {
+    return c.json({ error: 'No fields to update' }, 400);
+  }
 
   const [row] = await db
     .update(fights)

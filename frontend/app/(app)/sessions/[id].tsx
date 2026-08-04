@@ -47,6 +47,7 @@ import { ExerciseFilters, filterByChips, EMPTY_FILTER, type ExerciseChipFilter }
 import {
   useSession,
   useCompleteSession,
+  useSkipSession,
   useStartSession,
   useUpdateSession,
   useDeleteSession,
@@ -1736,6 +1737,7 @@ export default function SessionScreen() {
   const deleteSession = useDeleteSession();
   const updateSession = useUpdateSession();
   const startSession = useStartSession();
+  const skipSession = useSkipSession();
   const reorderEntries = useReorderSessionEntries();
   const updateEntry = useUpdateSessionEntry();
   const addEntry = useAddSessionEntry();
@@ -1949,9 +1951,13 @@ export default function SessionScreen() {
   }
 
   function handleBack() {
-    // Leaving a scheduled (planned) or finished session is normal navigation —
+    // Leaving a scheduled, skipped or finished session is normal navigation —
     // the leave-warning only applies to a live in-progress session.
-    if (session?.status !== 'completed' && session?.status !== 'planned') {
+    if (
+      session?.status !== 'completed' &&
+      session?.status !== 'planned' &&
+      session?.status !== 'skipped'
+    ) {
       Alert.alert(
         'Leave Session?',
         'Your session will still be in progress. Use the Resume button to return.',
@@ -1986,6 +1992,30 @@ export default function SessionScreen() {
         Alert.alert('Error', (err as Error).message ?? 'Failed to start session.');
       }
     }
+  }
+
+  function handleSkipPlanned() {
+    if (!id) return;
+    Alert.alert(
+      'Skip this workout?',
+      "It'll be marked as skipped and stay on your calendar. You can still start it later.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Skip',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await skipSession.mutateAsync({ id });
+              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              router.back();
+            } catch (err) {
+              Alert.alert('Error', (err as Error).message ?? 'Failed to skip session.');
+            }
+          },
+        },
+      ],
+    );
   }
 
   async function handleReschedule(date: string) {
@@ -2114,6 +2144,10 @@ export default function SessionScreen() {
   const canFinish = doneCount > 0 || hasMartialArts;
   const isActive = session.status !== 'completed';
   const isPlanned = session.status === 'planned';
+  const isSkipped = session.status === 'skipped';
+  // Neither has been started, so neither has anything to finish — both show the
+  // start bar instead of the running timer and the finish check.
+  const notYetStarted = isPlanned || isSkipped;
   // A workout being logged after the fact: the elapsed timer would count from
   // the moment the session row was created, which tells the user nothing.
   const isBackdated = session.status === 'in_progress' && session.date < localTodayISO();
@@ -2167,13 +2201,13 @@ export default function SessionScreen() {
 
         {/* Center: scheduled date when planned, timer when live, name when done */}
         <View style={styles.headerCenter}>
-          {isPlanned || isBackdated ? (
+          {notYetStarted || isBackdated ? (
             <>
               <Text style={styles.headerDoneLabel} numberOfLines={1}>
                 {scheduledLabel}
               </Text>
               <Text style={styles.headerScheduledSub}>
-                {isPlanned ? 'Scheduled' : 'Logging past workout'}
+                {isSkipped ? 'Skipped' : isPlanned ? 'Scheduled' : 'Logging past workout'}
               </Text>
             </>
           ) : isActive ? (
@@ -2205,8 +2239,8 @@ export default function SessionScreen() {
             <TouchableOpacity style={styles.headerIconBtn} onPress={() => setShowSettings(true)}>
               <Ionicons name="settings-outline" size={20} color={T.textDim} />
             </TouchableOpacity>
-            {/* A planned session can't finish — it must be started first. */}
-            {!isPlanned && (
+            {/* A planned or skipped session can't finish — start it first. */}
+            {!notYetStarted && (
               <TouchableOpacity
                 style={[
                   styles.headerIconBtn,
@@ -2229,8 +2263,8 @@ export default function SessionScreen() {
         )}
       </View>
 
-      {/* Pinned bar for a scheduled session: start it or move it. */}
-      {isPlanned && (
+      {/* Pinned bar for a session that hasn't started: start, move, or skip it. */}
+      {notYetStarted && (
         <View style={styles.plannedBar}>
           <TouchableOpacity
             style={{ flex: 1 }}
@@ -2258,6 +2292,18 @@ export default function SessionScreen() {
             <Ionicons name="calendar-outline" size={16} color={T.textDim} />
             <Text style={styles.rescheduleText}>Move</Text>
           </TouchableOpacity>
+          {isPlanned && (
+            <TouchableOpacity
+              style={styles.rescheduleBtn}
+              onPress={handleSkipPlanned}
+              disabled={skipSession.isPending}
+              accessibilityRole="button"
+              accessibilityLabel="Skip workout"
+            >
+              <Ionicons name="close-circle-outline" size={16} color={T.textDim} />
+              <Text style={styles.rescheduleText}>Skip</Text>
+            </TouchableOpacity>
+          )}
         </View>
       )}
 

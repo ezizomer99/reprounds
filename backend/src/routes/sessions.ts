@@ -16,16 +16,33 @@ import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
 import { disciplineVisible, exerciseVisible } from '../lib/ownership';
 import {
+  DETAILS_MAX_BYTES,
+  DURATION_MINUTES_RANGE,
   isEntryKind,
   isGiType,
   isNumberInRange,
   isSessionStatus,
   isSetType,
+  MAX_REORDER_IDS,
+  NAME_MAX_LENGTH,
+  NOTES_MAX_LENGTH,
+  ORDER_INDEX_RANGE,
   REPS_RANGE,
+  REST_SECONDS_STORED_RANGE,
   RIR_RANGE,
   RPE_RANGE,
+  SET_NUMBER_RANGE,
+  SUPERSET_GROUP_RANGE,
   WEIGHT_KG_RANGE,
 } from '@app/shared';
+import {
+  isIntInRange,
+  isIsoDate,
+  isUuid,
+  isWithinLength,
+  isWithinSerializedSize,
+  validateIdList,
+} from '../lib/validate';
 import type {
   CompleteSessionRequest,
   CreateSessionEntryRequest,
@@ -53,10 +70,6 @@ function getDb(env: Env['Bindings']) {
 }
 
 const FALLBACK_REST_SECONDS = 120;
-
-function isIsoDate(value: unknown): value is string {
-  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
-}
 
 // The rest duration an exercise "remembers": the value from the user's most
 // recent session entry for that exercise. A remembered 0 ("Off") counts.
@@ -276,6 +289,72 @@ function validateEntryKind(body: {
   if (body.kind === 'martial_arts' && !body.disciplineId) {
     return 'disciplineId is required when kind is martial_arts';
   }
+  // Checked before the visibility lookups below run the id through a query —
+  // a non-UUID is a uuid cast error (500) rather than a clean 400.
+  if (body.exerciseId != null && !isUuid(body.exerciseId)) {
+    return 'Invalid exerciseId';
+  }
+  if (body.disciplineId != null && !isUuid(body.disciplineId)) {
+    return 'Invalid disciplineId';
+  }
+  return null;
+}
+
+// Validates the fields a session row carries directly. Shared by create, patch
+// and complete so a value one of them rejects can't sneak in via another —
+// backdating through /complete previously bypassed every check patch applied.
+function validateSessionFields(body: {
+  name?: unknown;
+  notes?: unknown;
+  durationMinutes?: unknown;
+}): string | null {
+  if (!isWithinLength(body.name, NAME_MAX_LENGTH)) {
+    return `name must be ${NAME_MAX_LENGTH} characters or fewer`;
+  }
+  if (!isWithinLength(body.notes, NOTES_MAX_LENGTH)) {
+    return `notes must be ${NOTES_MAX_LENGTH} characters or fewer`;
+  }
+  if (
+    body.durationMinutes != null &&
+    !isIntInRange(body.durationMinutes, DURATION_MINUTES_RANGE)
+  ) {
+    return 'Invalid durationMinutes';
+  }
+  return null;
+}
+
+// Validates the optional fields on a session-entry create/update body. These
+// went straight to the DB before: a fractional orderIndex or an int4 overflow
+// became a 500, and `details` had no ceiling at all.
+function validateEntryFields(body: {
+  orderIndex?: unknown;
+  restSeconds?: unknown;
+  supersetGroup?: unknown;
+  details?: unknown;
+  notes?: unknown;
+}): string | null {
+  if (body.orderIndex != null && !isIntInRange(body.orderIndex, ORDER_INDEX_RANGE)) {
+    return 'Invalid orderIndex';
+  }
+  // Stored range, not REST_SECONDS_RANGE — 0 is the "Off" preset.
+  if (
+    body.restSeconds != null &&
+    !isIntInRange(body.restSeconds, REST_SECONDS_STORED_RANGE)
+  ) {
+    return 'Invalid restSeconds';
+  }
+  if (
+    body.supersetGroup != null &&
+    !isIntInRange(body.supersetGroup, SUPERSET_GROUP_RANGE)
+  ) {
+    return 'Invalid supersetGroup';
+  }
+  if (!isWithinSerializedSize(body.details, DETAILS_MAX_BYTES)) {
+    return 'details payload is too large';
+  }
+  if (!isWithinLength(body.notes, NOTES_MAX_LENGTH)) {
+    return `notes must be ${NOTES_MAX_LENGTH} characters or fewer`;
+  }
   return null;
 }
 
@@ -284,14 +363,22 @@ function validateEntryKind(body: {
 // are present; presence/required checks live in the handlers.
 function validateSetFields(body: {
   setType?: unknown;
+  setNumber?: unknown;
   reps?: unknown;
   weight?: unknown;
   rpe?: unknown;
   rir?: unknown;
+  notes?: unknown;
 }): string | null {
   if (body.setType !== undefined && !isSetType(body.setType)) return 'Invalid setType';
+  if (body.setNumber != null && !isIntInRange(body.setNumber, SET_NUMBER_RANGE)) {
+    return 'Invalid setNumber';
+  }
   if (body.reps != null && !isNumberInRange(body.reps, REPS_RANGE.min, REPS_RANGE.max)) {
     return 'Invalid reps';
+  }
+  if (!isWithinLength(body.notes, NOTES_MAX_LENGTH)) {
+    return `notes must be ${NOTES_MAX_LENGTH} characters or fewer`;
   }
   // weight was previously unchecked, so a NaN or a lb/kg mix-up went straight
   // into the column and skewed every volume and 1RM aggregate off it.
@@ -438,8 +525,18 @@ sessionRoutes.post('/', async (c) => {
     return c.json({ error: 'Invalid request body' }, 400);
   }
 
-  if (!body.date) {
-    return c.json({ error: 'date is required' }, 400);
+  // Create validated only that a date was present, while patch and complete
+  // both checked the format — so the one path that always sets a date was the
+  // one that let a malformed one through to the date column as a 500.
+  if (!isIsoDate(body.date)) {
+    return c.json({ error: 'date must be YYYY-MM-DD' }, 400);
+  }
+
+  const sessionErr = validateSessionFields(body);
+  if (sessionErr) return c.json({ error: sessionErr }, 400);
+
+  if (body.routineId !== undefined && body.routineId !== null && !isUuid(body.routineId)) {
+    return c.json({ error: 'Invalid routineId' }, 400);
   }
 
   if (body.kind !== undefined && body.kind !== 'exercise' && body.kind !== 'martial_arts') {
@@ -606,6 +703,9 @@ sessionRoutes.patch('/:id', async (c) => {
     return c.json({ error: 'Invalid request body' }, 400);
   }
 
+  const sessionErr = validateSessionFields(body);
+  if (sessionErr) return c.json({ error: sessionErr }, 400);
+
   const updates: Partial<typeof sessions.$inferInsert> = {};
   if ('name' in body) updates.name = body.name ?? null;
   if ('notes' in body) updates.notes = body.notes ?? null;
@@ -662,7 +762,12 @@ sessionRoutes.post('/:id/start', async (c) => {
     .limit(1);
 
   if (!existing) return c.json({ error: 'Not found' }, 404);
-  if (existing.status !== 'planned') return c.json({ error: 'not_planned' }, 409);
+  // 'skipped' is startable too: marking a planned session skipped is a
+  // dismissal, not a deletion, so changing your mind and training after all has
+  // to lead somewhere.
+  if (existing.status !== 'planned' && existing.status !== 'skipped') {
+    return c.json({ error: 'not_planned' }, 409);
+  }
 
   const [active] = await db
     .select({ id: sessions.id })
@@ -698,19 +803,64 @@ sessionRoutes.post('/:id/start', async (c) => {
   return c.json({ session });
 });
 
+// POST /sessions/:id/skip — dismiss a planned session that never happened.
+//
+// 'skipped' has been in the session_status enum, and rendered by the session
+// row and the calendar markers, since the first migration — but no endpoint
+// could ever set it. A scheduled workout the user didn't do had no resting
+// place: it stayed "Overdue" on the calendar forever, and deleting it was the
+// only way out, which also erased the fact that it had been planned.
+//
+// Reversible via POST /:id/start, which accepts a skipped session.
+sessionRoutes.post('/:id/skip', async (c) => {
+  const userId = c.get('userId');
+  const id = c.req.param('id');
+  const db = getDb(c.env);
+
+  const [existing] = await db
+    .select({ id: sessions.id, status: sessions.status })
+    .from(sessions)
+    .where(and(eq(sessions.id, id), eq(sessions.userId, userId)))
+    .limit(1);
+
+  if (!existing) return c.json({ error: 'Not found' }, 404);
+  // Only a plan can go unfulfilled. A live or finished session has real logged
+  // work in it, so discarding that is a delete, not a skip.
+  if (existing.status !== 'planned') {
+    return c.json({ error: 'not_planned', status: existing.status }, 409);
+  }
+
+  await db
+    .update(sessions)
+    .set({ status: 'skipped' })
+    .where(and(eq(sessions.id, id), eq(sessions.userId, userId)));
+
+  const session = await fetchSessionWithEntries(db, id, userId);
+  return c.json({ session });
+});
+
 // POST /sessions/:id/complete
 sessionRoutes.post('/:id/complete', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
   const db = getDb(c.env);
 
-  const existing = await db
-    .select({ id: sessions.id })
+  const [existing] = await db
+    .select({ id: sessions.id, status: sessions.status })
     .from(sessions)
     .where(and(eq(sessions.id, id), eq(sessions.userId, userId)))
     .limit(1);
 
-  if (existing.length === 0) return c.json({ error: 'Not found' }, 404);
+  if (!existing) return c.json({ error: 'Not found' }, 404);
+
+  // Only a live session can be completed. Without this, a double-tap on Finish
+  // over a slow connection re-stamped completedAt on an already-finished
+  // session (skewing duration analytics and the notes timeline), and a planned
+  // session could jump straight to completed with startedAt still null.
+  // Mirrors the not_planned guard on /start so the client sees the same shape.
+  if (existing.status !== 'in_progress') {
+    return c.json({ error: 'not_in_progress', status: existing.status }, 409);
+  }
 
   let body: CompleteSessionRequest = {};
   try {
@@ -718,6 +868,9 @@ sessionRoutes.post('/:id/complete', async (c) => {
   } catch {
     // body is optional
   }
+
+  const sessionErr = validateSessionFields(body);
+  if (sessionErr) return c.json({ error: sessionErr }, 400);
 
   const updates: Partial<typeof sessions.$inferInsert> = {
     status: 'completed',
@@ -765,8 +918,13 @@ sessionRoutes.put('/:id/focuses', async (c) => {
     return c.json({ error: 'Invalid request body' }, 400);
   }
 
-  if (!Array.isArray(body.focusIds)) {
+  // Shape-check before the ids reach the inArray lookup below, where a
+  // non-UUID element would be a uuid cast error rather than a 400.
+  if (!Array.isArray(body.focusIds) || !body.focusIds.every(isUuid)) {
     return c.json({ error: 'focusIds must be an array of focus IDs' }, 400);
+  }
+  if (body.focusIds.length > MAX_REORDER_IDS) {
+    return c.json({ error: 'focusIds array too large' }, 400);
   }
 
   // Dedupe and, if any provided, verify every focus belongs to the caller —
@@ -820,6 +978,8 @@ sessionRoutes.post('/:id/entries', async (c) => {
   if (body.gi != null && !isGiType(body.gi)) {
     return c.json({ error: 'Invalid gi' }, 400);
   }
+  const fieldErr = validateEntryFields(body);
+  if (fieldErr) return c.json({ error: fieldErr }, 400);
 
   // Guard against attaching another user's private exercise/discipline (IDOR).
   if (!(await exerciseVisible(db, body.exerciseId, userId))) {
@@ -901,9 +1061,11 @@ sessionRoutes.put('/:id/entries/order', async (c) => {
     return c.json({ error: 'Invalid request body' }, 400);
   }
 
-  if (!Array.isArray(body.order) || body.order.length === 0) {
-    return c.json({ error: 'order must be a non-empty array of entry IDs' }, 400);
-  }
+  // Matches the guards the routines reorder endpoints have carried since they
+  // were written: each id costs a round-trip inside the transaction, and a
+  // non-UUID element reaches Postgres as a cast error.
+  const orderErr = validateIdList(body.order, MAX_REORDER_IDS, 'order', 'entry ID');
+  if (orderErr) return c.json({ error: orderErr }, 400);
 
   await db.transaction(async (tx) => {
     for (let i = 0; i < body.order.length; i++) {
@@ -952,6 +1114,12 @@ sessionRoutes.patch('/:id/entries/:entryId', async (c) => {
     return c.json({ error: 'Invalid request body' }, 400);
   }
 
+  if (body.gi != null && !isGiType(body.gi)) {
+    return c.json({ error: 'Invalid gi' }, 400);
+  }
+  const fieldErr = validateEntryFields(body);
+  if (fieldErr) return c.json({ error: fieldErr }, 400);
+
   const updates: Partial<typeof sessionEntries.$inferInsert> = {};
   if ('gi' in body) updates.gi = body.gi ?? null;
   if ('restSeconds' in body) updates.restSeconds = body.restSeconds ?? null;
@@ -962,6 +1130,9 @@ sessionRoutes.patch('/:id/entries/:entryId', async (c) => {
   if ('exerciseId' in body && body.exerciseId !== undefined) {
     if (body.exerciseId === null) {
       return c.json({ error: 'exerciseId cannot be null for exercise entries' }, 400);
+    }
+    if (!isUuid(body.exerciseId)) {
+      return c.json({ error: 'Invalid exerciseId' }, 400);
     }
     // Re-fetch the entry kind — only exercise-kind entries may swap their exercise.
     const [kindRow] = await db

@@ -1,10 +1,16 @@
 import { Hono } from 'hono';
-import { and, eq, isNull, or } from 'drizzle-orm';
+import { and, eq, isNull, or, sql } from 'drizzle-orm';
 import { createDb } from '../db';
 import { techniques } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
-import { isDisciplineCat, isTechniqueKind } from '@app/shared';
+import {
+  isDisciplineCat,
+  isTechniqueKind,
+  MAX_CUSTOM_TECHNIQUES_PER_USER,
+  NAME_MAX_LENGTH,
+} from '@app/shared';
+import { isWithinLength } from '../lib/validate';
 import type {
   CreateTechniqueRequest,
   Technique,
@@ -91,6 +97,10 @@ techniqueRoutes.post('/', async (c) => {
     return c.json({ error: 'Invalid category' }, 400);
   }
 
+  if (!isWithinLength(body.label, NAME_MAX_LENGTH)) {
+    return c.json({ error: `label must be ${NAME_MAX_LENGTH} characters or fewer` }, 400);
+  }
+
   const label = body.label.trim();
   const value = slugify(label);
   if (!label || !value) {
@@ -112,6 +122,21 @@ techniqueRoutes.post('/', async (c) => {
     .limit(1);
   if (existing) {
     return c.json({ technique: mapTechnique(existing) }, 200);
+  }
+
+  // Abuse ceiling, not the paywall — see the note on FREE_CUSTOM_TECHNIQUE_LIMIT
+  // in @app/shared. Checked after the idempotent re-use above so re-adding an
+  // existing custom never trips it.
+  const [{ count: customCount }] = await db
+    .select({ count: sql<number>`COUNT(*)::int` })
+    .from(techniques)
+    .where(eq(techniques.userId, userId));
+
+  if (Number(customCount) >= MAX_CUSTOM_TECHNIQUES_PER_USER) {
+    return c.json(
+      { error: `You've reached the maximum of ${MAX_CUSTOM_TECHNIQUES_PER_USER} custom techniques` },
+      409,
+    );
   }
 
   const [row] = await db
