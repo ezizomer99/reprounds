@@ -5,11 +5,17 @@ import { partners, sessionEntries, sessions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
 import { aggregateMatStats, type MatEntryRow } from '../lib/matStats';
+import { buildWeeklyBuckets } from '../lib/weeklyStats';
 import { aggregatePartnerStats } from '../lib/partnerStats';
 import { epleyE1rmSql } from '../lib/e1rm';
 import { isIsoDate } from '../lib/validate';
 import { E1RM_MAX_REPS } from '@app/shared';
-import type { MuscleSummaryResponse, PartnerStatsResponse, TopLiftsResponse } from '@app/shared';
+import type {
+  MuscleSummaryResponse,
+  PartnerStatsResponse,
+  TopLiftsResponse,
+  WeeklyStatsResponse,
+} from '@app/shared';
 
 type Env = AppEnv;
 
@@ -19,6 +25,38 @@ statsRoutes.use('*', authMiddleware);
 
 function getDb(env: Env['Bindings']) {
   return createDb(env.HYPERDRIVE?.connectionString ?? env.DATABASE_URL!);
+}
+
+/**
+ * Longest window the weekly endpoints will aggregate: one year, matching the
+ * widest range the stats tab offers. Was 26, which silently served six months
+ * of data to anything asking for a year.
+ */
+const MAX_WEEKS = 52;
+const DEFAULT_WEEKS = 8;
+
+/**
+ * Parse the `since`/`weeks` pair shared by /stats/weekly and /stats/mat.
+ *
+ * `weeks` is deliberately parsed from the raw string rather than via Number():
+ * `Number('')` is 0, which passes Number.isInteger and clamped to a one-week
+ * window, so `?weeks=` returned a single bucket instead of the default.
+ */
+function weekWindow(sinceParam: string | undefined, weeksParam: string | undefined) {
+  const parsedWeeks = weeksParam !== undefined && weeksParam !== '' ? Number(weeksParam) : NaN;
+  const weeks = Number.isInteger(parsedWeeks)
+    ? Math.min(Math.max(parsedWeeks, 1), MAX_WEEKS)
+    : DEFAULT_WEEKS;
+
+  if (isIsoDate(sinceParam)) return { since: sinceParam, weeks };
+
+  // Default: UTC Monday of the week (weeks - 1) weeks back. Callers should send
+  // their local Monday — this fallback can be a day off for a device far from
+  // UTC, which is why the client always passes one.
+  const now = new Date();
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7) - (weeks - 1) * 7);
+  return { since: monday.toISOString().slice(0, 10), weeks };
 }
 
 // GET /stats/muscles?since=YYYY-MM-DD&until=YYYY-MM-DD
@@ -169,6 +207,55 @@ statsRoutes.get('/top-lifts', async (c) => {
   return c.json(result);
 });
 
+// GET /stats/weekly?since=YYYY-MM-DD&weeks=8
+// Per-week completed sessions, tonnage and set count over the window. `since`
+// should be the Monday of the oldest bucket, computed client-side so week
+// boundaries follow the device's timezone.
+statsRoutes.get('/weekly', async (c) => {
+  const userId = c.get('userId');
+  const db = getDb(c.env);
+
+  const { since, weeks } = weekWindow(c.req.query('since'), c.req.query('weeks'));
+
+  // Aggregated in SQL rather than rolled up on the client from GET /sessions:
+  // that list caps at 200 rows ordered newest-first, so at a year and five
+  // sessions a week the oldest buckets quietly undercounted. Bucketing on
+  // `s.date - since` keeps this a single grouped scan over the window.
+  //
+  // COUNT(DISTINCT s.id) is required, not stylistic: the joins fan a session out
+  // to one row per set, so a plain COUNT would report a heavy session as dozens.
+  const rows = await db.execute(sql`
+    SELECT
+      (FLOOR((s.date - ${since}::date) / 7))::int                            AS bucket,
+      COUNT(DISTINCT s.id)::int                                              AS sessions,
+      COALESCE(SUM(ss.weight * ss.reps), 0)::float                           AS volume_kg,
+      COUNT(ss.id)::int                                                      AS completed_sets
+    FROM sessions s
+    LEFT JOIN session_entries se ON se.session_id = s.id
+    LEFT JOIN strength_sets  ss ON ss.session_entry_id = se.id AND ss.completed = TRUE
+    WHERE s.user_id = ${userId}
+      AND s.status  = 'completed'
+      AND s.date   >= ${since}::date
+      AND s.date    < (${since}::date + ${weeks * 7})
+    GROUP BY bucket
+  `);
+
+  const parsed = (rows as unknown as Array<{
+    bucket: number;
+    sessions: number;
+    volume_kg: number;
+    completed_sets: number;
+  }>).map((r) => ({
+    bucket: r.bucket,
+    sessions: r.sessions,
+    volumeKg: r.volume_kg,
+    completedSets: r.completed_sets,
+  }));
+
+  const result: WeeklyStatsResponse = { weeks: buildWeeklyBuckets(parsed, since, weeks) };
+  return c.json(result);
+});
+
 // GET /stats/mat?since=YYYY-MM-DD&weeks=8
 // Weekly rounds/mat-time buckets plus intensity and sparring aggregates over
 // the window. `since` should be the Monday of the oldest bucket, computed
@@ -177,20 +264,7 @@ statsRoutes.get('/mat', async (c) => {
   const userId = c.get('userId');
   const db = getDb(c.env);
 
-  const weeksParam = Number(c.req.query('weeks'));
-  const weeks = Number.isInteger(weeksParam) ? Math.min(Math.max(weeksParam, 1), 26) : 8;
-
-  const sinceParam = c.req.query('since');
-  let since: string;
-  if (isIsoDate(sinceParam)) {
-    since = sinceParam;
-  } else {
-    // Default: UTC Monday of the week (weeks - 1) weeks back.
-    const now = new Date();
-    const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7) - (weeks - 1) * 7);
-    since = monday.toISOString().slice(0, 10);
-  }
+  const { since, weeks } = weekWindow(c.req.query('since'), c.req.query('weeks'));
 
   // The rounds payload is a discriminated jsonb union with a legacy variant,
   // so aggregation happens in TS (reusing the shared isRoundsSession guard)

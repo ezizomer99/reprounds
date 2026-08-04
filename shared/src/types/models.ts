@@ -638,6 +638,31 @@ export interface TopLiftsResponse {
   lifts: TopLift[];
 }
 
+/** One Monday-aligned week of gym activity. */
+export interface WeeklyBucket {
+  /** ISO date of the bucket's Monday, YYYY-MM-DD. */
+  weekStart: string;
+  /** Completed sessions dated in this week. */
+  sessions: number;
+  /** Tonnage (kg) from completed strength sets — 0 for a bodyweight-only week. */
+  volumeKg: number;
+  /** Completed strength sets logged this week. */
+  completedSets: number;
+}
+
+/**
+ * Weekly gym activity over a window.
+ *
+ * Exists because the equivalent client-side rollup read from `GET /sessions`,
+ * which caps at 200 rows ordered newest-first: at a year and five sessions a
+ * week the *oldest* buckets silently undercounted. Bounded by `weeks` rather
+ * than by a row cap, so it stays correct at any range.
+ */
+export interface WeeklyStatsResponse {
+  /** Oldest → newest, one bucket per requested week, gaps filled with zeroes. */
+  weeks: WeeklyBucket[];
+}
+
 // ---- Mat (martial arts) stats ----
 
 export interface MatWeekBucket {

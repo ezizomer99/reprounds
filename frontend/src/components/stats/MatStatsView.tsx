@@ -8,7 +8,7 @@ import { grapplingPositionLabel, submissionLabel } from '@app/shared';
 import { useMatStats } from '../../hooks/useStats';
 import { useProGate } from '../../hooks/useProGate';
 import { useTodayISO } from '../../hooks/useTodayISO';
-import { weeksAgoMonday } from '../../lib/statsHelpers';
+import { weeksAgoMonday, weeklyBarLabel } from '../../lib/statsHelpers';
 import { Skeleton } from '../Skeleton';
 import { InlineError } from '../InlineError';
 import { F, R, ThemeColors } from '../../theme/colors';
@@ -16,7 +16,12 @@ import { useTheme } from '../../theme/ThemeContext';
 import { withAlpha } from '../../lib/color';
 import { parseLocalDate } from '../../lib/calendar';
 
-const WEEKS = 8;
+export interface MatStatsViewProps {
+  /** Window length in Monday-aligned weeks, from the tab's range selector. */
+  weeks: number;
+  /** Human label for that window, e.g. "Last 8 weeks". */
+  rangeLabel: string;
+}
 
 const ROUND_TYPE_LABELS: Record<StrikingRoundType, string> = {
   shadow: 'Shadow',
@@ -53,7 +58,7 @@ function fmtMatTime(minutes: number): string {
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
 
-export function MatStatsView() {
+export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
   const router = useRouter();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
@@ -65,20 +70,19 @@ export function MatStatsView() {
   // query key, so it does not self-correct on re-render the way the local
   // helpers do — an app resumed on Monday kept charting through last Sunday.
   const todayISO = useTodayISO();
-  const since = useMemo(() => weeksAgoMonday(WEEKS, parseLocalDate(todayISO)), [todayISO]);
-  const { data, isLoading, isError, refetch } = useMatStats(since, WEEKS);
+  const since = useMemo(
+    () => weeksAgoMonday(weeks, parseLocalDate(todayISO)),
+    [weeks, todayISO],
+  );
+  const { data, isLoading, isError, refetch } = useMatStats(since, weeks);
 
   const barData = useMemo(
     () =>
       (data?.weeks ?? []).map((w, i, all) => ({
         value: w.rounds,
-        label:
-          i === all.length - 1
-            ? 'This\nweek'
-            : parseLocalDate(w.weekStart).toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-              }),
+        // Shared with the gym charts so both axes thin out identically as the
+        // range widens — 52 labels in a row is an unreadable smear.
+        label: weeklyBarLabel(w.weekStart, i, all.length),
       })),
     [data],
   );
@@ -157,7 +161,7 @@ export function MatStatsView() {
             </View>
           </View>
         )}
-        <Text style={styles.windowNote}>Last {WEEKS} weeks</Text>
+        <Text style={styles.windowNote}>{rangeLabel}</Text>
       </View>
 
       {isEmpty ? (

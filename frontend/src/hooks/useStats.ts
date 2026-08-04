@@ -1,5 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import type { MatStatsResponse, MuscleSummaryResponse, TopLiftsResponse } from '@app/shared';
+import type {
+  MatStatsResponse,
+  MuscleSummaryResponse,
+  TopLiftsResponse,
+  WeeklyStatsResponse,
+} from '@app/shared';
 import { apiGet } from '../lib/api';
 
 /**
@@ -17,10 +22,25 @@ export function useMuscleSummary(since: string, until: string) {
   });
 }
 
-export function useTopLifts() {
+/** Top lifts by est. 1RM. `since` bounds the scan to the selected range. */
+export function useTopLifts(since: string) {
   return useQuery<TopLiftsResponse, Error>({
-    queryKey: ['stats', 'top-lifts'],
-    queryFn: () => apiGet<TopLiftsResponse>('/stats/top-lifts'),
+    queryKey: ['stats', 'top-lifts', since],
+    queryFn: () => apiGet<TopLiftsResponse>(`/stats/top-lifts?since=${since}`),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/**
+ * Per-week sessions, tonnage and set count. `since` = Monday of the oldest bucket.
+ *
+ * Server-side because the client-side equivalent read from `GET /sessions`,
+ * which caps at 200 rows — fine at 8 weeks, silently short at a year.
+ */
+export function useWeeklyStats(since: string, weeks: number) {
+  return useQuery<WeeklyStatsResponse, Error>({
+    queryKey: ['stats', 'weekly', since, weeks],
+    queryFn: () => apiGet<WeeklyStatsResponse>(`/stats/weekly?since=${since}&weeks=${weeks}`),
     staleTime: 5 * 60 * 1000,
   });
 }

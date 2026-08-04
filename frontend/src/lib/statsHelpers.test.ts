@@ -4,12 +4,12 @@ import {
   nextMondayISO,
   weekKey,
   computeWeekStreak,
-  sessionsThisWeek,
-  avgPerWeek,
-  getWeeklyBarData,
   weeksAgoMonday,
+  avgPerWeekFromBuckets,
+  weeklyBarLabel,
+  statsRange,
+  STATS_RANGES,
 } from './statsHelpers';
-import type { Session } from '@app/shared';
 
 /** Local `YYYY-MM-DD` — the convention every helper in this module uses. */
 function isoDate(d: Date): string {
@@ -19,13 +19,6 @@ function isoDate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
-/** ISO date of the Monday n days from today. */
-function daysFromToday(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + n);
-  return isoDate(d);
-}
-
 /** ISO date of the Monday n full weeks before the current Monday. */
 function mondayNWeeksAgo(n: number): string {
   const mon = mondayOf(new Date());
@@ -33,21 +26,6 @@ function mondayNWeeksAgo(n: number): string {
   return isoDate(mon);
 }
 
-function makeSession(date: string): Session {
-  return {
-    id: 'sess',
-    userId: 'user',
-    routineId: null,
-    name: null,
-    date,
-    status: 'completed',
-    startedAt: null,
-    completedAt: null,
-    durationMinutes: null,
-    notes: null,
-    createdAt: date + 'T10:00:00Z',
-  };
-}
 
 // ─── computeWeekStreak ─────────────────────────────────────────────────────────
 
@@ -84,63 +62,6 @@ describe('computeWeekStreak', () => {
   it('breaks after last week when neither this week nor last week has a session', () => {
     // Only a session 2 weeks ago → grace covers w=0, then w=1 has no session → break
     expect(computeWeekStreak([mondayNWeeksAgo(2)])).toBe(0);
-  });
-});
-
-// ─── sessionsThisWeek ─────────────────────────────────────────────────────────
-
-describe('sessionsThisWeek', () => {
-  it('returns 0 for an empty list', () => {
-    expect(sessionsThisWeek([])).toBe(0);
-  });
-
-  it('counts sessions whose date falls in the current Monday-aligned week', () => {
-    const thisMonday = mondayNWeeksAgo(0);
-    expect(sessionsThisWeek([makeSession(thisMonday)])).toBe(1);
-  });
-
-  it('does not count sessions from last week', () => {
-    const lastMonday = mondayNWeeksAgo(1);
-    expect(sessionsThisWeek([makeSession(lastMonday)])).toBe(0);
-  });
-
-  // The filter was open-ended (`>= monday`), so anything dated ahead of this
-  // week — a scheduled session — was counted as already trained.
-  it('does not count a session dated after this week', () => {
-    const nextWeek = daysFromToday(14);
-    expect(sessionsThisWeek([makeSession(nextWeek)])).toBe(0);
-  });
-});
-
-// ─── avgPerWeek ───────────────────────────────────────────────────────────────
-
-describe('avgPerWeek', () => {
-  it('returns 0 for an empty list', () => {
-    expect(avgPerWeek([])).toBe(0);
-  });
-
-  it('calculates the average over the given window', () => {
-    // 4 sessions in 4 weeks = 1.0 avg/week
-    const sessions = [0, 1, 2, 3].map((n) => makeSession(mondayNWeeksAgo(n)));
-    expect(avgPerWeek(sessions, 4)).toBe(1);
-  });
-
-  it('excludes sessions outside the window', () => {
-    // One session 10 weeks ago should not appear in a 4-week window
-    const old = makeSession(mondayNWeeksAgo(10));
-    expect(avgPerWeek([old], 4)).toBe(0);
-  });
-
-  // Dividing by the full window understated a new user's rate: two sessions in
-  // their only week read as 0.5/week against a fixed divisor of 4.
-  it('averages over the weeks actually covered, not the whole window', () => {
-    const twoThisWeek = [makeSession(daysFromToday(0)), makeSession(daysFromToday(0))];
-    expect(avgPerWeek(twoThisWeek, 4)).toBe(2);
-  });
-
-  it('still divides by the full window once history covers it', () => {
-    const sessions = [0, 1, 2, 3].map((n) => makeSession(mondayNWeeksAgo(n)));
-    expect(avgPerWeek(sessions, 4)).toBe(1);
   });
 });
 
@@ -245,40 +166,96 @@ describe('weeksAgoMonday', () => {
   });
 });
 
-// ─── getWeeklyBarData ─────────────────────────────────────────────────────────
 
-describe('getWeeklyBarData', () => {
-  it('returns an array with `weeks` entries (default 8)', () => {
-    expect(getWeeklyBarData([])).toHaveLength(8);
+// ─── STATS_RANGES / statsRange ────────────────────────────────────────────────
+
+describe('statsRange', () => {
+  it('resolves every advertised key', () => {
+    for (const r of STATS_RANGES) {
+      expect(statsRange(r.key).weeks).toBe(r.weeks);
+    }
   });
 
-  it('respects a custom weeks argument', () => {
-    expect(getWeeklyBarData([], 4)).toHaveLength(4);
+  it('falls back to 8 weeks for an unrecognised key', () => {
+    expect(statsRange('nonsense' as never).weeks).toBe(8);
   });
 
-  it('labels the last bucket as "This\\nweek"', () => {
-    const data = getWeeklyBarData([]);
-    expect(data[data.length - 1].label).toBe('This\nweek');
+  // The server clamps to MAX_WEEKS = 52. A range asking for more would render a
+  // label promising a window the response doesn't contain.
+  it('never offers a range wider than the server will serve', () => {
+    for (const r of STATS_RANGES) expect(r.weeks).toBeLessThanOrEqual(52);
   });
 
-  it('counts a session dated today in the last (current-week) bucket', () => {
-    const today = isoDate(new Date());
-    const data = getWeeklyBarData([makeSession(today)]);
-    expect(data[data.length - 1].value).toBe(1);
+  it('lists ranges shortest to longest', () => {
+    const weeks = STATS_RANGES.map((r) => r.weeks);
+    expect([...weeks].sort((a, b) => a - b)).toEqual(weeks);
+  });
+});
+
+// ─── avgPerWeekFromBuckets ────────────────────────────────────────────────────
+
+describe('avgPerWeekFromBuckets', () => {
+  it('returns 0 for no buckets and for an untrained window', () => {
+    expect(avgPerWeekFromBuckets([])).toBe(0);
+    expect(avgPerWeekFromBuckets([{ sessions: 0 }, { sessions: 0 }])).toBe(0);
   });
 
-  it('does not count sessions from more than `weeks` weeks ago', () => {
-    // 9 weeks ago is outside the default 8-week window
-    const old = new Date();
-    old.setDate(old.getDate() - 9 * 7);
-    const data = getWeeklyBarData([makeSession(isoDate(old))]);
-    expect(data.every((d) => d.value === 0)).toBe(true);
+  it('averages across the window when every week is active', () => {
+    expect(avgPerWeekFromBuckets([{ sessions: 2 }, { sessions: 4 }])).toBe(3);
   });
 
-  it('bucketes a session from last week into the second-to-last bucket', () => {
-    const lastMonday = mondayNWeeksAgo(1);
-    const data = getWeeklyBarData([makeSession(lastMonday)]);
-    expect(data[data.length - 2].value).toBe(1);
-    expect(data[data.length - 1].value).toBe(0);
+  // Same rule the old session-list helper applied, for the same reason: someone
+  // two weeks in who trains twice a week should read 2.0, not 0.2 against a
+  // year-long divisor.
+  it('divides by the weeks since the first active one, not the whole window', () => {
+    const buckets = [
+      { sessions: 0 },
+      { sessions: 0 },
+      { sessions: 0 },
+      { sessions: 2 },
+      { sessions: 2 },
+    ];
+    expect(avgPerWeekFromBuckets(buckets)).toBe(2);
+  });
+
+  it('counts a rest week after training started', () => {
+    expect(avgPerWeekFromBuckets([{ sessions: 4 }, { sessions: 0 }])).toBe(2);
+  });
+
+  it('rounds to one decimal', () => {
+    expect(avgPerWeekFromBuckets([{ sessions: 1 }, { sessions: 2 }])).toBe(1.5);
+    expect(avgPerWeekFromBuckets([{ sessions: 1 }, { sessions: 1 }, { sessions: 2 }])).toBe(1.3);
+  });
+});
+
+// ─── weeklyBarLabel ───────────────────────────────────────────────────────────
+
+describe('weeklyBarLabel', () => {
+  it('always labels the newest bucket "This week"', () => {
+    expect(weeklyBarLabel('2026-06-01', 7, 8)).toBe('This\nweek');
+    expect(weeklyBarLabel('2026-06-01', 51, 52)).toBe('This\nweek');
+  });
+
+  it('labels every bucket at short ranges', () => {
+    const labels = Array.from({ length: 8 }, (_, i) => weeklyBarLabel('2026-06-01', i, 8));
+    expect(labels.every((l) => l !== '')).toBe(true);
+  });
+
+  // 52 labels in a row is an unreadable smear, so wide ranges label every Nth.
+  // The count must never *grow* with the window and must stay small at the top
+  // end — it does not have to shrink at every step (26 and 52 both land on 7,
+  // which is monthly and bi-monthly respectively: both perfectly readable).
+  it('never shows more labels as the window widens', () => {
+    const shown = (total: number) =>
+      Array.from({ length: total }, (_, i) => weeklyBarLabel('2026-06-01', i, total)).filter(
+        (l) => l !== '',
+      ).length;
+    expect(shown(26)).toBeLessThan(shown(8));
+    expect(shown(52)).toBeLessThanOrEqual(shown(26));
+    expect(shown(52)).toBeLessThanOrEqual(10);
+  });
+
+  it('formats a dated label as month and day', () => {
+    expect(weeklyBarLabel('2026-06-01', 0, 8)).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
   });
 });
