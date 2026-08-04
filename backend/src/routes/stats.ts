@@ -8,6 +8,7 @@ import { aggregateMatStats, type MatEntryRow } from '../lib/matStats';
 import { aggregatePartnerStats } from '../lib/partnerStats';
 import { epleyE1rmSql } from '../lib/e1rm';
 import { isIsoDate } from '../lib/validate';
+import { E1RM_MAX_REPS } from '@app/shared';
 import type { MuscleSummaryResponse, PartnerStatsResponse, TopLiftsResponse } from '@app/shared';
 
 type Env = AppEnv;
@@ -113,6 +114,14 @@ statsRoutes.get('/top-lifts', async (c) => {
   // DISTINCT ON picks the best set per exercise (highest estimated 1RM), then we
   // sort across exercises and take the top 10. The CASE mirrors the shared
   // estimatedOneRepMax calculator (Epley, reps=1 → weight).
+  //
+  // This is a leaderboard, so sets the estimate can't speak for are filtered out
+  // in the WHERE rather than ranked last: an exercise trained only in high reps
+  // simply doesn't place, and no NULL can reach TopLift.estimatedOneRepMax.
+  // (The exercise's *own* PR card takes the opposite approach and keeps the set
+  // while showing "—" — see /exercises/:id/prs.) NULLS LAST on both ORDER BYs
+  // regardless: Postgres sorts NULLS FIRST for DESC, and a filter that later
+  // loosens would otherwise silently promote exactly the wrong rows.
   const e1rm = epleyE1rmSql(sql`ss.weight::numeric`, sql`ss.reps::numeric`);
   const rows = await db.execute(sql`
     SELECT x.exercise_id, x.exercise_name, x.weight::float AS weight, x.reps,
@@ -134,9 +143,11 @@ statsRoutes.get('/top-lifts', async (c) => {
         AND ss.completed = TRUE
         AND ss.weight    IS NOT NULL
         AND ss.reps      IS NOT NULL
-      ORDER BY e.id, (${e1rm}) DESC
+        AND ss.reps      <= ${E1RM_MAX_REPS}
+        AND ss.set_type <> 'warmup'
+      ORDER BY e.id, (${e1rm}) DESC NULLS LAST
     ) x
-    ORDER BY x.estimated_1rm DESC
+    ORDER BY x.estimated_1rm DESC NULLS LAST
     LIMIT 10
   `);
 

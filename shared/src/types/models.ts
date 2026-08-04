@@ -589,7 +589,13 @@ export interface ExercisePRsResponse {
 // the client converts to the user's display unit.
 export interface ExerciseProgressionPoint {
   date: string; // YYYY-MM-DD
-  bestEstimatedOneRepMax: number; // best Epley e1RM across the session's completed sets
+  /**
+   * Best Epley e1RM across the session's completed working sets, or null when no
+   * set that session was low-rep enough to estimate from (see E1RM_MAX_REPS).
+   * Such a session still carries topWeight and totalVolume — it contributes no
+   * point to the 1RM trend, not no point at all.
+   */
+  bestEstimatedOneRepMax: number | null;
   topWeight: number; // heaviest completed set that session
   totalVolume: number; // sum of weight*reps over completed sets that session
 }
