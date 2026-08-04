@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import type {
   MatStatsResponse,
   MuscleSummaryResponse,
+  PersonalRecordsResponse,
   TopLiftsResponse,
   WeeklyStatsResponse,
 } from '@app/shared';
@@ -41,6 +42,15 @@ export function useWeeklyStats(since: string, weeks: number) {
   return useQuery<WeeklyStatsResponse, Error>({
     queryKey: ['stats', 'weekly', since, weeks],
     queryFn: () => apiGet<WeeklyStatsResponse>(`/stats/weekly?since=${since}&weeks=${weeks}`),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** Lifts improved on since `since` — best estimate in the window vs. before it. */
+export function usePersonalRecords(since: string) {
+  return useQuery<PersonalRecordsResponse, Error>({
+    queryKey: ['stats', 'prs', since],
+    queryFn: () => apiGet<PersonalRecordsResponse>(`/stats/prs?since=${since}`),
     staleTime: 5 * 60 * 1000,
   });
 }

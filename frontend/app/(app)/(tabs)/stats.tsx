@@ -35,6 +35,7 @@ import { Skeleton } from '../../../src/components/Skeleton';
 import { InlineError } from '../../../src/components/InlineError';
 import { MatStatsView } from '../../../src/components/stats/MatStatsView';
 import { RecentNotesCard } from '../../../src/components/stats/RecentNotesCard';
+import { PRFeedCard } from '../../../src/components/stats/PRFeedCard';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -543,6 +544,11 @@ export default function StatsTab() {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* ── New PRs (PRO) ──
+            Under Top Lifts by design: that board is your best ever, this is what
+            actually moved inside the selected range. */}
+        <PRFeedCard since={rangeStart} rangeLabel={range.longLabel} />
           </>
         )}
 

@@ -638,6 +638,28 @@ export interface TopLiftsResponse {
   lifts: TopLift[];
 }
 
+/** A lift whose best estimated 1RM inside the window beat everything before it. */
+export interface PersonalRecord {
+  exerciseId: string;
+  exerciseName: string;
+  /** The set that set the record. */
+  weight: number;
+  reps: number;
+  estimatedOneRepMax: number;
+  /**
+   * Best estimate from before the window, or null when this is a first-ever
+   * record for the exercise — worth surfacing differently ("New lift" vs "+5kg").
+   */
+  previousOneRepMax: number | null;
+  /** ISO date (YYYY-MM-DD) of the session the record was set in. */
+  date: string;
+}
+
+export interface PersonalRecordsResponse {
+  since: string;
+  records: PersonalRecord[];
+}
+
 /** One Monday-aligned week of gym activity. */
 export interface WeeklyBucket {
   /** ISO date of the bucket's Monday, YYYY-MM-DD. */

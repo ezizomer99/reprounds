@@ -13,6 +13,7 @@ import { E1RM_MAX_REPS } from '@app/shared';
 import type {
   MuscleSummaryResponse,
   PartnerStatsResponse,
+  PersonalRecordsResponse,
   TopLiftsResponse,
   WeeklyStatsResponse,
 } from '@app/shared';
@@ -202,6 +203,100 @@ statsRoutes.get('/top-lifts', async (c) => {
       weight: r.weight,
       reps: r.reps,
       estimatedOneRepMax: r.estimated_1rm,
+    })),
+  };
+  return c.json(result);
+});
+
+// GET /stats/prs?since=YYYY-MM-DD
+// Lifts whose best estimated 1RM inside the window beats their best from before
+// it — "what you actually improved this month", which no other endpoint answers.
+statsRoutes.get('/prs', async (c) => {
+  const userId = c.get('userId');
+  const db = getDb(c.env);
+
+  const sinceParam = c.req.query('since');
+  const since =
+    isIsoDate(sinceParam)
+      ? sinceParam
+      : new Date(Date.now() - 28 * 86_400_000).toISOString().slice(0, 10);
+
+  // `qualifying` applies the same rules as every other PR surface — completed
+  // sessions, completed non-warm-up sets, reps within the estimable range — so a
+  // high-rep back-off set can't be celebrated as a record.
+  //
+  // DISTINCT ON picks the single best set inside the window per exercise; the
+  // LEFT JOIN against the pre-window max decides whether it beat anything. A
+  // NULL there means no prior qualifying set at all, which counts as a record
+  // (a first-ever lift) rather than being filtered out by the comparison.
+  const e1rm = epleyE1rmSql(sql`ss.weight::numeric`, sql`ss.reps::numeric`);
+  const rows = await db.execute(sql`
+    WITH qualifying AS (
+      SELECT
+        e.id   AS exercise_id,
+        e.name AS exercise_name,
+        s.date AS date,
+        ss.weight::numeric AS weight,
+        ss.reps            AS reps,
+        ${e1rm}            AS e1rm
+      FROM strength_sets ss
+      JOIN session_entries se ON ss.session_entry_id = se.id
+      JOIN sessions s         ON se.session_id = s.id
+      JOIN exercises e        ON se.exercise_id = e.id
+      WHERE s.user_id    = ${userId}
+        AND s.status     = 'completed'
+        AND ss.completed = TRUE
+        AND ss.set_type <> 'warmup'
+        AND ss.weight    IS NOT NULL
+        AND ss.reps      IS NOT NULL
+        AND ss.reps     <= ${E1RM_MAX_REPS}
+    ),
+    current AS (
+      SELECT DISTINCT ON (exercise_id)
+        exercise_id, exercise_name, date, weight, reps, e1rm
+      FROM qualifying
+      WHERE date >= ${since}
+      ORDER BY exercise_id, e1rm DESC NULLS LAST, date ASC
+    ),
+    prior AS (
+      SELECT exercise_id, MAX(e1rm) AS best_e1rm
+      FROM qualifying
+      WHERE date < ${since}
+      GROUP BY exercise_id
+    )
+    SELECT
+      c.exercise_id,
+      c.exercise_name,
+      c.date,
+      c.weight::float AS weight,
+      c.reps,
+      c.e1rm::float   AS e1rm,
+      p.best_e1rm::float AS previous_e1rm
+    FROM current c
+    LEFT JOIN prior p ON p.exercise_id = c.exercise_id
+    WHERE p.best_e1rm IS NULL OR c.e1rm > p.best_e1rm
+    ORDER BY c.date DESC, c.e1rm DESC
+    LIMIT 20
+  `);
+
+  const result: PersonalRecordsResponse = {
+    since,
+    records: (rows as unknown as Array<{
+      exercise_id: string;
+      exercise_name: string;
+      date: string;
+      weight: number;
+      reps: number;
+      e1rm: number;
+      previous_e1rm: number | null;
+    }>).map((r) => ({
+      exerciseId: r.exercise_id,
+      exerciseName: r.exercise_name,
+      weight: r.weight,
+      reps: r.reps,
+      estimatedOneRepMax: r.e1rm,
+      previousOneRepMax: r.previous_e1rm,
+      date: r.date,
     })),
   };
   return c.json(result);
