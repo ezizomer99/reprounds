@@ -136,6 +136,61 @@ describe('monthsBetween', () => {
     expect(months.length).toBe(37);
     expect(months[24]).toEqual(today);
   });
+
+  // The calendar screen's window contract. Opening mid-list is what made the
+  // calendar land on the LAST month: FlashList v2 has no size estimates and
+  // assumes 200px per unmeasured item against a ~360px MonthGrid, so a
+  // mid-list initialScrollIndex resolved to an offset past the content height
+  // and got clamped to the bottom. So the current month MUST be index 0 on the
+  // first paint, and history is only ever added above it afterwards.
+  describe('calendar window contract', () => {
+    const MONTHS_BACK = 24;
+    const MONTHS_FORWARD = 12;
+    const anchor = { year: 2026, month0: 7 }; // Aug 2026
+
+    const windowFor = (monthsBack: number) =>
+      monthsBetween(addMonths(anchor, -monthsBack), addMonths(anchor, MONTHS_FORWARD));
+
+    it('puts the current month at index 0 before any history is loaded', () => {
+      const months = windowFor(0);
+      expect(months[0]).toEqual(anchor);
+      expect(months.length).toBe(MONTHS_FORWARD + 1);
+    });
+
+    it('only adds months above when history loads, never reordering the rest', () => {
+      const initial = windowFor(0);
+      const extended = windowFor(MONTHS_BACK);
+
+      expect(extended.length).toBe(initial.length + MONTHS_BACK);
+      // The current month moved down by exactly the number of prepended months...
+      expect(extended[MONTHS_BACK]).toEqual(anchor);
+      // ...and everything that was already there kept its order, contiguously.
+      expect(extended.slice(MONTHS_BACK)).toEqual(initial);
+    });
+
+    it('keeps prepending above on each further extension', () => {
+      const first = windowFor(MONTHS_BACK);
+      const second = windowFor(MONTHS_BACK + 12);
+      expect(second.slice(12)).toEqual(first);
+      expect(second[MONTHS_BACK + 12]).toEqual(anchor);
+    });
+
+    // A month rollover advances only the forward edge, so index 0 is untouched
+    // and the user's scroll position survives midnight.
+    it('appends at the end on a month rollover without shifting index 0', () => {
+      const before = monthsBetween(
+        addMonths(anchor, -MONTHS_BACK),
+        addMonths(anchor, MONTHS_FORWARD),
+      );
+      const afterRollover = monthsBetween(
+        addMonths(anchor, -MONTHS_BACK),
+        addMonths(addMonths(anchor, 1), MONTHS_FORWARD),
+      );
+      expect(afterRollover.length).toBe(before.length + 1);
+      expect(afterRollover.slice(0, before.length)).toEqual(before);
+      expect(afterRollover[0]).toEqual(before[0]);
+    });
+  });
 });
 
 describe('formatDayTitle', () => {
