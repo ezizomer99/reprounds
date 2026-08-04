@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type {
   CompleteSessionRequest,
   CreateSessionEntryRequest,
@@ -23,6 +23,25 @@ import { cancelScheduledByKind } from '../lib/notifications';
 import { clearActiveRestForSession } from '../lib/restTimerStore';
 
 const sessionKey = (id: string) => ['session', id] as const;
+
+/**
+ * Invalidate the stats aggregates, but only for a session that already counts
+ * towards them.
+ *
+ * Every stats query filters `status = 'completed'`, so a set ticked during a live
+ * workout moves no number on the stats tab — invalidating there unconditionally
+ * would refetch three queries on every tap of a set checkbox. Editing an
+ * *already completed* session (fixing a mistyped weight, deleting a stray
+ * exercise) genuinely does change them, and that is the case worth a refetch:
+ * until now nothing but `complete` touched `['stats']`, so the correction sat
+ * invisible for the full 5-minute staleTime.
+ */
+function invalidateStatsIfCompleted(queryClient: QueryClient, sessionId: string) {
+  const session = queryClient.getQueryData<SessionWithEntries>(sessionKey(sessionId));
+  if (session?.status === 'completed') {
+    queryClient.invalidateQueries({ queryKey: ['stats'] });
+  }
+}
 
 /**
  * Id for a row that exists only in the optimistic cache until the server
@@ -159,6 +178,12 @@ export function useDeleteSession() {
       if (clearActiveRestForSession(id)) void cancelScheduledByKind('rest');
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       queryClient.invalidateQueries({ queryKey: ['session'] });
+      // Deleting a completed session retires its work from every aggregate. Only
+      // `complete` used to invalidate these, so the stats tab kept showing the
+      // deleted session's muscles, lifts and rounds for the whole 5-minute
+      // staleTime — and the tab has no way to force a refetch on demand.
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
     },
   });
 }
@@ -311,6 +336,7 @@ export function useAddSessionEntry() {
     // Refetch to swap the temp id for the server-assigned entry id.
     onSettled: (_d, _e, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: sessionKey(sessionId) });
+      invalidateStatsIfCompleted(queryClient, sessionId);
     },
   });
 }
@@ -344,6 +370,7 @@ export function useUpdateSessionEntry() {
     // gi can be server-derived from details, so reconcile in the background.
     onSettled: (_d, _e, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: sessionKey(sessionId) });
+      invalidateStatsIfCompleted(queryClient, sessionId);
     },
   });
 }
@@ -389,6 +416,7 @@ export function useAddStrengthSet() {
     // Refetch to swap the temp id for the server-assigned set id.
     onSettled: (_d, _e, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: sessionKey(sessionId) });
+      invalidateStatsIfCompleted(queryClient, sessionId);
     },
   });
 }
@@ -423,7 +451,13 @@ export function useUpdateStrengthSet() {
       if (ctx?.previous) queryClient.setQueryData(sessionKey(sessionId), ctx.previous);
     },
     // No server-derived fields on a set; the optimistic patch is authoritative,
-    // so skip the invalidate to avoid a full-session refetch on every keystroke.
+    // so skip the session invalidate to avoid a full-session refetch on every
+    // keystroke. Stats are a different matter — a corrected weight on a
+    // completed session changes top lifts — and the guard keeps this to the
+    // rare edit-after-the-fact case rather than every keystroke of a live set.
+    onSuccess: (_d, { sessionId }) => {
+      invalidateStatsIfCompleted(queryClient, sessionId);
+    },
   });
 }
 
@@ -450,6 +484,7 @@ export function useDeleteSessionEntry() {
     },
     onSettled: (_d, _e, { sessionId }) => {
       queryClient.invalidateQueries({ queryKey: sessionKey(sessionId) });
+      invalidateStatsIfCompleted(queryClient, sessionId);
     },
   });
 }
@@ -482,6 +517,9 @@ export function useDeleteStrengthSet() {
     },
     onError: (_e, { sessionId }, ctx) => {
       if (ctx?.previous) queryClient.setQueryData(sessionKey(sessionId), ctx.previous);
+    },
+    onSuccess: (_d, { sessionId }) => {
+      invalidateStatsIfCompleted(queryClient, sessionId);
     },
   });
 }

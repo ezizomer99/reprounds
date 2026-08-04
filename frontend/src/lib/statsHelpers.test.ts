@@ -1,6 +1,7 @@
 import {
   mondayOf,
   mondayISO,
+  nextMondayISO,
   weekKey,
   computeWeekStreak,
   sessionsThisWeek,
@@ -173,6 +174,41 @@ describe('mondayISO / weekKey', () => {
   });
 });
 
+// ─── nextMondayISO ────────────────────────────────────────────────────────────
+
+// The exclusive upper bound callers send as `until`. The server windows filtered
+// `date >= since` only, so a session dated ahead of the window counted inside it.
+describe('nextMondayISO', () => {
+  it('returns a Monday in local time', () => {
+    expect(new Date(nextMondayISO() + 'T00:00:00').getDay()).toBe(1);
+  });
+
+  it('is exactly 7 days after mondayISO', () => {
+    const start = new Date(mondayISO() + 'T00:00:00');
+    const end = new Date(nextMondayISO() + 'T00:00:00');
+    expect(Math.round((end.getTime() - start.getTime()) / 86_400_000)).toBe(7);
+  });
+
+  it('brackets every day of the current week', () => {
+    const start = mondayISO();
+    const end = nextMondayISO();
+    const monday = mondayOf(new Date());
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(monday);
+      d.setDate(monday.getDate() + i);
+      expect(isoDate(d) >= start).toBe(true);
+      expect(isoDate(d) < end).toBe(true);
+    }
+  });
+
+  it('excludes next Monday itself', () => {
+    const monday = mondayOf(new Date());
+    const nextMon = new Date(monday);
+    nextMon.setDate(monday.getDate() + 7);
+    expect(isoDate(nextMon) < nextMondayISO()).toBe(false);
+  });
+});
+
 // ─── weeksAgoMonday ───────────────────────────────────────────────────────────
 
 describe('weeksAgoMonday', () => {
@@ -190,6 +226,22 @@ describe('weeksAgoMonday', () => {
     expect(parsed.getDay()).toBe(1); // Monday
     const diffDays = Math.round((mondayOf(new Date()).getTime() - parsed.getTime()) / 86_400_000);
     expect(diffDays).toBe(49);
+  });
+
+  // The anchor is a parameter so a caller holding this in a query key can
+  // re-derive it at midnight; frozen at mount it kept charting last week.
+  it('anchors on the supplied date rather than today', () => {
+    const anchor = new Date();
+    anchor.setDate(anchor.getDate() - 7 * 3);
+    const result = weeksAgoMonday(1, anchor);
+    expect(result).toBe(isoDate(mondayOf(anchor)));
+  });
+
+  it('moves the window when the anchor crosses into a new week', () => {
+    const thisWeek = mondayOf(new Date());
+    const lastWeek = new Date(thisWeek);
+    lastWeek.setDate(thisWeek.getDate() - 7);
+    expect(weeksAgoMonday(8, thisWeek)).not.toBe(weeksAgoMonday(8, lastWeek));
   });
 });
 

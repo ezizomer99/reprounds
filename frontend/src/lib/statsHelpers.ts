@@ -26,6 +26,20 @@ export function mondayISO(d: Date = new Date()): string {
   return localISO(mondayOf(d));
 }
 
+/**
+ * ISO date (local) of the Monday *after* the week containing `d` — the exclusive
+ * upper bound of "this week".
+ *
+ * Every client-side weekly count is bounded `[monday, nextMonday)`; the server
+ * windows were open-ended, so a session dated ahead of this week counted as
+ * trained inside it. This is what callers send as the `until` bound.
+ */
+export function nextMondayISO(d: Date = new Date()): string {
+  const m = mondayOf(d);
+  m.setDate(m.getDate() + 7);
+  return localISO(m);
+}
+
 /** ISO date (YYYY-MM-DD) of the Monday of the week containing `isoDate`. */
 export function weekKey(isoDate: string): string {
   return mondayISO(parseLocalDate(isoDate));
@@ -87,11 +101,15 @@ export function avgPerWeek(sessions: Session[], weeks = 4): number {
 }
 
 /**
- * ISO date (local) of the Monday `weeks - 1` weeks before the current week —
- * the window start for weekly charts (last bucket = this week).
+ * ISO date (local) of the Monday `weeks - 1` weeks before the week containing
+ * `from` — the window start for weekly charts (last bucket = that week).
+ *
+ * `from` is a parameter rather than always `new Date()` so a caller holding this
+ * in a query key can re-derive it when the day rolls over; a value frozen at
+ * mount keeps querying last week's window after midnight.
  */
-export function weeksAgoMonday(weeks = 8): string {
-  const monday = mondayOf(new Date());
+export function weeksAgoMonday(weeks = 8, from: Date = new Date()): string {
+  const monday = mondayOf(from);
   monday.setDate(monday.getDate() - (weeks - 1) * 7);
   return localISO(monday);
 }

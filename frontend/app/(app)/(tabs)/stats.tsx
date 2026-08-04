@@ -1,21 +1,32 @@
 import {
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useQueryClient } from '@tanstack/react-query';
 import { BarChart } from 'react-native-gifted-charts';
 import Body from 'react-native-body-highlighter';
 import { MAX_SESSIONS_PAGE, useSessions } from '../../../src/hooks/useSession';
 import { useProGate } from '../../../src/hooks/useProGate';
-import { mondayISO, sessionsThisWeek, avgPerWeek, getWeeklyBarData } from '../../../src/lib/statsHelpers';
+import {
+  mondayISO,
+  nextMondayISO,
+  sessionsThisWeek,
+  avgPerWeek,
+  computeWeekStreak,
+  getWeeklyBarData,
+} from '../../../src/lib/statsHelpers';
 import { useMuscleSummary, useTopLifts } from '../../../src/hooks/useStats';
+import { useTodayISO } from '../../../src/hooks/useTodayISO';
 import { aggregateMuscles } from '../../../src/lib/muscleSlugMap';
+import { parseLocalDate } from '../../../src/lib/calendar';
 import { useUnit } from '../../../src/units/UnitContext';
 import { fmtWeight } from '../../../src/units/units';
 import { Skeleton } from '../../../src/components/Skeleton';
@@ -31,7 +42,11 @@ export default function StatsTab() {
   const insets = useSafeAreaInsets();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const { isPro, showPaywall } = useProGate();
+  const queryClient = useQueryClient();
+  // `isLoading` matters as much as `isPro`: a mid-race `isPro === false` is
+  // indistinguishable from a genuine free user, so reading it alone flashed
+  // lock icons and the upsell blur at every paying user on a cold start.
+  const { isPro, isLoading: proLoading, showPaywall } = useProGate();
   const { unit } = useUnit();
   const [muscleView, setMuscleView] = useState<'front' | 'back'>('front');
   const [statsView, setStatsView] = useState<'gym' | 'mat'>('gym');
@@ -40,13 +55,32 @@ export default function StatsTab() {
 
   // Local, not UTC: toISOString() sent the preceding Sunday as the window
   // start for anyone ahead of UTC, pulling an extra day into the summary.
-  const thisWeekMonday = useMemo(() => mondayISO(), []);
-  const { data: muscleData, isError: muscleError, refetch: refetchMuscles } =
-    useMuscleSummary(thisWeekMonday);
-  const { data: topLiftsData, isError: topLiftsError, refetch: refetchTopLifts } = useTopLifts();
+  //
+  // Derived from useTodayISO rather than frozen with an empty dep array: these
+  // are query keys, so unlike the helpers below they do not self-correct on
+  // re-render, and an app resumed the next morning kept asking for last week.
+  const todayISO = useTodayISO();
+  const thisWeekMonday = useMemo(() => mondayISO(parseLocalDate(todayISO)), [todayISO]);
+  const nextWeekMonday = useMemo(() => nextMondayISO(parseLocalDate(todayISO)), [todayISO]);
+  const {
+    data: muscleData,
+    isLoading: muscleLoading,
+    isError: muscleError,
+    refetch: refetchMuscles,
+  } = useMuscleSummary(thisWeekMonday, nextWeekMonday);
+  const {
+    data: topLiftsData,
+    isLoading: topLiftsLoading,
+    isError: topLiftsError,
+    refetch: refetchTopLifts,
+  } = useTopLifts();
 
   const thisWeek = useMemo(() => (sessions ? sessionsThisWeek(sessions) : 0), [sessions]);
   const avg = useMemo(() => (sessions ? avgPerWeek(sessions) : 0), [sessions]);
+  const streak = useMemo(
+    () => (sessions ? computeWeekStreak(sessions.map((s) => s.date)) : 0),
+    [sessions],
+  );
 
   const weeklyBarData = useMemo(() => getWeeklyBarData(sessions ?? []), [sessions]);
 
@@ -56,6 +90,22 @@ export default function StatsTab() {
   );
 
   const hasMuscles = bodyData.length > 0;
+  const hasSessions = (sessions?.length ?? 0) > 0;
+
+  const [refreshing, setRefreshing] = useState(false);
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    // Invalidate by prefix rather than calling each refetch: ['stats'] covers
+    // muscles, top lifts and the mat view's own query, so one pull refreshes
+    // whichever half is showing. Until now the tab had no way to force this at
+    // all — every stats query holds a 5-minute staleTime.
+    await Promise.allSettled([
+      refetch(),
+      queryClient.invalidateQueries({ queryKey: ['stats'] }),
+      queryClient.invalidateQueries({ queryKey: ['notes'] }),
+    ]);
+    setRefreshing(false);
+  }, [refetch, queryClient]);
 
   return (
     <View style={styles.screen}>
@@ -67,6 +117,14 @@ export default function StatsTab() {
         style={styles.scroll}
         contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void onRefresh()}
+            tintColor={T.textDim}
+            colors={[T.primary]}
+          />
+        }
       >
         {/* ── Gym / Martial Arts view toggle ── */}
         <View style={styles.segmentRow}>
@@ -98,8 +156,6 @@ export default function StatsTab() {
 
         {statsView === 'mat' ? (
           <MatStatsView />
-        ) : isError ? (
-          <InlineError message="Couldn't load your gym stats." onRetry={() => void refetch()} />
         ) : (
           <>
         {/* ── Highlights ── */}
@@ -109,7 +165,13 @@ export default function StatsTab() {
             <Text style={styles.highlightsTitle}>Highlights</Text>
           </View>
 
-          {isLoading ? (
+          {/* The error guard sits here, not around the whole gym view: Muscles
+              This Week and Top Lifts are separate queries with their own error
+              and retry handling, and blanking them on a failed session fetch
+              hid data that had loaded fine. */}
+          {isError ? (
+            <InlineError message="Couldn't load your gym stats." onRetry={() => void refetch()} />
+          ) : isLoading || proLoading ? (
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
               <Skeleton width="30%" height={72} radius={12} />
               <Skeleton width="30%" height={72} radius={12} />
@@ -138,6 +200,11 @@ export default function StatsTab() {
                   </>
                 )}
               </TouchableOpacity>
+              {/* Was the length of the top-lifts list, which the endpoint caps at
+                  10 — so it read "10" forever once you had ten lifts, a page size
+                  dressed as a metric. The week streak is a real number and the
+                  helper behind it (grace for an untrained current week) already
+                  exists and is tested. */}
               <TouchableOpacity
                 style={[styles.statCard, { backgroundColor: withAlpha(T.gold, 0.12) }]}
                 onPress={isPro ? () => router.push('/history' as never) : showPaywall}
@@ -145,15 +212,13 @@ export default function StatsTab() {
               >
                 {isPro ? (
                   <>
-                    <Text style={[styles.statCardNum, { color: T.gold }]}>
-                      {topLiftsData?.lifts.length ?? 0}
-                    </Text>
-                    <Text style={[styles.statCardLabel, { color: T.gold }]}>Tracked</Text>
+                    <Text style={[styles.statCardNum, { color: T.gold }]}>{streak}</Text>
+                    <Text style={[styles.statCardLabel, { color: T.gold }]}>Week Streak</Text>
                   </>
                 ) : (
                   <>
                     <Ionicons name="lock-closed" size={18} color={T.gold} />
-                    <Text style={[styles.statCardLabel, { color: T.gold }]}>PRs</Text>
+                    <Text style={[styles.statCardLabel, { color: T.gold }]}>Streak</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -190,6 +255,12 @@ export default function StatsTab() {
               message="Couldn't load your muscle breakdown."
               onRetry={() => void refetchMuscles()}
             />
+          ) : muscleLoading ? (
+            // Without this the empty copy below doubled as the loading state, so
+            // a user who had trained this week was told to go train.
+            <View style={styles.bodyContainer}>
+              <Skeleton width={140} height={220} radius={12} />
+            </View>
           ) : hasMuscles ? (
             <View style={styles.bodyContainer}>
               <Body
@@ -219,18 +290,26 @@ export default function StatsTab() {
               </View>
               <Text style={styles.cardTitle}>Sessions per Week</Text>
             </View>
-            {!isPro && (
+            {!isPro && !proLoading && (
               <TouchableOpacity onPress={showPaywall} activeOpacity={0.7}>
                 <Ionicons name="lock-closed" size={16} color={T.muted} />
               </TouchableOpacity>
             )}
           </View>
 
-          {isPro ? (
-            isLoading ? (
+          {isPro || proLoading ? (
+            isLoading || proLoading ? (
               <Skeleton width="100%" height={100} radius={8} />
+            ) : !hasSessions ? (
+              <Text style={styles.emptyText}>
+                Log a few workouts to see how your weeks compare.
+              </Text>
             ) : (
-              <View style={{ marginTop: 8, overflow: 'hidden' }}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ marginTop: 8 }}
+              >
                 <BarChart
                   data={weeklyBarData}
                   barWidth={28}
@@ -249,7 +328,7 @@ export default function StatsTab() {
                   barBorderRadius={4}
                   showGradient
                 />
-              </View>
+              </ScrollView>
             )
           ) : (
             <TouchableOpacity onPress={showPaywall} activeOpacity={0.85}>
@@ -269,20 +348,20 @@ export default function StatsTab() {
               </View>
               <Text style={styles.cardTitle}>Top Lifts</Text>
             </View>
-            {!isPro && (
+            {!isPro && !proLoading && (
               <TouchableOpacity onPress={showPaywall} activeOpacity={0.7}>
                 <Ionicons name="lock-closed" size={16} color={T.muted} />
               </TouchableOpacity>
             )}
           </View>
 
-          {isPro ? (
+          {isPro || proLoading ? (
             topLiftsError ? (
               <InlineError
                 message="Couldn't load your top lifts."
                 onRetry={() => void refetchTopLifts()}
               />
-            ) : !topLiftsData ? (
+            ) : topLiftsLoading || proLoading || !topLiftsData ? (
               <View style={{ gap: 8, marginTop: 4 }}>
                 {Array.from({ length: 3 }).map((_, i) => (
                   <Skeleton key={i} width="100%" height={40} radius={8} />
@@ -309,7 +388,9 @@ export default function StatsTab() {
                       </Text>
                     </View>
                     <View style={styles.liftOneRM}>
-                      <Text style={styles.liftOneRMVal}>{fmtWeight(lift.estimatedOneRepMax, unit)}</Text>
+                      <Text style={styles.liftOneRMVal}>
+                        {fmtWeight(lift.estimatedOneRepMax, unit)} {unit}
+                      </Text>
                       <Text style={styles.liftOneRMLabel}>est. 1RM</Text>
                     </View>
                   </TouchableOpacity>

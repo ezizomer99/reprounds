@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import { and, eq, gte, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, sql } from 'drizzle-orm';
 import { createDb } from '../db';
-import { exercises, partners, sessionEntries, sessions } from '../db/schema';
+import { partners, sessionEntries, sessions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
 import { aggregateMatStats, type MatEntryRow } from '../lib/matStats';
@@ -20,8 +20,9 @@ function getDb(env: Env['Bindings']) {
   return createDb(env.HYPERDRIVE?.connectionString ?? env.DATABASE_URL!);
 }
 
-// GET /stats/muscles?since=YYYY-MM-DD
-// Returns distinct muscle groups from exercises done in completed sessions since the given date.
+// GET /stats/muscles?since=YYYY-MM-DD&until=YYYY-MM-DD
+// Muscle groups trained in completed sessions over [since, until), weighted by
+// the completed sets logged against each.
 statsRoutes.get('/muscles', async (c) => {
   const userId = c.get('userId');
   const db = getDb(c.env);
@@ -34,28 +35,62 @@ statsRoutes.get('/muscles', async (c) => {
   const sinceParam = c.req.query('since');
   const since = isIsoDate(sinceParam) ? sinceParam : defaultSince.toISOString().slice(0, 10);
 
-  const rows = await db
-    .selectDistinct({
-      muscleGroup: exercises.muscleGroup,
-      secondaryMuscles: exercises.secondaryMuscles,
-    })
-    .from(sessionEntries)
-    .innerJoin(sessions, eq(sessionEntries.sessionId, sessions.id))
-    .innerJoin(exercises, eq(sessionEntries.exerciseId, exercises.id))
-    .where(
-      and(
-        eq(sessions.userId, userId),
-        eq(sessions.status, 'completed'),
-        gte(sessions.date, since),
-        eq(sessionEntries.kind, 'exercise'),
-        isNotNull(exercises.muscleGroup),
-      ),
-    );
+  // Bounded at both ends, exclusive at the top. `>= since` alone counted a
+  // completed session dated *ahead* of the window — session dates are accepted
+  // years into the future — so a workout logged forward showed up in "Muscles
+  // This Week". The client's own sessionsThisWeek was fixed for exactly this;
+  // the endpoint it sits next to was not. An absent/invalid `until` keeps the
+  // old open-ended behaviour rather than inventing a ceiling.
+  const untilParam = c.req.query('until');
+  const until = isIsoDate(untilParam) ? untilParam : null;
+
+  // Weight per muscle grouping = completed sets, not row count. This was a
+  // selectDistinct, so a single set of curls and eight sets of bench produced
+  // one row each and coloured the heat map identically. Sets (not tonnage) is
+  // the weight: tonnage is dominated by the squat/deadlift pattern and would
+  // paint every user's legs red regardless of how they actually trained.
+  //
+  // The inner query rolls up per entry so an entry with no strength_sets at all
+  // (conditioning work) still lands with a floor of one set instead of dropping
+  // out through the LEFT JOIN.
+  const rows = await db.execute(sql`
+    SELECT
+      x.muscle_group,
+      x.secondary_muscles,
+      SUM(x.sets)::int         AS sets,
+      SUM(x.volume_kg)::float  AS volume_kg
+    FROM (
+      SELECT
+        e.muscle_group,
+        e.secondary_muscles,
+        GREATEST(COUNT(ss.id) FILTER (WHERE ss.completed), 1) AS sets,
+        COALESCE(SUM(ss.weight * ss.reps) FILTER (WHERE ss.completed), 0) AS volume_kg
+      FROM session_entries se
+      JOIN sessions  s ON se.session_id  = s.id
+      JOIN exercises e ON se.exercise_id = e.id
+      LEFT JOIN strength_sets ss ON ss.session_entry_id = se.id
+      WHERE s.user_id = ${userId}
+        AND s.status  = 'completed'
+        AND s.date   >= ${since}
+        ${until ? sql`AND s.date < ${until}` : sql``}
+        AND se.kind   = 'exercise'
+        AND e.muscle_group IS NOT NULL
+      GROUP BY se.id, e.muscle_group, e.secondary_muscles
+    ) x
+    GROUP BY x.muscle_group, x.secondary_muscles
+  `);
 
   const result: MuscleSummaryResponse = {
-    muscles: rows.map((r) => ({
-      muscleGroup: r.muscleGroup,
-      secondaryMuscles: r.secondaryMuscles ?? [],
+    muscles: (rows as unknown as Array<{
+      muscle_group: string;
+      secondary_muscles: string[] | null;
+      sets: number;
+      volume_kg: number;
+    }>).map((r) => ({
+      muscleGroup: r.muscle_group,
+      secondaryMuscles: r.secondary_muscles ?? [],
+      sets: r.sets,
+      volumeKg: r.volume_kg,
     })),
   };
   return c.json(result);

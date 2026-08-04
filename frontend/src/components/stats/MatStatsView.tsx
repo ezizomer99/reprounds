@@ -1,4 +1,4 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import type { StrikeWeapon, StrikingRoundType } from '@app/shared';
 import { grapplingPositionLabel, submissionLabel } from '@app/shared';
 import { useMatStats } from '../../hooks/useStats';
 import { useProGate } from '../../hooks/useProGate';
+import { useTodayISO } from '../../hooks/useTodayISO';
 import { weeksAgoMonday } from '../../lib/statsHelpers';
 import { Skeleton } from '../Skeleton';
 import { InlineError } from '../InlineError';
@@ -56,9 +57,15 @@ export function MatStatsView() {
   const router = useRouter();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const { isPro, showPaywall } = useProGate();
+  // See the note in useProGate: a mid-race `isPro === false` looks exactly like
+  // a free user, so reading it alone showed paying users the upsell blur first.
+  const { isPro, isLoading: proLoading, showPaywall } = useProGate();
 
-  const since = useMemo(() => weeksAgoMonday(WEEKS), []);
+  // Re-derived when the day rolls over rather than frozen at mount. This is a
+  // query key, so it does not self-correct on re-render the way the local
+  // helpers do — an app resumed on Monday kept charting through last Sunday.
+  const todayISO = useTodayISO();
+  const since = useMemo(() => weeksAgoMonday(WEEKS, parseLocalDate(todayISO)), [todayISO]);
   const { data, isLoading, isError, refetch } = useMatStats(since, WEEKS);
 
   const barData = useMemo(
@@ -101,7 +108,11 @@ export function MatStatsView() {
       grap.takedowns > 0 ||
       Object.keys(grap.positions ?? {}).length > 0);
   const hasStriking = !!strik && (strik.rounds > 0 || strik.totalStrikes > 0);
-  const isEmpty = !isLoading && (data?.totals.sessions ?? 0) === 0;
+  // Requires `data`, not just `!isLoading`: a query paused offline is pending
+  // without fetching, so `isLoading` is false while `data` is still undefined —
+  // and "you haven't trained" is the wrong thing to tell someone on a plane.
+  const isEmpty = !!data && data.totals.sessions === 0;
+  const showSkeletons = isLoading || !data;
 
   // One guard above all four loading branches: a failed fetch used to render as
   // an all-zeroes view, indistinguishable from "you haven't trained".
@@ -118,7 +129,7 @@ export function MatStatsView() {
           <Text style={styles.highlightsTitle}>Highlights</Text>
         </View>
 
-        {isLoading ? (
+        {showSkeletons ? (
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
             <Skeleton width="30%" height={72} radius={12} />
             <Skeleton width="30%" height={72} radius={12} />
@@ -171,7 +182,7 @@ export function MatStatsView() {
               </View>
             </View>
 
-            {isLoading ? (
+            {showSkeletons ? (
               <Skeleton width="100%" height={44} radius={8} />
             ) : intensityTotal === 0 ? (
               <Text style={styles.emptyText}>Rate your rounds to see the intensity mix.</Text>
@@ -208,18 +219,22 @@ export function MatStatsView() {
                 </View>
                 <Text style={styles.cardTitle}>Rounds per Week</Text>
               </View>
-              {!isPro && (
+              {!isPro && !proLoading && (
                 <TouchableOpacity onPress={showPaywall} activeOpacity={0.7}>
                   <Ionicons name="lock-closed" size={16} color={T.muted} />
                 </TouchableOpacity>
               )}
             </View>
 
-            {isPro ? (
-              isLoading ? (
+            {isPro || proLoading ? (
+              showSkeletons || proLoading ? (
                 <Skeleton width="100%" height={100} radius={8} />
               ) : (
-                <View style={{ marginTop: 8, overflow: 'hidden' }}>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ marginTop: 8 }}
+                >
                   <BarChart
                     data={barData}
                     barWidth={28}
@@ -238,7 +253,7 @@ export function MatStatsView() {
                     barBorderRadius={4}
                     showGradient
                   />
-                </View>
+                </ScrollView>
               )
             ) : (
               <TouchableOpacity onPress={showPaywall} activeOpacity={0.85}>
@@ -260,15 +275,15 @@ export function MatStatsView() {
                 </View>
                 <Text style={styles.cardTitle}>Sparring Numbers</Text>
               </View>
-              {!isPro && (
+              {!isPro && !proLoading && (
                 <TouchableOpacity onPress={showPaywall} activeOpacity={0.7}>
                   <Ionicons name="lock-closed" size={16} color={T.muted} />
                 </TouchableOpacity>
               )}
             </View>
 
-            {isPro ? (
-              isLoading ? (
+            {isPro || proLoading ? (
+              showSkeletons || proLoading ? (
                 <View style={{ gap: 8, marginTop: 4 }}>
                   <Skeleton width="100%" height={40} radius={8} />
                   <Skeleton width="100%" height={40} radius={8} />
