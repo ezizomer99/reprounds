@@ -25,6 +25,13 @@ import { DaySheet } from '../../../src/components/DaySheet';
 // Scroll window: enough back-history for multi-year training logs without
 // infinite-scroll bookkeeping, and a year ahead for scheduling. "Earlier months"
 // extends the back end on demand so a long-running log is never silently cut off.
+//
+// History is NOT part of the first paint — see `monthsBack` below. The current
+// month has to be index 0 initially, because opening in the middle of this list
+// is what broke it: FlashList v2 has no size estimates and assumes 200px for any
+// unmeasured item, while a MonthGrid is ~360px, so `initialScrollIndex` computed
+// an offset past the not-yet-grown content height and the platform clamped it to
+// the bottom — landing on the last month instead of today's.
 const MONTHS_BACK = 24;
 const MONTHS_FORWARD = 12;
 const MONTHS_PER_EXTENSION = 12;
@@ -47,24 +54,29 @@ export default function CalendarScreen() {
   // month's cached query so it can't strand on a stale snapshot.
   const [sheetISO, setSheetISO] = useState<string | null>(null);
 
-  // The window is anchored to a month captured once, not to a rolling offset from
-  // "now". When the day rolls over past a month boundary the new month is
-  // appended and every existing index keeps its place; deriving the start from
-  // `now` instead would shift index 0 and jump the user's scroll under them.
-  const originRef = useRef<YearMonth>(addMonths(monthOfISO(localTodayISO()), -MONTHS_BACK));
-  const [extraMonthsBack, setExtraMonthsBack] = useState(0);
+  // The back edge is anchored to the month captured once at mount, never to a
+  // rolling offset from "now": when the day rolls over past a month boundary the
+  // new month is appended at the far end and every existing index keeps its
+  // place. Deriving the start from `now` would shift index 0 and jump the user's
+  // scroll under them.
+  const anchorRef = useRef<YearMonth>(monthOfISO(localTodayISO()));
 
-  const origin = useMemo(
-    () => addMonths(originRef.current, -extraMonthsBack),
-    [extraMonthsBack],
-  );
+  // How much history is currently loaded *behind* the current month. Starts at 0
+  // so the first paint puts the current month at index 0 and needs no scrolling
+  // at all — the only way to be certain the calendar opens where it should.
+  // `onLoad` then fills history in behind it (see the FlashList below).
+  const [monthsBack, setMonthsBack] = useState(0);
 
   // Keyed on the month, not the day: a daily rollover must not hand FlashList a
   // fresh `data` array when the set of months hasn't actually changed.
   const todayMonthKey = todayISO.slice(0, 7);
   const months = useMemo<YearMonth[]>(
-    () => monthsBetween(origin, addMonths(monthOfISO(`${todayMonthKey}-01`), MONTHS_FORWARD)),
-    [origin, todayMonthKey],
+    () =>
+      monthsBetween(
+        addMonths(anchorRef.current, -monthsBack),
+        addMonths(monthOfISO(`${todayMonthKey}-01`), MONTHS_FORWARD),
+      ),
+    [monthsBack, todayMonthKey],
   );
 
   // Free tier: only the trailing history window is visible, like History.
@@ -124,7 +136,16 @@ export default function CalendarScreen() {
   }
 
   function loadEarlierMonths() {
-    setExtraMonthsBack((n) => n + MONTHS_PER_EXTENSION);
+    setMonthsBack((n) => n + MONTHS_PER_EXTENSION);
+  }
+
+  // Load the default history once the list has measured itself. Deferring to
+  // `onLoad` rather than an effect matters: prepending is only seamless while
+  // maintainVisibleContentPosition is live (on by default in v2, and gated on the
+  // stable keys this list already supplies via keyExtractor), which is not the
+  // case before the first layout pass.
+  function handleListLoad() {
+    setMonthsBack((n) => (n === 0 ? MONTHS_BACK : n));
   }
 
   return (
@@ -153,23 +174,33 @@ export default function CalendarScreen() {
       <FlashList
         data={months}
         keyExtractor={(m) => `${m.year}-${m.month0}`}
-        initialScrollIndex={MONTHS_BACK}
         extraData={cellExtraData}
-        // No maintainVisibleContentPosition config needed: FlashList v2 keeps the
-        // visible anchor by default, which is what stops "Show earlier months"
-        // from shoving the current month down the screen as it prepends.
+        // Deliberately NO initialScrollIndex: the current month is index 0 on the
+        // first paint, so there is nothing to scroll to. Asking FlashList to open
+        // mid-list is what produced the wrong month — see the note on MONTHS_BACK.
+        //
+        // No maintainVisibleContentPosition config needed either: it is on by
+        // default in v2, and it is what absorbs the prepend below (and "Show
+        // earlier months") so the month on screen stays put.
+        onLoad={handleListLoad}
+        // Always rendered, so the header can never unmount and shift the grid
+        // under the user — the button itself is what's conditional. (It used to
+        // render only for full-access users, and vanished mid-layout for a free
+        // one the moment the entitlement resolved.)
         ListHeaderComponent={
-          canLoadEarlier ? (
-            <TouchableOpacity
-              style={styles.earlierBtn}
-              onPress={loadEarlierMonths}
-              accessibilityRole="button"
-              accessibilityLabel="Show earlier months"
-            >
-              <Ionicons name="chevron-up" size={14} color={T.textDim} />
-              <Text style={styles.earlierText}>Show earlier months</Text>
-            </TouchableOpacity>
-          ) : null
+          <View style={styles.earlierSlot}>
+            {canLoadEarlier && (
+              <TouchableOpacity
+                style={styles.earlierBtn}
+                onPress={loadEarlierMonths}
+                accessibilityRole="button"
+                accessibilityLabel="Show earlier months"
+              >
+                <Ionicons name="chevron-up" size={14} color={T.textDim} />
+                <Text style={styles.earlierText}>Show earlier months</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         }
         renderItem={({ item }) => (
           <View style={styles.monthWrap}>
@@ -230,6 +261,9 @@ function makeStyles(T: ThemeColors) {
 
     monthWrap: { paddingHorizontal: D.pad, paddingTop: 16 },
 
+    // Fixed height whether or not the button is showing, so the header never
+    // changes the offset of the first month.
+    earlierSlot: { height: 46, justifyContent: 'center' },
     earlierBtn: {
       flexDirection: 'row',
       alignItems: 'center',
