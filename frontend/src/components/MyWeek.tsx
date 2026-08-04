@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { MAX_SESSIONS_PAGE, useSessions } from '../hooks/useSession';
-import { mondayOf, weekKey, computeWeekStreak } from '../lib/statsHelpers';
+import { mondayISO, weekKey, computeWeekStreak } from '../lib/statsHelpers';
 import { toISODate } from '../lib/calendar';
 import { F, R, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
@@ -65,7 +65,10 @@ export function MyWeek() {
     const matDates = completed
       .filter((s) => s.kinds?.includes('martial_arts'))
       .map((s) => s.date);
-    const thisWeek = mondayOf(new Date()).toISOString().slice(0, 10);
+    // Must use the same local-date convention as weekKey, which it is
+    // compared against below — toISOString() here made the two disagree by a
+    // day in every timezone ahead of UTC.
+    const thisWeek = mondayISO();
     return {
       gymDays: new Set(gymDates),
       matDays: new Set(matDates),

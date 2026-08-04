@@ -1,5 +1,7 @@
 import {
   mondayOf,
+  mondayISO,
+  weekKey,
   computeWeekStreak,
   sessionsThisWeek,
   avgPerWeek,
@@ -8,8 +10,19 @@ import {
 } from './statsHelpers';
 import type { Session } from '@app/shared';
 
+/** Local `YYYY-MM-DD` — the convention every helper in this module uses. */
 function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/** ISO date of the Monday n days from today. */
+function daysFromToday(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return isoDate(d);
 }
 
 /** ISO date of the Monday n full weeks before the current Monday. */
@@ -89,6 +102,13 @@ describe('sessionsThisWeek', () => {
     const lastMonday = mondayNWeeksAgo(1);
     expect(sessionsThisWeek([makeSession(lastMonday)])).toBe(0);
   });
+
+  // The filter was open-ended (`>= monday`), so anything dated ahead of this
+  // week — a scheduled session — was counted as already trained.
+  it('does not count a session dated after this week', () => {
+    const nextWeek = daysFromToday(14);
+    expect(sessionsThisWeek([makeSession(nextWeek)])).toBe(0);
+  });
 });
 
 // ─── avgPerWeek ───────────────────────────────────────────────────────────────
@@ -108,6 +128,48 @@ describe('avgPerWeek', () => {
     // One session 10 weeks ago should not appear in a 4-week window
     const old = makeSession(mondayNWeeksAgo(10));
     expect(avgPerWeek([old], 4)).toBe(0);
+  });
+
+  // Dividing by the full window understated a new user's rate: two sessions in
+  // their only week read as 0.5/week against a fixed divisor of 4.
+  it('averages over the weeks actually covered, not the whole window', () => {
+    const twoThisWeek = [makeSession(daysFromToday(0)), makeSession(daysFromToday(0))];
+    expect(avgPerWeek(twoThisWeek, 4)).toBe(2);
+  });
+
+  it('still divides by the full window once history covers it', () => {
+    const sessions = [0, 1, 2, 3].map((n) => makeSession(mondayNWeeksAgo(n)));
+    expect(avgPerWeek(sessions, 4)).toBe(1);
+  });
+});
+
+// ─── local-date convention ────────────────────────────────────────────────────
+
+// mondayISO and weekKey are compared against each other by callers (MyWeek's
+// weekCount, the stats tab's muscle window). toISOString() converts to UTC
+// first, so a local Monday 00:00 formatted that way lands on the previous
+// Sunday anywhere ahead of UTC — these pin both to the local convention.
+describe('mondayISO / weekKey', () => {
+  it('returns a Monday in local time', () => {
+    const parsed = new Date(mondayISO() + 'T00:00:00');
+    expect(parsed.getDay()).toBe(1);
+  });
+
+  it('agrees with mondayOf formatted locally', () => {
+    expect(mondayISO()).toBe(isoDate(mondayOf(new Date())));
+  });
+
+  it('maps every day of the current week to the same key', () => {
+    const monday = mondayOf(new Date());
+    const keys = new Set(
+      Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(monday);
+        d.setDate(monday.getDate() + i);
+        return weekKey(isoDate(d));
+      }),
+    );
+    expect(keys.size).toBe(1);
+    expect([...keys][0]).toBe(mondayISO());
   });
 });
 

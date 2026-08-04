@@ -48,3 +48,17 @@ export function updateActiveRestNotifId(notifId: string | null): void {
 export function clearActiveRest(): void {
   activeRest = null;
 }
+
+/**
+ * Clear the countdown only if it belongs to `sessionId`. Returns true when
+ * something was cleared, so the caller knows whether to cancel the scheduled
+ * notification too.
+ *
+ * Deleting a session from another screen used to leave this pointing at a row
+ * that no longer exists, and the "Rest complete" notification still fired.
+ */
+export function clearActiveRestForSession(sessionId: string): boolean {
+  if (activeRest?.sessionId !== sessionId) return false;
+  activeRest = null;
+  return true;
+}

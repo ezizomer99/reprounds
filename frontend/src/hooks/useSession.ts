@@ -19,6 +19,8 @@ import type {
 import * as Crypto from 'expo-crypto';
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../lib/api';
 import { localTodayISO } from '../lib/calendar';
+import { cancelScheduledByKind } from '../lib/notifications';
+import { clearActiveRestForSession } from '../lib/restTimerStore';
 
 const sessionKey = (id: string) => ['session', id] as const;
 
@@ -112,7 +114,11 @@ export function useDeleteSession() {
   const queryClient = useQueryClient();
   return useMutation<void, Error, { id: string }>({
     mutationFn: ({ id }) => apiDelete(`/sessions/${id}`),
-    onSuccess: () => {
+    onSuccess: (_data, { id }) => {
+      // A rest period running for the session being deleted has nothing left to
+      // count down to, but its notification is armed against the wall clock and
+      // would still fire.
+      if (clearActiveRestForSession(id)) void cancelScheduledByKind('rest');
       queryClient.invalidateQueries({ queryKey: ['sessions'] });
       queryClient.invalidateQueries({ queryKey: ['session'] });
     },

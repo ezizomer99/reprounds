@@ -4,7 +4,7 @@ import { createDb } from '../db';
 import { disciplines, exercises, sessionEntries, sessions, strengthSets } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
-import { estimatedOneRepMax } from '@app/shared';
+import { estimatedOneRepMax, NAME_MAX_LENGTH } from '@app/shared';
 import { epleyE1rmSql } from '../lib/e1rm';
 import { isIsoDate, isWithinLength } from '../lib/validate';
 import type {
@@ -115,6 +115,9 @@ exerciseRoutes.post('/', async (c) => {
   if (body.type !== 'strength' && body.type !== 'conditioning') {
     return c.json({ error: 'type must be "strength" or "conditioning"' }, 400);
   }
+  if (!isWithinLength(body.name, NAME_MAX_LENGTH)) {
+    return c.json({ error: `name must be ${NAME_MAX_LENGTH} characters or fewer` }, 400);
+  }
 
   const [row] = await db
     .insert(exercises)
@@ -173,6 +176,9 @@ exerciseRoutes.patch('/:id', async (c) => {
 
   if (body.type !== undefined && body.type !== 'strength' && body.type !== 'conditioning') {
     return c.json({ error: 'type must be "strength" or "conditioning"' }, 400);
+  }
+  if (!isWithinLength(body.name, NAME_MAX_LENGTH)) {
+    return c.json({ error: `name must be ${NAME_MAX_LENGTH} characters or fewer` }, 400);
   }
 
   const updates: Partial<typeof exercises.$inferInsert> = {};

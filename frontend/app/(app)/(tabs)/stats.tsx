@@ -13,7 +13,7 @@ import { BarChart } from 'react-native-gifted-charts';
 import Body from 'react-native-body-highlighter';
 import { MAX_SESSIONS_PAGE, useSessions } from '../../../src/hooks/useSession';
 import { useProGate } from '../../../src/hooks/useProGate';
-import { mondayOf, sessionsThisWeek, avgPerWeek, getWeeklyBarData } from '../../../src/lib/statsHelpers';
+import { mondayISO, sessionsThisWeek, avgPerWeek, getWeeklyBarData } from '../../../src/lib/statsHelpers';
 import { useMuscleSummary, useTopLifts } from '../../../src/hooks/useStats';
 import { aggregateMuscles } from '../../../src/lib/muscleSlugMap';
 import { useUnit } from '../../../src/units/UnitContext';
@@ -38,7 +38,9 @@ export default function StatsTab() {
 
   const { data: sessions, isLoading, isError, refetch } = useSessions('completed', MAX_SESSIONS_PAGE);
 
-  const thisWeekMonday = useMemo(() => mondayOf(new Date()).toISOString().slice(0, 10), []);
+  // Local, not UTC: toISOString() sent the preceding Sunday as the window
+  // start for anyone ahead of UTC, pulling an extra day into the summary.
+  const thisWeekMonday = useMemo(() => mondayISO(), []);
   const { data: muscleData, isError: muscleError, refetch: refetchMuscles } =
     useMuscleSummary(thisWeekMonday);
   const { data: topLiftsData, isError: topLiftsError, refetch: refetchTopLifts } = useTopLifts();

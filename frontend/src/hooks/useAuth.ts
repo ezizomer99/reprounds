@@ -12,6 +12,8 @@ import {
   setGuestUserId,
   clearGuestData,
 } from '../lib/auth';
+import { cancelScheduledByKind } from '../lib/notifications';
+import { clearActiveRest } from '../lib/restTimerStore';
 
 interface MeResponse {
   user: User;
@@ -110,6 +112,21 @@ export function useSignIn() {
   return { signInWithGoogle, signInAsGuest, registerWithEmail, signInWithEmail };
 }
 
+/**
+ * Local state that outlives a signed-in session unless it is torn down
+ * explicitly: the in-memory rest countdown and the OS notification armed
+ * alongside it.
+ *
+ * The rest timer is deliberately built to survive leaving the session screen —
+ * the notification is scheduled against the wall clock so it fires with the app
+ * backgrounded or killed. Signing out never cancelled it, so the phone went on
+ * to ding "Rest complete" for an account no longer signed in.
+ */
+async function clearLocalTimers(): Promise<void> {
+  clearActiveRest();
+  await cancelScheduledByKind('rest');
+}
+
 export function useSignOut() {
   // Note: deliberately does NOT call clearGuestData(). This same function backs
   // the "Exit Guest Mode" button in settings, and dropping the deviceId would
@@ -117,6 +134,7 @@ export function useSignOut() {
   // that guest's entire training history.
   async function signOut(): Promise<void> {
     await clearSessionToken();
+    await clearLocalTimers();
     try { await GoogleSignin.signOut(); } catch { /* ignore if not signed in via Google */ }
     await clearPersistedCache();
   }
@@ -131,6 +149,7 @@ export function useDeleteAccount() {
     await apiDelete('/auth/me');
     await clearSessionToken();
     await clearGuestData();
+    await clearLocalTimers();
     try { await GoogleSignin.signOut(); } catch { /* ignore if not signed in via Google */ }
     await clearPersistedCache();
   }
