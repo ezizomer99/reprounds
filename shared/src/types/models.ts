@@ -603,6 +603,17 @@ export interface ExerciseProgressionResponse {
 export interface MuscleSummaryItem {
   muscleGroup: string | null;
   secondaryMuscles: string[];
+  /**
+   * Completed working sets logged against this muscle grouping over the window.
+   *
+   * The heat map's colour scale is driven by this, not by row count: the
+   * endpoint used to return DISTINCT (muscleGroup, secondaryMuscles) tuples, so
+   * one set of curls and eight sets of bench coloured identically. An entry with
+   * no strength sets at all (conditioning work) still counts as 1.
+   */
+  sets: number;
+  /** Tonnage (kg) from completed sets. 0 for bodyweight and conditioning work. */
+  volumeKg: number;
 }
 
 export interface MuscleSummaryResponse {
