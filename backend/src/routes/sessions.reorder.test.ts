@@ -24,7 +24,7 @@ import { signJwt } from '../lib/jwt';
 
 const SECRET = 'test-secret-at-least-32-chars-long-xxxxx';
 const USER_ID = 'user-abc';
-const SESSION_ID = 'sess-abc';
+const SESSION_ID = '22222222-2222-4222-8222-222222222222';
 const env = { JWT_SECRET: SECRET, DATABASE_URL: 'postgres://test' };
 
 function makeApp() {
@@ -81,6 +81,12 @@ beforeEach(() => {
   });
 });
 
+// Entry ids are real UUIDs: the endpoint now shape-checks the list before it
+// reaches Postgres, the same way the routines reorder always has.
+const E1 = 'e1111111-1111-4111-8111-111111111111';
+const E2 = 'e2222222-2222-4222-8222-222222222222';
+const E3 = 'e3333333-3333-4333-8333-333333333333';
+
 describe('PUT /sessions/:id/entries/order', () => {
   it('writes sequential orderIndex values for the given entry order', async () => {
     mock.selectQueue.push([{ id: SESSION_ID }]); // owner check passes
@@ -90,7 +96,7 @@ describe('PUT /sessions/:id/entries/order', () => {
       {
         method: 'PUT',
         headers: { ...(await bearer()), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order: ['e3', 'e1', 'e2'] }),
+        body: JSON.stringify({ order: [E3, E1, E2] }),
       },
       env,
     );
@@ -108,7 +114,7 @@ describe('PUT /sessions/:id/entries/order', () => {
       {
         method: 'PUT',
         headers: { ...(await bearer()), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order: ['e1'] }),
+        body: JSON.stringify({ order: [E1] }),
       },
       env,
     );

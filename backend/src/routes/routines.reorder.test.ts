@@ -116,7 +116,7 @@ async function reorder(order: unknown, sub = USER_ID) {
 
 describe('PUT /routines/order', () => {
   it('writes sequential orderIndex values in the given routine order', async () => {
-    const res = await reorder(['r3', 'r1', 'r2']);
+    const res = await reorder(['ba333333-3333-4333-8333-333333333333', 'ba111111-1111-4111-8111-111111111111', 'ba222222-2222-4222-8222-222222222222']);
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ success: true });
@@ -124,7 +124,7 @@ describe('PUT /routines/order', () => {
   });
 
   it('scopes every update by user_id so one user cannot reindex another\'s routines', async () => {
-    await reorder(['r1', 'r2']);
+    await reorder(['ba111111-1111-4111-8111-111111111111', 'ba222222-2222-4222-8222-222222222222']);
 
     expect(mock.wheres).toHaveLength(2);
     for (const where of mock.wheres) {
@@ -137,7 +137,7 @@ describe('PUT /routines/order', () => {
   it('rejects an empty, missing, or non-string order array', async () => {
     expect((await reorder([])).status).toBe(400);
     expect((await reorder(undefined)).status).toBe(400);
-    expect((await reorder('r1')).status).toBe(400);
+    expect((await reorder('ba111111-1111-4111-8111-111111111111')).status).toBe(400);
     expect((await reorder([1, 2])).status).toBe(400);
     expect(mock.updates).toEqual([]);
   });
@@ -155,7 +155,7 @@ describe('PUT /routines/order', () => {
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order: ['r1'] }),
+        body: JSON.stringify({ order: ['ba111111-1111-4111-8111-111111111111'] }),
       },
       env,
     );

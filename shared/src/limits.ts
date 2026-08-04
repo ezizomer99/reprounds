@@ -34,14 +34,57 @@ export const FIGHT_ROUND_RANGE: NumericRange = { min: 1, max: 100 };
 /** Stripes on a belt promotion. */
 export const STRIPES_RANGE: NumericRange = { min: 0, max: 20 };
 
-/** Custom rest-timer duration in seconds. Matches the existing 1-600 UI cap. */
+/**
+ * Custom rest-timer duration in seconds, as typed into the custom-duration
+ * field. Matches the existing 1-600 UI cap — the field offers no way to mean
+ * "off", so 0 is deliberately outside it.
+ */
 export const REST_SECONDS_RANGE: NumericRange = { min: 1, max: 600 };
+
+/**
+ * Rest duration as *stored* on an entry, which additionally allows 0 — the
+ * "Off" preset. Validate persisted values against this, never against
+ * REST_SECONDS_RANGE, or picking "Off" is rejected.
+ */
+export const REST_SECONDS_STORED_RANGE: NumericRange = { min: 0, max: 600 };
 
 /** Length of a martial-arts round, in minutes. */
 export const ROUND_MINUTES_RANGE: NumericRange = { min: 0, max: 600 };
+
+/**
+ * Position of an entry within a session, or an item within a routine. Generous
+ * — the point is to reject a non-integer or an int4 overflow, both of which
+ * used to reach Postgres and surface as a 500.
+ */
+export const ORDER_INDEX_RANGE: NumericRange = { min: 0, max: 10_000 };
+
+/** Position of a set within an entry. 1-based, matching the UI. */
+export const SET_NUMBER_RANGE: NumericRange = { min: 1, max: 1_000 };
+
+/** Superset grouping key. Arbitrary but bounded; only equality matters. */
+export const SUPERSET_GROUP_RANGE: NumericRange = { min: 0, max: 1_000 };
+
+/** Recorded length of a session. Capped at a (long) 24 hours. */
+export const DURATION_MINUTES_RANGE: NumericRange = { min: 0, max: 1_440 };
 
 // Free-text caps. Every text column in the schema is an unbounded Postgres
 // `text`, so these are a client-side sanity guard (a stuck key or a paste of a
 // whole document), not a mirror of a DB constraint.
 export const NAME_MAX_LENGTH = 120;
 export const NOTES_MAX_LENGTH = 2000;
+
+/**
+ * Serialized size cap for the free-form `details` JSONB on a session entry (the
+ * rounds payload, technique tags, custom field_config answers). Unbounded jsonb
+ * is the one request field with no natural ceiling; a real mat session
+ * serializes to a few KB, so this is generous while still refusing a payload
+ * that could bloat the row.
+ */
+export const DETAILS_MAX_BYTES = 64_000;
+
+/**
+ * Upper bound on ids accepted by a reorder endpoint. Each id costs one
+ * round-trip inside a transaction, so this caps the work one request can queue.
+ * Far above any realistic routine or session length.
+ */
+export const MAX_REORDER_IDS = 500;

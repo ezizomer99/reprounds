@@ -6,6 +6,7 @@ import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
 import { estimatedOneRepMax } from '@app/shared';
 import { epleyE1rmSql } from '../lib/e1rm';
+import { isIsoDate, isWithinLength } from '../lib/validate';
 import type {
   CreateExerciseRequest,
   Exercise,
@@ -407,7 +408,7 @@ exerciseRoutes.get('/:id/progression', async (c) => {
 
   const sinceParam = c.req.query('since');
   const since =
-    sinceParam && /^\d{4}-\d{2}-\d{2}$/.test(sinceParam)
+    isIsoDate(sinceParam)
       ? sinceParam
       : new Date(Date.now() - 2 * 365.25 * 86_400_000).toISOString().slice(0, 10);
 

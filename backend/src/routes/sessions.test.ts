@@ -33,8 +33,8 @@ import { signJwt } from '../lib/jwt';
 
 const SECRET = 'test-secret-at-least-32-chars-long-xxxxx';
 const USER_ID = 'user-abc';
-const SESSION_ID = 'sess-abc';
-const ENTRY_ID = 'entry-abc';
+const SESSION_ID = '22222222-2222-4222-8222-222222222222';
+const ENTRY_ID = '33333333-3333-4333-8333-333333333333';
 const SET_ID = 'set-abc';
 const env = { JWT_SECRET: SECRET, DATABASE_URL: 'postgres://test' };
 
@@ -178,7 +178,7 @@ describe('POST /sessions', () => {
     }, env);
 
     expect(res.status).toBe(400);
-    expect((await res.json() as { error: string }).error).toBe('date is required');
+    expect((await res.json() as { error: string }).error).toBe('date must be YYYY-MM-DD');
     // The date check happens before any DB call.
     expect(mock.select).not.toHaveBeenCalled();
   });
@@ -213,7 +213,7 @@ describe('POST /sessions', () => {
   });
 
   it('rejects a mixed-kind routine started without a kind (never a combined session)', async () => {
-    mock.selectQueue.push([{ id: 'routine-1' }]); // routine ownership ✓
+    mock.selectQueue.push([{ id: '66666666-6666-4666-8666-666666666666' }]); // routine ownership ✓
     mock.selectQueue.push([                        // routine items span both kinds
       { kind: 'exercise', exerciseId: 'ex-1', disciplineId: null, orderIndex: 0, supersetGroup: null, defaultRestSeconds: null, target: null },
       { kind: 'martial_arts', exerciseId: null, disciplineId: 'disc-1', orderIndex: 1, supersetGroup: null, defaultRestSeconds: null, target: null },
@@ -222,7 +222,7 @@ describe('POST /sessions', () => {
     const res = await makeApp().request('/sessions', {
       method: 'POST',
       headers: { ...(await bearer()), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: '2026-07-03', routineId: 'routine-1' }),
+      body: JSON.stringify({ date: '2026-07-03', routineId: '66666666-6666-4666-8666-666666666666' }),
     }, env);
 
     expect(res.status).toBe(400);
@@ -235,7 +235,7 @@ describe('POST /sessions', () => {
 
   it('starts one part of a mixed-kind routine when a kind is given', async () => {
     mock.insertedRow = fakeSessionRow;
-    mock.selectQueue.push([{ id: 'routine-1' }]); // routine ownership ✓
+    mock.selectQueue.push([{ id: '66666666-6666-4666-8666-666666666666' }]); // routine ownership ✓
     mock.selectQueue.push([                        // routine items span both kinds
       { kind: 'exercise', exerciseId: 'ex-1', disciplineId: null, orderIndex: 0, supersetGroup: null, defaultRestSeconds: null, target: null },
       { kind: 'martial_arts', exerciseId: null, disciplineId: 'disc-1', orderIndex: 1, supersetGroup: null, defaultRestSeconds: null, target: null },
@@ -248,7 +248,7 @@ describe('POST /sessions', () => {
     const res = await makeApp().request('/sessions', {
       method: 'POST',
       headers: { ...(await bearer()), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: '2026-07-03', routineId: 'routine-1', kind: 'exercise' }),
+      body: JSON.stringify({ date: '2026-07-03', routineId: '66666666-6666-4666-8666-666666666666', kind: 'exercise' }),
     }, env);
 
     expect(res.status).toBe(201);
@@ -418,7 +418,7 @@ describe('DELETE /sessions/:id/entries/:entryId', () => {
 // PATCH /sessions/:id/entries/:entryId — exerciseId swap
 // ---------------------------------------------------------------------------
 describe('PATCH /sessions/:id/entries/:entryId — exerciseId swap', () => {
-  const NEW_EXERCISE_ID = 'ex-new-abc';
+  const NEW_EXERCISE_ID = '77777777-7777-4777-8777-777777777777';
 
   it('returns 400 when trying to swap exerciseId to null', async () => {
     mock.selectQueue.push([{ id: SESSION_ID }]); // session owned ✓
@@ -528,7 +528,7 @@ describe('POST /sessions/:id/entries', () => {
       {
         method: 'POST',
         headers: { ...(await bearer()), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind: 'exercise', exerciseId: 'ex-other-user' }),
+        body: JSON.stringify({ kind: 'exercise', exerciseId: 'ffffffff-eeee-4eee-8eee-eeeeeeeeeeee' }),
       },
       env,
     );
@@ -547,7 +547,7 @@ describe('POST /sessions/:id/entries', () => {
       {
         method: 'POST',
         headers: { ...(await bearer()), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kind: 'martial_arts', disciplineId: 'disc-other-user' }),
+        body: JSON.stringify({ kind: 'martial_arts', disciplineId: 'ffffffff-dddd-4ddd-8ddd-dddddddddddd' }),
       },
       env,
     );
@@ -651,7 +651,7 @@ describe('PUT /sessions/:id/focuses', () => {
     const res = await makeApp().request(`/sessions/${SESSION_ID}/focuses`, {
       method: 'PUT',
       headers: { ...(await bearer()), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ focusIds: ['focus-1'] }),
+      body: JSON.stringify({ focusIds: ['88888888-8888-4888-8888-888888888888'] }),
     }, env);
 
     expect(res.status).toBe(404);
@@ -679,7 +679,7 @@ describe('PUT /sessions/:id/focuses', () => {
     const res = await makeApp().request(`/sessions/${SESSION_ID}/focuses`, {
       method: 'PUT',
       headers: { ...(await bearer()), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ focusIds: ['focus-foreign'] }),
+      body: JSON.stringify({ focusIds: ['99999999-9999-4999-8999-999999999999'] }),
     }, env);
 
     expect(res.status).toBe(400);
@@ -690,17 +690,17 @@ describe('PUT /sessions/:id/focuses', () => {
 
   it('replaces the links in a transaction and echoes the deduped focusIds', async () => {
     mock.selectQueue.push([{ id: SESSION_ID }]);          // owner check ✓
-    mock.selectQueue.push([{ id: 'focus-1' }]);           // both refs resolve to one owned focus
+    mock.selectQueue.push([{ id: '88888888-8888-4888-8888-888888888888' }]);           // both refs resolve to one owned focus
 
     const res = await makeApp().request(`/sessions/${SESSION_ID}/focuses`, {
       method: 'PUT',
       headers: { ...(await bearer()), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ focusIds: ['focus-1', 'focus-1'] }),
+      body: JSON.stringify({ focusIds: ['88888888-8888-4888-8888-888888888888', '88888888-8888-4888-8888-888888888888'] }),
     }, env);
 
     expect(res.status).toBe(200);
     expect(mock.transaction).toHaveBeenCalledTimes(1);
-    expect((await res.json() as { focusIds: string[] }).focusIds).toEqual(['focus-1']);
+    expect((await res.json() as { focusIds: string[] }).focusIds).toEqual(['88888888-8888-4888-8888-888888888888']);
   });
 
   it('clears all links for an empty focusIds array without an ownership query', async () => {
@@ -743,7 +743,7 @@ describe('POST /sessions/:id/complete', () => {
       completedAt: new Date('2026-07-03T12:00:00Z'),
     };
 
-    mock.selectQueue.push([{ id: SESSION_ID }]); // owner check ✓
+    mock.selectQueue.push([{ id: SESSION_ID, status: 'in_progress' }]); // owner check ✓
     // fetchSessionWithEntries after the update:
     mock.selectQueue.push([completedRow]);         // session row
     mock.selectQueue.push([]);                     // entries (empty → no sets query)
@@ -766,7 +766,7 @@ describe('POST /sessions/:id/complete', () => {
   });
 
   it('returns 400 for a malformed backdate', async () => {
-    mock.selectQueue.push([{ id: SESSION_ID }]); // owner check ✓
+    mock.selectQueue.push([{ id: SESSION_ID, status: 'in_progress' }]); // owner check ✓
 
     const res = await makeApp().request(`/sessions/${SESSION_ID}/complete`, {
       method: 'POST',

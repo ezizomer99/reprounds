@@ -5,6 +5,8 @@ import { disciplines, exercises, routineItems, routines, sessions } from '../db/
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
 import { disciplineVisible, exerciseVisible } from '../lib/ownership';
+import { validateIdList } from '../lib/validate';
+import { MAX_REORDER_IDS } from '@app/shared';
 import type {
   AddRoutineItemRequest,
   CreateRoutineRequest,
@@ -20,9 +22,6 @@ import type {
 type Env = AppEnv;
 
 const routineRoutes = new Hono<Env>();
-
-// Upper bound on ids accepted by the reorder endpoints.
-const MAX_REORDER_IDS = 500;
 
 routineRoutes.use('*', authMiddleware);
 
@@ -247,19 +246,8 @@ routineRoutes.put('/order', async (c) => {
     return c.json({ error: 'Invalid request body' }, 400);
   }
 
-  if (!Array.isArray(body.order) || body.order.length === 0) {
-    return c.json({ error: 'order must be a non-empty array of routine IDs' }, 400);
-  }
-
-  if (body.order.some((id) => typeof id !== 'string')) {
-    return c.json({ error: 'order must be a non-empty array of routine IDs' }, 400);
-  }
-
-  // Each id costs one round-trip inside the transaction, so cap the work a
-  // single request can queue. Far above any realistic routine count.
-  if (body.order.length > MAX_REORDER_IDS) {
-    return c.json({ error: 'order array too large' }, 400);
-  }
+  const orderErr = validateIdList(body.order, MAX_REORDER_IDS, 'order', 'routine ID');
+  if (orderErr) return c.json({ error: orderErr }, 400);
 
   await db.transaction(async (tx) => {
     for (let i = 0; i < body.order.length; i++) {
@@ -520,13 +508,8 @@ routineRoutes.put('/:id/items/order', async (c) => {
     return c.json({ error: 'Invalid request body' }, 400);
   }
 
-  if (!Array.isArray(body.order) || body.order.length === 0) {
-    return c.json({ error: 'order must be a non-empty array of item IDs' }, 400);
-  }
-
-  if (body.order.length > MAX_REORDER_IDS) {
-    return c.json({ error: 'order array too large' }, 400);
-  }
+  const orderErr = validateIdList(body.order, MAX_REORDER_IDS, 'order', 'item ID');
+  if (orderErr) return c.json({ error: orderErr }, 400);
 
   await db.transaction(async (tx) => {
     for (let i = 0; i < body.order.length; i++) {

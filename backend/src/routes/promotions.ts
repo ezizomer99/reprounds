@@ -5,7 +5,8 @@ import { rankPromotions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
 import { disciplineVisible } from '../lib/ownership';
-import { isNumberInRange, STRIPES_RANGE } from '@app/shared';
+import { isNumberInRange, NAME_MAX_LENGTH, NOTES_MAX_LENGTH, STRIPES_RANGE } from '@app/shared';
+import { isIsoDate, isUuid, isWithinLength } from '../lib/validate';
 import type {
   CreateRankPromotionRequest,
   RankPromotion,
@@ -38,6 +39,10 @@ promotionRoutes.get('/', async (c) => {
   const disciplineId = c.req.query('disciplineId');
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
+  if (disciplineId !== undefined && !isUuid(disciplineId)) {
+    return c.json({ error: 'Invalid disciplineId' }, 400);
+  }
+
   const where = disciplineId
     ? and(eq(rankPromotions.userId, userId), eq(rankPromotions.disciplineId, disciplineId))
     : eq(rankPromotions.userId, userId);
@@ -65,6 +70,18 @@ promotionRoutes.post('/', async (c) => {
   }
   if (body.stripes != null && !isNumberInRange(body.stripes, STRIPES_RANGE.min, STRIPES_RANGE.max)) {
     return c.json({ error: 'Invalid stripes' }, 400);
+  }
+  if (!isUuid(body.disciplineId)) {
+    return c.json({ error: 'Invalid disciplineId' }, 400);
+  }
+  if (!isIsoDate(body.date)) {
+    return c.json({ error: 'date must be YYYY-MM-DD' }, 400);
+  }
+  if (!isWithinLength(rank, NAME_MAX_LENGTH)) {
+    return c.json({ error: `rank must be ${NAME_MAX_LENGTH} characters or fewer` }, 400);
+  }
+  if (!isWithinLength(body.notes, NOTES_MAX_LENGTH)) {
+    return c.json({ error: `notes must be ${NOTES_MAX_LENGTH} characters or fewer` }, 400);
   }
 
   // Guard against tagging a promotion to another user's private discipline (IDOR).
@@ -102,11 +119,23 @@ promotionRoutes.patch('/:id', async (c) => {
   if (body.stripes != null && !isNumberInRange(body.stripes, STRIPES_RANGE.min, STRIPES_RANGE.max)) {
     return c.json({ error: 'Invalid stripes' }, 400);
   }
+  if (body.disciplineId !== undefined && !isUuid(body.disciplineId)) {
+    return c.json({ error: 'Invalid disciplineId' }, 400);
+  }
   if (body.disciplineId !== undefined && !(await disciplineVisible(db, body.disciplineId, userId))) {
     return c.json({ error: 'Discipline not found' }, 404);
   }
   if (body.rank !== undefined && !body.rank.trim()) {
     return c.json({ error: 'rank cannot be empty' }, 400);
+  }
+  if (body.date !== undefined && !isIsoDate(body.date)) {
+    return c.json({ error: 'date must be YYYY-MM-DD' }, 400);
+  }
+  if (!isWithinLength(body.rank, NAME_MAX_LENGTH)) {
+    return c.json({ error: `rank must be ${NAME_MAX_LENGTH} characters or fewer` }, 400);
+  }
+  if (!isWithinLength(body.notes, NOTES_MAX_LENGTH)) {
+    return c.json({ error: `notes must be ${NOTES_MAX_LENGTH} characters or fewer` }, 400);
   }
 
   const updates: Partial<typeof rankPromotions.$inferInsert> = {};

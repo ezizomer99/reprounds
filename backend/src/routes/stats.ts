@@ -7,6 +7,7 @@ import type { AppEnv } from '../env';
 import { aggregateMatStats, type MatEntryRow } from '../lib/matStats';
 import { aggregatePartnerStats } from '../lib/partnerStats';
 import { epleyE1rmSql } from '../lib/e1rm';
+import { isIsoDate } from '../lib/validate';
 import type { MuscleSummaryResponse, PartnerStatsResponse, TopLiftsResponse } from '@app/shared';
 
 type Env = AppEnv;
@@ -27,7 +28,11 @@ statsRoutes.get('/muscles', async (c) => {
 
   const defaultSince = new Date();
   defaultSince.setDate(defaultSince.getDate() - 7);
-  const since = c.req.query('since') ?? defaultSince.toISOString().slice(0, 10);
+  // The other three stats endpoints validate `since` and fall back on garbage;
+  // this one passed the raw param straight into a date comparison, so a bad
+  // value was a 500 instead of a default window.
+  const sinceParam = c.req.query('since');
+  const since = isIsoDate(sinceParam) ? sinceParam : defaultSince.toISOString().slice(0, 10);
 
   const rows = await db
     .selectDistinct({
@@ -66,7 +71,7 @@ statsRoutes.get('/top-lifts', async (c) => {
   // traverse a power user's entire training history on every stats view.
   const sinceParam = c.req.query('since');
   const since =
-    sinceParam && /^\d{4}-\d{2}-\d{2}$/.test(sinceParam)
+    isIsoDate(sinceParam)
       ? sinceParam
       : new Date(Date.now() - 2 * 365.25 * 86_400_000).toISOString().slice(0, 10);
 
@@ -131,7 +136,7 @@ statsRoutes.get('/mat', async (c) => {
 
   const sinceParam = c.req.query('since');
   let since: string;
-  if (sinceParam && /^\d{4}-\d{2}-\d{2}$/.test(sinceParam)) {
+  if (isIsoDate(sinceParam)) {
     since = sinceParam;
   } else {
     // Default: UTC Monday of the week (weeks - 1) weeks back.
@@ -175,7 +180,7 @@ statsRoutes.get('/partners', async (c) => {
 
   const sinceParam = c.req.query('since');
   const since =
-    sinceParam && /^\d{4}-\d{2}-\d{2}$/.test(sinceParam)
+    isIsoDate(sinceParam)
       ? sinceParam
       : new Date(Date.now() - 365 * 86_400_000).toISOString().slice(0, 10);
 

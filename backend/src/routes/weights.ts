@@ -4,7 +4,8 @@ import { createDb } from '../db';
 import { weightLogs } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
-import { isNumberInRange, WEIGHT_KG_RANGE } from '@app/shared';
+import { isNumberInRange, NOTES_MAX_LENGTH, WEIGHT_KG_RANGE } from '@app/shared';
+import { isIsoDate, isWithinLength } from '../lib/validate';
 import type {
   CreateWeightLogRequest,
   UpdateWeightLogRequest,
@@ -54,8 +55,11 @@ weightRoutes.post('/', async (c) => {
     return c.json({ error: 'Invalid request body' }, 400);
   }
 
-  if (!body.date || !isNumberInRange(body.weightKg, WEIGHT_KG_RANGE.min, WEIGHT_KG_RANGE.max)) {
-    return c.json({ error: 'date and a weightKg between 0 and 1000 are required' }, 400);
+  if (!isIsoDate(body.date) || !isNumberInRange(body.weightKg, WEIGHT_KG_RANGE.min, WEIGHT_KG_RANGE.max)) {
+    return c.json({ error: 'a date (YYYY-MM-DD) and a weightKg between 0 and 1000 are required' }, 400);
+  }
+  if (!isWithinLength(body.notes, NOTES_MAX_LENGTH)) {
+    return c.json({ error: `notes must be ${NOTES_MAX_LENGTH} characters or fewer` }, 400);
   }
 
   // One weigh-in per day: if this date already has an entry, update it rather
@@ -102,6 +106,12 @@ weightRoutes.patch('/:id', async (c) => {
 
   if (body.weightKg !== undefined && !isNumberInRange(body.weightKg, WEIGHT_KG_RANGE.min, WEIGHT_KG_RANGE.max)) {
     return c.json({ error: 'weightKg must be between 0 and 1000' }, 400);
+  }
+  if (body.date !== undefined && !isIsoDate(body.date)) {
+    return c.json({ error: 'date must be YYYY-MM-DD' }, 400);
+  }
+  if (!isWithinLength(body.notes, NOTES_MAX_LENGTH)) {
+    return c.json({ error: `notes must be ${NOTES_MAX_LENGTH} characters or fewer` }, 400);
   }
 
   const updates: Partial<typeof weightLogs.$inferInsert> = {};

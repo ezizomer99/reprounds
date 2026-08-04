@@ -25,9 +25,9 @@ import { signJwt } from '../lib/jwt';
 
 const SECRET = 'test-secret-at-least-32-chars-long-xxxxx';
 const USER_ID = 'user-abc';
-const SESSION_ID = 'sess-abc';
-const EXERCISE_ID = 'ex-abc';
-const DISCIPLINE_ID = 'disc-abc';
+const SESSION_ID = '22222222-2222-4222-8222-222222222222';
+const EXERCISE_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const DISCIPLINE_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const env = { JWT_SECRET: SECRET, DATABASE_URL: 'postgres://test' };
 
 function makeApp() {
