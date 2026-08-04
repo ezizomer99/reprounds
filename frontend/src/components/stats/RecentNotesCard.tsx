@@ -8,9 +8,10 @@ import { InlineError } from '../InlineError';
 import { F, R, ThemeColors } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeContext';
 import { withAlpha } from '../../lib/color';
+import { parseLocalDate } from '../../lib/calendar';
 
 function fmtDate(iso: string): string {
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', {
+  return parseLocalDate(iso).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
   });

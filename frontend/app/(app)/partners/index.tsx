@@ -19,6 +19,7 @@ import { Skeleton } from '../../../src/components/Skeleton';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
+import { parseLocalDate } from '../../../src/lib/calendar';
 
 function fmtMatTime(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
@@ -29,7 +30,7 @@ function fmtMatTime(minutes: number): string {
 
 function fmtLastDate(iso: string | null): string {
   if (!iso) return '—';
-  return new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return parseLocalDate(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 export default function PartnersScreen() {

@@ -20,18 +20,23 @@ export default function NewSessionScreen() {
   const createSession = useCreateSession();
 
   // Arriving from the calendar with a ?date=:
-  //  - mode omitted  → schedule mode: create a 'planned' session on that future
-  //    date and return to the calendar rather than entering the live logger.
+  //  - mode=schedule → create a 'planned' session on that future date and return
+  //    to the calendar rather than entering the live logger.
   //  - mode=log      → backfill mode: the workout already happened, so create a
   //    normal session dated that day and go straight into the logger.
+  //
+  // Scheduling must be requested explicitly. It used to be the default for any
+  // ?date= without mode=log, so a caller that forgot `mode` — or a deep link —
+  // silently created a planned session, and on a past date that session was
+  // immediately overdue. Defaulting to backfill fails safe instead.
   const { date: calendarDate, mode } = useLocalSearchParams<{
     date?: string;
     mode?: 'schedule' | 'log';
   }>();
-  const isBackfill = !!calendarDate && mode === 'log';
-  const isScheduling = !!calendarDate && !isBackfill;
-
   const todayISO = localTodayISO();
+  // A past date can only ever be a backfill, whatever the caller asked for.
+  const isScheduling = !!calendarDate && mode === 'schedule' && calendarDate >= todayISO;
+  const isBackfill = !!calendarDate && !isScheduling;
 
   function handleActiveSessionConflict(err: unknown) {
     const e = err as { status?: number; body?: { sessionId?: string } };

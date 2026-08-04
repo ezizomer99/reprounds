@@ -11,6 +11,7 @@ import {
   sessions,
   strengthSets,
   trainingFocuses,
+  users,
 } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
@@ -34,6 +35,10 @@ import {
   SET_NUMBER_RANGE,
   SUPERSET_GROUP_RANGE,
   WEIGHT_KG_RANGE,
+  anyDateWindow,
+  isWithinWindow,
+  plannedDateWindow,
+  utcTodayISO,
 } from '@app/shared';
 import {
   isIntInRange,
@@ -323,6 +328,47 @@ function validateSessionFields(body: {
   return null;
 }
 
+/**
+ * Raised inside the create transaction when the caller already has a live
+ * session, so the partially-inserted row rolls back with it. Carries the id so
+ * the handler can hand the client a Resume target.
+ */
+class ActiveSessionExists extends Error {
+  constructor(readonly sessionId: string) {
+    super('active_session_exists');
+  }
+}
+
+/**
+ * Bounds a session's date. `isIsoDate` already guarantees it names a real day;
+ * this decides whether it's a *plausible* one.
+ *
+ * Two windows, because the two directions mean different things. Backfilling a
+ * past workout is a first-class feature, so a non-planned session only has to
+ * clear the absurd-value range. A `planned` session is a workout scheduled for
+ * later, and one dated in the past is instantly "Overdue" — which used to be
+ * creatable from a calendar whose idea of "today" had gone stale overnight, or
+ * from a reschedule picker with no lower bound at all.
+ *
+ * The planned floor carries a day of slack: the Worker only knows UTC and cannot
+ * know the device's offset, which spans UTC−12…UTC+14. Without the slack a user
+ * scheduling for their own "today" would be rejected on the wrong side of the
+ * date line; with it, a genuinely past date still is.
+ */
+function validateSessionDate(
+  date: string,
+  isPlanned: boolean,
+): { error: string; min: string; max: string } | null {
+  const today = utcTodayISO();
+  const window = isPlanned ? plannedDateWindow(today) : anyDateWindow(today);
+  if (isWithinWindow(date, window)) return null;
+  return {
+    error: isPlanned ? 'planned_date_out_of_range' : 'date_out_of_range',
+    min: window.min,
+    max: window.max,
+  };
+}
+
 // Validates the optional fields on a session-entry create/update body. These
 // went straight to the DB before: a fractional orderIndex or an int4 overflow
 // became a 500, and `details` had no ceiling at all.
@@ -421,6 +467,12 @@ sessionRoutes.get('/', async (c) => {
   if (to !== undefined && !isIsoDate(to)) {
     return c.json({ error: 'to must be YYYY-MM-DD' }, 400);
   }
+  // An inverted range is always a caller bug. It used to return an empty list,
+  // which reads identically to "no sessions in this month" — so a calendar
+  // computing its bounds backwards would look empty rather than broken.
+  if (from !== undefined && to !== undefined && from > to) {
+    return c.json({ error: 'from must be on or before to' }, 400);
+  }
 
   const rows = await db
     .select()
@@ -498,7 +550,10 @@ sessionRoutes.get('/', async (c) => {
     completedSets: volumeMap.get(s.id)?.completedSets ?? 0,
   }));
 
-  return c.json({ sessions: mapped });
+  // A filled page means older rows exist that this response doesn't carry. Range
+  // queries have no cursor yet, so a month past the cap would otherwise render as
+  // blank days with nothing to indicate rows were dropped.
+  return c.json({ sessions: mapped, hasMore: rows.length === limit });
 });
 
 // GET /sessions/:id
@@ -551,6 +606,9 @@ sessionRoutes.post('/', async (c) => {
   }
   const isPlanned = body.status === 'planned';
 
+  const dateErr = validateSessionDate(body.date, isPlanned);
+  if (dateErr) return c.json(dateErr, 400);
+
   // The routine the session is created from must belong to the caller —
   // otherwise the prefill below would read (and echo back) another user's
   // routine structure from a leaked UUID.
@@ -583,20 +641,6 @@ sessionRoutes.post('/', async (c) => {
     routineSeedItems = body.kind ? allItems.filter((i) => i.kind === body.kind) : allItems;
   }
 
-  // Scheduling a future workout must not conflict with a live one — only
-  // starting-now sessions are subject to the single-active-session rule.
-  if (!isPlanned) {
-    const [existing] = await db
-      .select({ id: sessions.id })
-      .from(sessions)
-      .where(and(eq(sessions.userId, userId), eq(sessions.status, 'in_progress')))
-      .limit(1);
-
-    if (existing) {
-      return c.json({ error: 'active_session_exists', sessionId: existing.id }, 409);
-    }
-  }
-
   // Seed rest durations for routine exercises without an explicit routine
   // default: the exercise's remembered value from the user's last session.
   // Looked up before the transaction to keep it short.
@@ -615,68 +659,99 @@ sessionRoutes.post('/', async (c) => {
     }
   }
 
-  const newSession = await db.transaction(async (tx) => {
-    const [sess] = await tx
-      .insert(sessions)
-      .values({
-        userId,
-        routineId: body.routineId ?? null,
-        date: body.date,
-        status: isPlanned ? 'planned' : 'in_progress',
-        startedAt: isPlanned ? null : new Date(),
-        notes: body.notes ?? null,
-      })
-      .returning();
+  let newSession: typeof sessions.$inferSelect;
+  try {
+    newSession = await db.transaction(async (tx) => {
+      // Scheduling a future workout must not conflict with a live one — only
+      // starting-now sessions are subject to the single-active-session rule.
+      //
+      // The check and the insert have to be one atomic unit: read-then-insert
+      // outside a transaction let two quick taps both see "no active session"
+      // and both insert one. Locking the caller's own `users` row serialises
+      // concurrent creates per user and touches nothing another user contends
+      // on. A partial unique index would be stronger, but it cannot be built
+      // against accounts that already hold two `in_progress` rows.
+      if (!isPlanned) {
+        await tx.execute(sql`SELECT 1 FROM ${users} WHERE ${users.id} = ${userId} FOR UPDATE`);
 
-    if (routineSeedItems.length > 0) {
-      for (const item of routineSeedItems) {
-        const [entry] = await tx
-          .insert(sessionEntries)
-          .values({
-            sessionId: sess.id,
-            kind: item.kind,
-            exerciseId: item.exerciseId ?? null,
-            disciplineId: item.disciplineId ?? null,
-            orderIndex: item.orderIndex,
-            supersetGroup: item.supersetGroup ?? null,
-            restSeconds:
-              item.kind === 'exercise'
-                ? item.defaultRestSeconds ??
-                  (item.exerciseId ? restHistory.get(item.exerciseId) : null) ??
-                  FALLBACK_REST_SECONDS
-                : null,
-          })
-          .returning();
+        const [existing] = await tx
+          .select({ id: sessions.id })
+          .from(sessions)
+          .where(and(eq(sessions.userId, userId), eq(sessions.status, 'in_progress')))
+          .limit(1);
 
-        // Pre-fill planned sets for exercises that have a target plan.
-        if (item.kind === 'exercise' && item.target) {
-          const t = item.target as {
-            sets?: Array<{
-              setType?: 'warmup' | 'normal' | 'drop' | 'failure' | 'amrap';
-              reps?: number | null;
-              weight?: number | null;
-              durationSeconds?: number | null;
-            }>;
-          };
-          const planned = Array.isArray(t.sets) ? t.sets.slice(0, 30) : [];
-          if (planned.length > 0) {
-            await tx.insert(strengthSets).values(
-              planned.map((p, i) => ({
-                sessionEntryId: entry.id,
-                setNumber: i + 1,
-                setType: p.setType ?? 'normal',
-                reps: p.durationSeconds != null ? p.durationSeconds : (p.reps ?? null),
-                weight: p.weight != null ? String(p.weight) : null,
-                completed: false,
-              })),
-            );
+        if (existing) throw new ActiveSessionExists(existing.id);
+      }
+
+      const [sess] = await tx
+        .insert(sessions)
+        .values({
+          userId,
+          routineId: body.routineId ?? null,
+          date: body.date,
+          status: isPlanned ? 'planned' : 'in_progress',
+          startedAt: isPlanned ? null : new Date(),
+          notes: body.notes ?? null,
+        })
+        .returning();
+
+      if (routineSeedItems.length > 0) {
+        for (const item of routineSeedItems) {
+          const [entry] = await tx
+            .insert(sessionEntries)
+            .values({
+              sessionId: sess.id,
+              kind: item.kind,
+              exerciseId: item.exerciseId ?? null,
+              disciplineId: item.disciplineId ?? null,
+              orderIndex: item.orderIndex,
+              supersetGroup: item.supersetGroup ?? null,
+              restSeconds:
+                item.kind === 'exercise'
+                  ? item.defaultRestSeconds ??
+                    (item.exerciseId ? restHistory.get(item.exerciseId) : null) ??
+                    FALLBACK_REST_SECONDS
+                  : null,
+            })
+            .returning();
+
+          // Pre-fill planned sets for exercises that have a target plan.
+          if (item.kind === 'exercise' && item.target) {
+            const t = item.target as {
+              sets?: Array<{
+                setType?: 'warmup' | 'normal' | 'drop' | 'failure' | 'amrap';
+                reps?: number | null;
+                weight?: number | null;
+                durationSeconds?: number | null;
+              }>;
+            };
+            const planned = Array.isArray(t.sets) ? t.sets.slice(0, 30) : [];
+            if (planned.length > 0) {
+              await tx.insert(strengthSets).values(
+                planned.map((p, i) => ({
+                  sessionEntryId: entry.id,
+                  setNumber: i + 1,
+                  setType: p.setType ?? 'normal',
+                  reps: p.durationSeconds != null ? p.durationSeconds : (p.reps ?? null),
+                  weight: p.weight != null ? String(p.weight) : null,
+                  completed: false,
+                })),
+              );
+            }
           }
         }
       }
-    }
 
-    return sess;
-  });
+      return sess;
+    });
+  } catch (err) {
+    // The conflict is raised from inside the transaction so the insert rolls
+    // back with it; it is a 409, not the 500 an unhandled throw would produce.
+    if (err instanceof ActiveSessionExists) {
+      return c.json({ error: 'active_session_exists', sessionId: err.sessionId }, 409);
+    }
+    throw err;
+  }
 
   const session = await fetchSessionWithEntries(db, newSession.id, userId);
   return c.json({ session }, 201);
@@ -689,7 +764,7 @@ sessionRoutes.patch('/:id', async (c) => {
   const db = getDb(c.env);
 
   const existing = await db
-    .select({ id: sessions.id })
+    .select({ id: sessions.id, status: sessions.status })
     .from(sessions)
     .where(and(eq(sessions.id, id), eq(sessions.userId, userId)))
     .limit(1);
@@ -712,6 +787,12 @@ sessionRoutes.patch('/:id', async (c) => {
   if ('durationMinutes' in body) updates.durationMinutes = body.durationMinutes ?? null;
   if ('date' in body) {
     if (!isIsoDate(body.date)) return c.json({ error: 'date must be YYYY-MM-DD' }, 400);
+    // This is the calendar's reschedule path. Moving a *planned* session into the
+    // past is what the create guard exists to prevent, so it is bounded the same
+    // way; a completed session stays freely backdatable, because correcting the
+    // date on a workout that already happened is the point.
+    const dateErr = validateSessionDate(body.date, existing[0].status === 'planned');
+    if (dateErr) return c.json(dateErr, 400);
     updates.date = body.date;
   }
 
@@ -790,9 +871,16 @@ sessionRoutes.post('/:id/start', async (c) => {
     status: 'in_progress',
     startedAt: new Date(),
   };
-  // Client-local today: an overdue planned session snaps to the day it
-  // actually ran.
-  if (isIsoDate(body.date)) updates.date = body.date;
+  // Client-local today: an overdue planned session snaps to the day it actually
+  // ran. The body is optional, so an absent date leaves the row's date alone —
+  // but a *present* malformed one is a client bug, and silently ignoring it left
+  // the session dated in the past with no sign anything had gone wrong.
+  if (body.date !== undefined) {
+    if (!isIsoDate(body.date)) return c.json({ error: 'date must be YYYY-MM-DD' }, 400);
+    const dateErr = validateSessionDate(body.date, false);
+    if (dateErr) return c.json(dateErr, 400);
+    updates.date = body.date;
+  }
 
   await db
     .update(sessions)

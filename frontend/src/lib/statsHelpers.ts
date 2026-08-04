@@ -1,5 +1,5 @@
 import type { Session } from '@app/shared';
-import { toISODate } from './calendar';
+import { parseLocalDate, toISODate } from './calendar';
 
 /** Return the Monday (00:00:00 local) of the week containing `d`. */
 export function mondayOf(d: Date): Date {
@@ -28,7 +28,7 @@ export function mondayISO(d: Date = new Date()): string {
 
 /** ISO date (YYYY-MM-DD) of the Monday of the week containing `isoDate`. */
 export function weekKey(isoDate: string): string {
-  return mondayISO(new Date(isoDate + 'T00:00:00'));
+  return mondayISO(parseLocalDate(isoDate));
 }
 
 /**
@@ -59,7 +59,7 @@ export function sessionsThisWeek(sessions: Session[]): number {
   const nextMonday = new Date(monday);
   nextMonday.setDate(monday.getDate() + 7);
   return sessions.filter((s) => {
-    const d = new Date(s.date + 'T00:00:00');
+    const d = parseLocalDate(s.date);
     return d >= monday && d < nextMonday;
   }).length;
 }
@@ -77,11 +77,11 @@ export function avgPerWeek(sessions: Session[], weeks = 4): number {
   const now = new Date();
   const cutoff = new Date(now);
   cutoff.setDate(cutoff.getDate() - weeks * 7);
-  const recent = sessions.filter((s) => new Date(s.date + 'T00:00:00') >= cutoff);
+  const recent = sessions.filter((s) => parseLocalDate(s.date) >= cutoff);
   if (!recent.length) return 0;
 
   const oldest = recent.reduce((min, s) => (s.date < min ? s.date : min), recent[0].date);
-  const daysCovered = (now.getTime() - new Date(oldest + 'T00:00:00').getTime()) / 86_400_000;
+  const daysCovered = (now.getTime() - parseLocalDate(oldest).getTime()) / 86_400_000;
   const weeksCovered = Math.min(weeks, Math.max(1, Math.ceil((daysCovered + 1) / 7)));
   return Math.round((recent.length / weeksCovered) * 10) / 10;
 }
@@ -108,7 +108,7 @@ export function getWeeklyBarData(
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekStart.getDate() + 7);
     const count = sessions.filter((s) => {
-      const d = new Date(s.date + 'T00:00:00');
+      const d = parseLocalDate(s.date);
       return d >= weekStart && d < weekEnd;
     }).length;
     const label = weekStart.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });

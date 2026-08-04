@@ -22,13 +22,14 @@ import { fightRecord, useCreateFight, useDeleteFight, useFights } from '../../..
 import { useCreatePromotion, useDeletePromotion, usePromotions } from '../../../src/hooks/usePromotions';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { CalendarPicker } from '../../../src/components/CalendarPicker';
+import { localTodayISO, parseLocalDate } from '../../../src/lib/calendar';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
 import { parseIntInRange } from '../../../src/lib/parseNumber';
 
 function formatDate(dateStr: string): { day: string; month: string; year: string } {
-  const d = new Date(dateStr + 'T00:00:00');
+  const d = parseLocalDate(dateStr);
   return {
     day: String(d.getDate()),
     month: d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),
@@ -409,7 +410,8 @@ function AddFightModal({ disciplineId, onClose }: { disciplineId: string; onClos
           />
 
           <Text style={styles.sheetLabel}>Date</Text>
-          <CalendarPicker value={date} onChange={setDate} />
+          {/* A fight result is a record of a bout already fought. */}
+          <CalendarPicker value={date} onChange={setDate} maxISO={localTodayISO()} />
 
           <Text style={styles.sheetLabel}>Method</Text>
           <View style={styles.chipRow}>
@@ -573,7 +575,8 @@ function AddPromotionModal({ disciplineId, onClose }: { disciplineId: string; on
           </View>
 
           <Text style={styles.sheetLabel}>Date</Text>
-          <CalendarPicker value={date} onChange={setDate} />
+          {/* A promotion is a rank already awarded. */}
+          <CalendarPicker value={date} onChange={setDate} maxISO={localTodayISO()} />
 
           <Text style={styles.sheetLabel}>Notes</Text>
           <TextInput

@@ -6,10 +6,10 @@ import type { RoutineWithItems, Session } from '@app/shared';
 import { F, R, D, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../lib/color';
-import { localTodayISO } from '../lib/calendar';
+import { localTodayISO, parseLocalDate } from '../lib/calendar';
 
 export function formatDateBlock(dateStr: string): { day: string; month: string } {
-  const d = new Date(dateStr + 'T00:00:00');
+  const d = parseLocalDate(dateStr);
   return {
     day: String(d.getDate()),
     month: d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase(),

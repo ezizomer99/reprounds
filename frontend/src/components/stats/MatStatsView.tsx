@@ -13,6 +13,7 @@ import { InlineError } from '../InlineError';
 import { F, R, ThemeColors } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeContext';
 import { withAlpha } from '../../lib/color';
+import { parseLocalDate } from '../../lib/calendar';
 
 const WEEKS = 8;
 
@@ -67,7 +68,7 @@ export function MatStatsView() {
         label:
           i === all.length - 1
             ? 'This\nweek'
-            : new Date(w.weekStart + 'T00:00:00').toLocaleDateString('en-US', {
+            : parseLocalDate(w.weekStart).toLocaleDateString('en-US', {
                 month: 'short',
                 day: 'numeric',
               }),

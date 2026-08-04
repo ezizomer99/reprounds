@@ -2,47 +2,38 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { MAX_SESSIONS_PAGE, useSessions } from '../hooks/useSession';
+import { addDaysISO } from '@app/shared';
+import { MAX_SESSIONS_PAGE, useSessions, useSessionsInRange } from '../hooks/useSession';
 import { mondayISO, weekKey, computeWeekStreak } from '../lib/statsHelpers';
-import { toISODate } from '../lib/calendar';
+import { DAY_LABELS_LONG } from '../lib/calendar';
+import { useTodayISO } from '../hooks/useTodayISO';
 import { F, R, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../lib/color';
 
 interface WeekDay {
-  date: Date;
   abbrev: string;
   dayNum: number;
   isoDate: string;
 }
 
-function getWeekDays(): WeekDay[] {
-  const now = new Date();
-  const dow = now.getDay();
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - ((dow + 6) % 7));
-  monday.setHours(0, 0, 0, 0);
+/**
+ * The seven days of the week containing `todayISO`, Monday first.
+ *
+ * Derived from `mondayISO`/`addDaysISO` rather than hand-rolled Date arithmetic:
+ * this used to duplicate the Monday math, and the two copies had to agree with
+ * `weekKey` — which they only did by accident.
+ */
+function weekDaysOf(todayISO: string): WeekDay[] {
+  const monday = mondayISO(new Date(`${todayISO}T12:00:00`));
   return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
+    const isoDate = addDaysISO(monday, i);
     return {
-      date: d,
-      abbrev: d.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 3).toUpperCase(),
-      dayNum: d.getDate(),
-      // Local date, not toISOString(): UTC formatting shifts the day for
-      // timezones away from UTC.
-      isoDate: toISODate(d.getFullYear(), d.getMonth(), d.getDate()),
+      abbrev: DAY_LABELS_LONG[i].toUpperCase(),
+      dayNum: Number(isoDate.slice(8, 10)),
+      isoDate,
     };
   });
-}
-
-function isToday(d: Date): boolean {
-  const now = new Date();
-  return (
-    d.getDate() === now.getDate() &&
-    d.getMonth() === now.getMonth() &&
-    d.getFullYear() === now.getFullYear()
-  );
 }
 
 /**
@@ -56,7 +47,25 @@ export function MyWeek() {
   const styles = useMemo(() => makeStyles(T), [T]);
   const { data: sessions } = useSessions('completed', MAX_SESSIONS_PAGE);
 
-  const weekDays = useMemo(getWeekDays, []);
+  // Refreshed at midnight and on resume, so the strip advances and the "today"
+  // highlight moves without needing the tab to be remounted.
+  const todayISO = useTodayISO();
+  const weekDays = useMemo(() => weekDaysOf(todayISO), [todayISO]);
+
+  // Planned sessions live outside the 'completed' query above, so the strip used
+  // to show nothing for a week the user had already scheduled — on the very card
+  // that taps through to the calendar where they scheduled it.
+  const { data: weekRange } = useSessionsInRange(
+    weekDays[0].isoDate,
+    weekDays[6].isoDate,
+  );
+  const plannedDays = useMemo(() => {
+    const days = new Set<string>();
+    for (const s of weekRange?.sessions ?? []) {
+      if (s.status === 'planned') days.add(s.date);
+    }
+    return days;
+  }, [weekRange]);
 
   const week = useMemo(() => {
     const completed = sessions ?? [];
@@ -105,9 +114,12 @@ export function MyWeek() {
 
       <View style={styles.weekStrip}>
         {weekDays.map((wd) => {
-          const today = isToday(wd.date);
+          const today = wd.isoDate === todayISO;
           const hasGym = week.gymDays.has(wd.isoDate);
           const hasMat = week.matDays.has(wd.isoDate);
+          // Only worth showing when nothing was actually logged that day — a
+          // completed dot already tells the fuller story.
+          const hasPlanned = !hasGym && !hasMat && plannedDays.has(wd.isoDate);
           return (
             <View key={wd.isoDate} style={styles.weekDayCol}>
               <Text style={[styles.weekDayAbbrev, today && styles.weekDayAbbrevActive]}>
@@ -121,6 +133,7 @@ export function MyWeek() {
               <View style={styles.dotRow}>
                 {hasGym && <View style={styles.gymDot} />}
                 {hasMat && <View style={styles.matDot} />}
+                {hasPlanned && <View style={styles.plannedDot} />}
               </View>
             </View>
           );
@@ -208,6 +221,15 @@ function makeStyles(T: ThemeColors) {
     dotRow: { flexDirection: 'row', gap: 3, height: 5, marginTop: -2 },
     gymDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: T.primary },
     matDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: T.grappling },
+    // A ring, matching the calendar's "scheduled" marker.
+    plannedDot: {
+      width: 5,
+      height: 5,
+      borderRadius: 3,
+      borderWidth: 1.5,
+      borderColor: T.primary,
+      backgroundColor: 'transparent',
+    },
 
     streakRow: { flexDirection: 'row', gap: 8 },
     streakChip: {

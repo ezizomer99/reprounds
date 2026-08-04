@@ -559,6 +559,13 @@ export interface SessionWithEntries extends Session {
 
 export interface SessionListResponse {
   sessions: Session[];
+  /**
+   * True when the query filled its `limit`, so older rows exist that this
+   * response does not contain. Range queries have no cursor yet, and a truncated
+   * calendar month used to render as blank days with no indication anything was
+   * missing. Optional so older clients keep type-checking.
+   */
+  hasMore?: boolean;
 }
 
 export interface ExerciseHistoryEntry {
