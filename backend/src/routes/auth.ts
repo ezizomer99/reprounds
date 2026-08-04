@@ -1,7 +1,19 @@
 import { Hono } from 'hono';
 import { and, eq, isNotNull, sql } from 'drizzle-orm';
 import { createDb } from '../db';
-import { users, exercises, disciplines, fights, partners, rankPromotions, routines, sessions, weightLogs } from '../db/schema';
+import {
+  users,
+  exercises,
+  disciplines,
+  fights,
+  partners,
+  rankPromotions,
+  routines,
+  sessions,
+  techniques,
+  trainingFocuses,
+  weightLogs,
+} from '../db/schema';
 import { verifyGoogleIdToken } from '../lib/googleAuth';
 import { signJwt, verifyJwt } from '../lib/jwt';
 import { hashPassword, verifyPassword } from '../lib/password';
@@ -78,23 +90,56 @@ async function resolveGuestId(guestToken: unknown, jwtSecret: string): Promise<s
 // Reassign a guest account's data to a real (Google or credential) user, then
 // delete the guest row. Mirrors the merge used by the Google flow so every
 // sign-in method migrates guest data identically.
+//
+// Every table below carries `user_id … ON DELETE CASCADE`, so anything NOT
+// reassigned here is destroyed by the final `delete(users)` — silently. Keep
+// this list in lockstep with the user-owned tables in db/schema.ts.
+//
+// The whole merge runs in one transaction: a failure partway through used to
+// leave the user's history split across two accounts, with the guest row either
+// orphaned or half-cascaded and no way to retry cleanly.
 async function migrateGuestData(db: Db, guestUserId: string, realUserId: string): Promise<void> {
-  const guestUser = await db.query.users.findFirst({
-    where: eq(users.id, guestUserId),
+  await db.transaction(async (tx) => {
+    const guestUser = await tx.query.users.findFirst({
+      where: eq(users.id, guestUserId),
+    });
+
+    if (!guestUser?.isGuest || guestUser.id === realUserId) return;
+
+    await tx.update(exercises).set({ userId: realUserId }).where(eq(exercises.userId, guestUser.id));
+    await tx.update(disciplines).set({ userId: realUserId }).where(eq(disciplines.userId, guestUser.id));
+    await tx.update(partners).set({ userId: realUserId }).where(eq(partners.userId, guestUser.id));
+    await tx.update(fights).set({ userId: realUserId }).where(eq(fights.userId, guestUser.id));
+    await tx.update(rankPromotions).set({ userId: realUserId }).where(eq(rankPromotions.userId, guestUser.id));
+    await tx.update(weightLogs).set({ userId: realUserId }).where(eq(weightLogs.userId, guestUser.id));
+    await tx.update(routines).set({ userId: realUserId }).where(eq(routines.userId, guestUser.id));
+    await tx.update(sessions).set({ userId: realUserId }).where(eq(sessions.userId, guestUser.id));
+    await tx.update(trainingFocuses).set({ userId: realUserId }).where(eq(trainingFocuses.userId, guestUser.id));
+
+    // Custom techniques carry a unique index on (user_id, kind, value), so a
+    // blind reassign throws when the real account already has the same custom.
+    // Skip the collisions: the real user's own row wins and the guest's
+    // duplicate is dropped by the cascade below. Logged rounds reference
+    // techniques by `value`, not by id, so they keep resolving either way.
+    await tx
+      .update(techniques)
+      .set({ userId: realUserId })
+      .where(
+        and(
+          eq(techniques.userId, guestUser.id),
+          sql`NOT EXISTS (
+            SELECT 1 FROM techniques t2
+            WHERE t2.user_id = ${realUserId}
+              AND t2.kind    = techniques.kind
+              AND t2.value   = techniques.value
+          )`,
+        ),
+      );
+
+    // session_entries, strength_sets and session_focuses cascade through
+    // sessions/routines/training_focuses — no direct user_id of their own.
+    await tx.delete(users).where(eq(users.id, guestUser.id));
   });
-
-  if (!guestUser?.isGuest || guestUser.id === realUserId) return;
-
-  await db.update(exercises).set({ userId: realUserId }).where(eq(exercises.userId, guestUser.id));
-  await db.update(disciplines).set({ userId: realUserId }).where(eq(disciplines.userId, guestUser.id));
-  await db.update(partners).set({ userId: realUserId }).where(eq(partners.userId, guestUser.id));
-  await db.update(fights).set({ userId: realUserId }).where(eq(fights.userId, guestUser.id));
-  await db.update(rankPromotions).set({ userId: realUserId }).where(eq(rankPromotions.userId, guestUser.id));
-  await db.update(weightLogs).set({ userId: realUserId }).where(eq(weightLogs.userId, guestUser.id));
-  await db.update(routines).set({ userId: realUserId }).where(eq(routines.userId, guestUser.id));
-  await db.update(sessions).set({ userId: realUserId }).where(eq(sessions.userId, guestUser.id));
-  // session_entries and strength_sets cascade through sessions/routines — no direct user_id
-  await db.delete(users).where(eq(users.id, guestUser.id));
 }
 
 const authRoutes = new Hono<Env>();
@@ -145,6 +190,11 @@ authRoutes.post('/guest', async (c) => {
 
 // ── Google sign-in (with optional guest migration) ─────────────────────────
 authRoutes.post('/google', async (c) => {
+  // The other three account-minting routes have always been throttled; this one
+  // wasn't, and each unthrottled call costs a JWKS fetch plus a DB upsert.
+  const limited = await rateLimited(c, 'google');
+  if (limited) return limited;
+
   let body: { idToken?: string; guestToken?: string | null };
   try {
     body = await c.req.json();
