@@ -27,18 +27,15 @@ import { fmtWeight, kgToUnit, unitToKg } from '../../../src/units/units';
 import { Sparkline } from '../../../src/components/Sparkline';
 import { InlineError } from '../../../src/components/InlineError';
 import { CalendarPicker } from '../../../src/components/CalendarPicker';
+import { localTodayISO, parseLocalDate } from '../../../src/lib/calendar';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 
 function formatDate(dateStr: string): string {
-  const d = new Date(dateStr + 'T00:00:00');
+  const d = parseLocalDate(dateStr);
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function todayISO(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 export default function WeightScreen() {
   const router = useRouter();
@@ -188,7 +185,7 @@ function AddWeightModal({ onClose }: { onClose: () => void }) {
   const { unit } = useUnit();
   const createWeight = useCreateWeightLog();
   const [weight, setWeight] = useState('');
-  const [date, setDate] = useState(todayISO());
+  const [date, setDate] = useState(localTodayISO());
   const [notes, setNotes] = useState('');
 
   async function handleSave() {
@@ -229,7 +226,8 @@ function AddWeightModal({ onClose }: { onClose: () => void }) {
           />
 
           <Text style={styles.sheetLabel}>Date</Text>
-          <CalendarPicker value={date} onChange={setDate} />
+          {/* A weigh-in records a measurement already taken — never a future one. */}
+          <CalendarPicker value={date} onChange={setDate} maxISO={localTodayISO()} />
 
           <Text style={styles.sheetLabel}>Notes</Text>
           <TextInput

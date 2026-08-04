@@ -28,8 +28,14 @@ vi.mock('../db', () => ({
 }));
 
 import { Hono } from 'hono';
+import { addDaysISO, utcTodayISO } from '@app/shared';
 import { sessionRoutes } from './sessions';
 import { signJwt } from '../lib/jwt';
+
+// Planned sessions are now bounded relative to the server's today, so any test
+// that schedules one has to compute its date the same way. Hardcoding a future
+// date would make the suite start failing on that calendar day.
+const daysFromToday = (n: number) => addDaysISO(utcTodayISO(), n);
 
 const SECRET = 'test-secret-at-least-32-chars-long-xxxxx';
 const USER_ID = 'user-abc';
@@ -84,10 +90,13 @@ function makeSelectChain() {
 }
 
 // Transaction mock passes a minimal tx object whose select also pops from the
-// shared queue (in order with any outer selects).
+// shared queue (in order with any outer selects). `execute` covers the raw
+// `SELECT … FOR UPDATE` row lock that serialises concurrent session creates; it
+// consumes nothing from the queue because it returns no rows the handler reads.
 function makeTx() {
   return {
     select: makeSelectChain,
+    execute: vi.fn(async () => ({ rows: [] })),
     insert: () => ({ values: () => ({ returning: async () => [mock.insertedRow] }) }),
     update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
     delete: () => ({ where: () => Promise.resolve() }),
@@ -848,6 +857,59 @@ describe('GET /sessions (list filters)', () => {
     expect(mock.select).not.toHaveBeenCalled();
   });
 
+  // An inverted range used to return an empty list, which is indistinguishable
+  // from "no sessions this month" — a caller computing its bounds backwards
+  // looked empty rather than broken.
+  it('returns 400 without touching the DB when from is after to', async () => {
+    const res = await makeApp().request(
+      '/sessions?from=2026-08-31&to=2026-08-01',
+      { headers: await bearer() },
+      env,
+    );
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('from must be on or before to');
+    expect(mock.select).not.toHaveBeenCalled();
+  });
+
+  it('accepts a single-day range where from equals to', async () => {
+    mock.selectQueue.push([fakeSessionRow]);
+    mock.selectQueue.push([]);
+    mock.selectQueue.push([]);
+
+    const res = await makeApp().request(
+      '/sessions?from=2026-08-04&to=2026-08-04',
+      { headers: await bearer() },
+      env,
+    );
+
+    expect(res.status).toBe(200);
+  });
+
+  // Range queries have no cursor, so a month past the cap would otherwise render
+  // as blank days with nothing to say rows were dropped.
+  it('reports hasMore when the page is full', async () => {
+    mock.selectQueue.push(Array.from({ length: 3 }, () => fakeSessionRow));
+    mock.selectQueue.push([]);
+    mock.selectQueue.push([]);
+
+    const res = await makeApp().request('/sessions?limit=3', { headers: await bearer() }, env);
+
+    expect(res.status).toBe(200);
+    expect((await res.json() as { hasMore: boolean }).hasMore).toBe(true);
+  });
+
+  it('reports hasMore false when the page is short', async () => {
+    mock.selectQueue.push([fakeSessionRow]);
+    mock.selectQueue.push([]);
+    mock.selectQueue.push([]);
+
+    const res = await makeApp().request('/sessions?limit=50', { headers: await bearer() }, env);
+
+    expect(res.status).toBe(200);
+    expect((await res.json() as { hasMore: boolean }).hasMore).toBe(false);
+  });
+
   it('returns 400 without touching the DB when status is not a session status', async () => {
     const res = await makeApp().request(
       '/sessions?status=bogus',
@@ -905,10 +967,11 @@ describe('POST /sessions with status planned', () => {
   });
 
   it('creates a planned session with null startedAt, skipping the active-session guard', async () => {
+    const scheduledFor = daysFromToday(12);
     const plannedRow = {
       ...fakeSessionRow,
       status: 'planned' as const,
-      date: '2026-08-16',
+      date: scheduledFor,
     };
     mock.insertedRow = plannedRow;
 
@@ -916,6 +979,7 @@ describe('POST /sessions with status planned', () => {
     mock.transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
       fn({
         select: makeSelectChain,
+        execute: vi.fn(async () => ({ rows: [] })),
         insert: () => ({
           values: (v: Record<string, unknown>) => {
             insertedValues.push(v);
@@ -935,7 +999,7 @@ describe('POST /sessions with status planned', () => {
     const res = await makeApp().request('/sessions', {
       method: 'POST',
       headers: { ...(await bearer()), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: '2026-08-16', status: 'planned' }),
+      body: JSON.stringify({ date: scheduledFor, status: 'planned' }),
     }, env);
 
     expect(res.status).toBe(201);
@@ -944,6 +1008,91 @@ describe('POST /sessions with status planned', () => {
     expect(insertedValues[0].startedAt).toBeNull();
     const json = await res.json() as { session: { status: string } };
     expect(json.session.status).toBe('planned');
+  });
+
+  // A planned session dated in the past is instantly "Overdue". It used to be
+  // creatable from a calendar whose idea of "today" had gone stale overnight.
+  it('rejects a planned session dated before the slack window', async () => {
+    const res = await makeApp().request('/sessions', {
+      method: 'POST',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: daysFromToday(-2), status: 'planned' }),
+    }, env);
+
+    expect(res.status).toBe(400);
+    const json = await res.json() as { error: string; min: string; max: string };
+    expect(json.error).toBe('planned_date_out_of_range');
+    expect(json.min).toBe(daysFromToday(-1));
+    expect(mock.select).not.toHaveBeenCalled();
+  });
+
+  it('rejects a planned session in the distant past', async () => {
+    const res = await makeApp().request('/sessions', {
+      method: 'POST',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: '1999-01-01', status: 'planned' }),
+    }, env);
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('planned_date_out_of_range');
+  });
+
+  // The Worker only knows UTC and cannot know the device offset (UTC−12…UTC+14),
+  // so a device's "today" may be a calendar day either side of the server's.
+  it('accepts yesterday, the timezone slack day', async () => {
+    const plannedRow = { ...fakeSessionRow, status: 'planned' as const, date: daysFromToday(-1) };
+    mock.insertedRow = plannedRow;
+    mock.selectQueue.push([plannedRow]);
+    mock.selectQueue.push([]);
+
+    const res = await makeApp().request('/sessions', {
+      method: 'POST',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: daysFromToday(-1), status: 'planned' }),
+    }, env);
+
+    expect(res.status).toBe(201);
+  });
+
+  it('rejects a planned session past the scheduling horizon', async () => {
+    const res = await makeApp().request('/sessions', {
+      method: 'POST',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: daysFromToday(731), status: 'planned' }),
+    }, env);
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('planned_date_out_of_range');
+  });
+
+  // Backfilling a workout that already happened is a first-class feature, so the
+  // past bound must NOT apply to a non-planned create.
+  it('still accepts a backfilled past date when status is omitted', async () => {
+    mock.insertedRow = { ...fakeSessionRow, date: daysFromToday(-90) };
+    mock.selectQueue.push([]);                                        // no active session
+    mock.selectQueue.push([{ ...fakeSessionRow, date: daysFromToday(-90) }]);
+    mock.selectQueue.push([]);
+
+    const res = await makeApp().request('/sessions', {
+      method: 'POST',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: daysFromToday(-90) }),
+    }, env);
+
+    expect(res.status).toBe(201);
+  });
+
+  it('rejects an absurd date on any create, planned or not', async () => {
+    for (const date of ['1823-04-01', '9999-12-31']) {
+      const res = await makeApp().request('/sessions', {
+        method: 'POST',
+        headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date }),
+      }, env);
+
+      expect(res.status).toBe(400);
+      expect((await res.json() as { error: string }).error).toBe('date_out_of_range');
+    }
   });
 });
 
@@ -1029,6 +1178,49 @@ describe('POST /sessions/:id/start', () => {
     const json = await res.json() as { session: { status: string } };
     expect(json.session.status).toBe('in_progress');
   });
+
+  // The body is optional, so an omitted date leaves the row's date alone. A
+  // present-but-malformed one used to be silently discarded, which left an
+  // overdue session still dated in the past with no sign anything went wrong.
+  it('returns 400 for a present but malformed date', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID, status: 'planned' }]); // owner check ✓
+    mock.selectQueue.push([]);                                      // no active session
+
+    const res = await makeApp().request(`/sessions/${SESSION_ID}/start`, {
+      method: 'POST',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: '8/2/2026' }),
+    }, env);
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('date must be YYYY-MM-DD');
+    expect(mock.update).not.toHaveBeenCalled();
+  });
+
+  it('still starts a session when the body carries no date at all', async () => {
+    let capturedSet: Record<string, unknown> | null = null;
+    mock.update.mockImplementation(() => ({
+      set: (v: Record<string, unknown>) => {
+        capturedSet = v;
+        return { where: () => Promise.resolve() };
+      },
+    }));
+
+    mock.selectQueue.push([{ id: SESSION_ID, status: 'planned' }]); // owner check ✓
+    mock.selectQueue.push([]);                                      // no active session
+    mock.selectQueue.push([fakeSessionRow]);
+    mock.selectQueue.push([]);
+
+    const res = await makeApp().request(
+      `/sessions/${SESSION_ID}/start`,
+      { method: 'POST', headers: await bearer() },
+      env,
+    );
+
+    expect(res.status).toBe(200);
+    expect(capturedSet!.status).toBe('in_progress');
+    expect(capturedSet!.date).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1044,20 +1236,76 @@ describe('PATCH /sessions/:id date', () => {
       },
     }));
 
-    const movedRow = { ...fakeSessionRow, status: 'planned' as const, date: '2026-08-20' };
-    mock.selectQueue.push([{ id: SESSION_ID }]); // owner check ✓
+    const movedTo = daysFromToday(16);
+    const movedRow = { ...fakeSessionRow, status: 'planned' as const, date: movedTo };
+    mock.selectQueue.push([{ id: SESSION_ID, status: 'planned' }]); // owner check ✓
     mock.selectQueue.push([movedRow]);           // fetchSessionWithEntries: session row
     mock.selectQueue.push([]);                   // entries (empty)
 
     const res = await makeApp().request(`/sessions/${SESSION_ID}`, {
       method: 'PATCH',
       headers: { ...(await bearer()), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ date: '2026-08-20' }),
+      body: JSON.stringify({ date: movedTo }),
     }, env);
 
     expect(res.status).toBe(200);
     expect(capturedSet).not.toBeNull();
-    expect(capturedSet!.date).toBe('2026-08-20');
+    expect(capturedSet!.date).toBe(movedTo);
+  });
+
+  // Reschedule is the other path that could strand a planned session in the
+  // past: the picker had no lower bound at all.
+  it('refuses to reschedule a planned session into the past', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID, status: 'planned' }]); // owner check ✓
+
+    const res = await makeApp().request(`/sessions/${SESSION_ID}`, {
+      method: 'PATCH',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: daysFromToday(-30) }),
+    }, env);
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('planned_date_out_of_range');
+    expect(mock.update).not.toHaveBeenCalled();
+  });
+
+  // Correcting the date on a workout that already happened is the whole point of
+  // backdating, so a completed session stays freely movable.
+  it('allows backdating a completed session', async () => {
+    let capturedSet: Record<string, unknown> | null = null;
+    mock.update.mockImplementation(() => ({
+      set: (v: Record<string, unknown>) => {
+        capturedSet = v;
+        return { where: () => Promise.resolve() };
+      },
+    }));
+
+    const backdatedTo = daysFromToday(-30);
+    mock.selectQueue.push([{ id: SESSION_ID, status: 'completed' }]); // owner check ✓
+    mock.selectQueue.push([{ ...fakeSessionRow, status: 'completed' as const, date: backdatedTo }]);
+    mock.selectQueue.push([]);
+
+    const res = await makeApp().request(`/sessions/${SESSION_ID}`, {
+      method: 'PATCH',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: backdatedTo }),
+    }, env);
+
+    expect(res.status).toBe(200);
+    expect(capturedSet!.date).toBe(backdatedTo);
+  });
+
+  it('rejects an absurd reschedule date even for a completed session', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID, status: 'completed' }]); // owner check ✓
+
+    const res = await makeApp().request(`/sessions/${SESSION_ID}`, {
+      method: 'PATCH',
+      headers: { ...(await bearer()), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: '1823-04-01' }),
+    }, env);
+
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('date_out_of_range');
   });
 
   it('returns 400 for a malformed date', async () => {

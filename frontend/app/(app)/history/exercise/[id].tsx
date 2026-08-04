@@ -16,9 +16,10 @@ import { useProGate } from '../../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../../src/theme/colors';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../../src/lib/color';
+import { parseLocalDate } from '../../../../src/lib/calendar';
 
 function formatDate(dateStr: string): { day: string; month: string } {
-  const d = new Date(dateStr + 'T00:00:00');
+  const d = parseLocalDate(dateStr);
   return {
     day: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
     month: d.getFullYear().toString(),

@@ -6,7 +6,7 @@ import { F, R, D, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../lib/color';
 import { useSessionsInRange } from '../hooks/useSession';
-import { monthRange } from '../lib/calendar';
+import { formatDayTitle, monthRange } from '../lib/calendar';
 import { sessionIsMat } from '../lib/sessionMarkers';
 import { buildRoutineMap, statusLabel } from './SessionRow';
 import { CutCornerView } from './CutCornerView';
@@ -20,8 +20,12 @@ interface DaySheetProps {
   routines: RoutineWithItems[] | undefined;
   onClose: () => void;
   onOpenSession: (id: string) => void;
-  /** Schedule (future/today) or log (past) a workout for this day. */
-  onAddWorkout: (iso: string, isPast: boolean) => void;
+  /**
+   * Add a workout for this day. The caller decides schedule-vs-log from a freshly
+   * read today — the sheet's own `isPast` only drives the button's wording, so the
+   * two can never disagree about what gets created.
+   */
+  onAddWorkout: (iso: string) => void;
 }
 
 export function DaySheet({
@@ -44,15 +48,11 @@ export function DaySheet({
   // month was still loading.
   const [y, m] = iso ? iso.split('-').map(Number) : [0, 1];
   const { from, to } = monthRange(y, m - 1);
-  const { data: monthSessions, isLoading, isError, refetch } = useSessionsInRange(
-    from,
-    to,
-    iso !== null,
-  );
+  const { data, isLoading, isError, refetch } = useSessionsInRange(from, to, iso !== null);
 
   const daySessions = useMemo(
-    () => (monthSessions ?? []).filter((s) => s.date === iso),
-    [monthSessions, iso],
+    () => (data?.sessions ?? []).filter((s) => s.date === iso),
+    [data, iso],
   );
 
   const totals = useMemo(() => {
@@ -66,13 +66,10 @@ export function DaySheet({
   }, [daySessions]);
 
   const isPast = iso !== null && iso < todayISO;
-  const title = iso
-    ? new Date(iso + 'T00:00:00').toLocaleDateString('en-US', {
-        weekday: 'long',
-        month: 'short',
-        day: 'numeric',
-      })
-    : '';
+  // Built from the ISO parts, not `new Date(iso + 'T00:00:00')`: local midnight
+  // does not exist on the transition day in zones that spring forward at
+  // midnight, so the old idiom tied the heading to the device's timezone rules.
+  const title = iso ? formatDayTitle(iso) : '';
 
   const totalParts = [
     totals.minutes > 0 ? fmtMinutes(totals.minutes) : null,
@@ -140,7 +137,7 @@ export function DaySheet({
 
         {iso !== null && (
           <View style={styles.footer}>
-            <TouchableOpacity onPress={() => onAddWorkout(iso, isPast)} activeOpacity={0.8}>
+            <TouchableOpacity onPress={() => onAddWorkout(iso)} activeOpacity={0.8}>
               <CutCornerView fill={T.primary} style={styles.cta}>
                 <Ionicons
                   name={isPast ? 'create-outline' : 'add'}

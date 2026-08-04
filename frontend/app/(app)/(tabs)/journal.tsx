@@ -12,6 +12,7 @@ import { withAlpha } from '../../../src/lib/color';
 import { Skeleton } from '../../../src/components/Skeleton';
 import { SessionRow, buildRoutineMap, rowSeparatorMargin } from '../../../src/components/SessionRow';
 import { sessionIsMat } from '../../../src/lib/sessionMarkers';
+import { parseLocalDate } from '../../../src/lib/calendar';
 
 const FREE_HISTORY_DAYS = 30;
 
@@ -46,7 +47,7 @@ export default function JournalTab() {
   }, [isPro]);
 
   const windowed = cutoff
-    ? allSessions.filter((s) => new Date(s.date + 'T00:00:00') >= cutoff)
+    ? allSessions.filter((s) => parseLocalDate(s.date) >= cutoff)
     : allSessions;
 
   const list = useMemo(() => {

@@ -5,6 +5,7 @@ export * from './types/models';
 export * from './calculators/oneRepMax';
 export * from './calculators/volume';
 export * from './validators';
+export * from './dates';
 export * from './limits';
 
 // Paywall thresholds. These are enforced CLIENT-SIDE ONLY, and deliberately so:

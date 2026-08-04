@@ -71,9 +71,22 @@ export function useSessions(status?: string, limit?: number) {
 /** Backend maximum for a single /sessions page. */
 export const MAX_SESSIONS_PAGE = 200;
 
+/**
+ * Page size for one calendar month. The same backend cap — a month that fills it
+ * reports `hasMore` so the grid can say so rather than rendering blank days.
+ */
+export const MAX_SESSIONS_RANGE_PAGE = MAX_SESSIONS_PAGE;
+
 export function useActiveSession() {
   const { data, ...rest } = useSessions('in_progress');
   return { activeSession: data?.[0] ?? null, ...rest };
+}
+
+/** What one calendar month's range query yields: its rows, and whether it truncated. */
+export interface SessionRangePage {
+  sessions: Session[];
+  /** The page filled its limit, so this month is showing an incomplete picture. */
+  hasMore: boolean;
 }
 
 /**
@@ -82,13 +95,21 @@ export function useActiveSession() {
  * (create/start/complete/delete/reschedule) refreshes calendar months too.
  */
 export function useSessionsInRange(from: string, to: string, enabled = true) {
-  return useQuery<Session[], Error>({
+  return useQuery<SessionRangePage, Error>({
     queryKey: ['sessions', 'range', from, to],
     queryFn: async () => {
-      const data = await apiGet<SessionListResponse>(`/sessions?from=${from}&to=${to}&limit=200`);
-      return data.sessions;
+      const data = await apiGet<SessionListResponse>(
+        `/sessions?from=${from}&to=${to}&limit=${MAX_SESSIONS_RANGE_PAGE}`,
+      );
+      return { sessions: data.sessions, hasMore: data.hasMore ?? false };
     },
     enabled,
+    // The calendar mounts one query per month and can hold dozens at once, so a
+    // scroll back and forth used to refetch every month it re-mounted. Any
+    // session mutation still invalidates ['sessions'] and refetches the mounted
+    // months — that part is deliberate, since a new session has to appear.
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
   });
 }
 

@@ -68,7 +68,7 @@ import { Skeleton } from '../../../src/components/Skeleton';
 import { RoundLogger, BOXING_WEAPONS, MUAY_THAI_WEAPONS } from '../../../src/components/RoundLogger';
 import { PlateCalculator } from '../../../src/components/PlateCalculator';
 import { CalendarPicker } from '../../../src/components/CalendarPicker';
-import { localTodayISO } from '../../../src/lib/calendar';
+import { formatDayTitle, localTodayISO } from '../../../src/lib/calendar';
 import { useUnit } from '../../../src/units/UnitContext';
 import {
   fmtWeight,
@@ -1659,7 +1659,9 @@ function SessionSettingsSheet({ session, routineName, onSave, onFinish, onDiscar
 
           {/* Date */}
           <Text style={styles.settingsSectionLabel}>Select date</Text>
-          <CalendarPicker value={date} onChange={setDate} />
+          {/* Finishing a session records work already done, so a future date is
+              never valid — including when backdating an earlier day. */}
+          <CalendarPicker value={date} onChange={setDate} maxISO={localTodayISO()} />
 
           {/* Start & End time */}
           <Text style={styles.settingsSectionLabel}>Start & End time</Text>
@@ -2151,11 +2153,10 @@ export default function SessionScreen() {
   // A workout being logged after the fact: the elapsed timer would count from
   // the moment the session row was created, which tells the user nothing.
   const isBackdated = session.status === 'in_progress' && session.date < localTodayISO();
-  const scheduledLabel = new Date(session.date + 'T00:00:00').toLocaleDateString('en-US', {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  });
+  // A planned session whose day has already passed. The header used to say
+  // "Scheduled" for it, contradicting the "Overdue" the session list showed.
+  const isOverdue = isPlanned && session.date < localTodayISO();
+  const scheduledLabel = formatDayTitle(session.date, { weekday: 'short' });
 
   const entryIds = session.entries.map((e) => e.id);
   const allCollapsed = entryIds.length > 0 && entryIds.every((eid) => collapsedIds.has(eid));
@@ -2207,7 +2208,13 @@ export default function SessionScreen() {
                 {scheduledLabel}
               </Text>
               <Text style={styles.headerScheduledSub}>
-                {isSkipped ? 'Skipped' : isPlanned ? 'Scheduled' : 'Logging past workout'}
+                {isSkipped
+                  ? 'Skipped'
+                  : isOverdue
+                    ? 'Overdue'
+                    : isPlanned
+                      ? 'Scheduled'
+                      : 'Logging past workout'}
               </Text>
             </>
           ) : isActive ? (
@@ -2529,7 +2536,13 @@ export default function SessionScreen() {
         >
           <TouchableOpacity activeOpacity={1} style={styles.rescheduleCard}>
             <Text style={styles.rescheduleTitle}>Reschedule to</Text>
-            <CalendarPicker value={session.date} onChange={handleReschedule} />
+            {/* Moving a planned session into the past makes it instantly overdue,
+                and the API rejects it — so those days must not look tappable. */}
+            <CalendarPicker
+              value={session.date}
+              onChange={handleReschedule}
+              minISO={localTodayISO()}
+            />
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
