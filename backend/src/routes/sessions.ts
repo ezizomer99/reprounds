@@ -762,7 +762,12 @@ sessionRoutes.post('/:id/start', async (c) => {
     .limit(1);
 
   if (!existing) return c.json({ error: 'Not found' }, 404);
-  if (existing.status !== 'planned') return c.json({ error: 'not_planned' }, 409);
+  // 'skipped' is startable too: marking a planned session skipped is a
+  // dismissal, not a deletion, so changing your mind and training after all has
+  // to lead somewhere.
+  if (existing.status !== 'planned' && existing.status !== 'skipped') {
+    return c.json({ error: 'not_planned' }, 409);
+  }
 
   const [active] = await db
     .select({ id: sessions.id })
@@ -792,6 +797,42 @@ sessionRoutes.post('/:id/start', async (c) => {
   await db
     .update(sessions)
     .set(updates)
+    .where(and(eq(sessions.id, id), eq(sessions.userId, userId)));
+
+  const session = await fetchSessionWithEntries(db, id, userId);
+  return c.json({ session });
+});
+
+// POST /sessions/:id/skip — dismiss a planned session that never happened.
+//
+// 'skipped' has been in the session_status enum, and rendered by the session
+// row and the calendar markers, since the first migration — but no endpoint
+// could ever set it. A scheduled workout the user didn't do had no resting
+// place: it stayed "Overdue" on the calendar forever, and deleting it was the
+// only way out, which also erased the fact that it had been planned.
+//
+// Reversible via POST /:id/start, which accepts a skipped session.
+sessionRoutes.post('/:id/skip', async (c) => {
+  const userId = c.get('userId');
+  const id = c.req.param('id');
+  const db = getDb(c.env);
+
+  const [existing] = await db
+    .select({ id: sessions.id, status: sessions.status })
+    .from(sessions)
+    .where(and(eq(sessions.id, id), eq(sessions.userId, userId)))
+    .limit(1);
+
+  if (!existing) return c.json({ error: 'Not found' }, 404);
+  // Only a plan can go unfulfilled. A live or finished session has real logged
+  // work in it, so discarding that is a delete, not a skip.
+  if (existing.status !== 'planned') {
+    return c.json({ error: 'not_planned', status: existing.status }, 409);
+  }
+
+  await db
+    .update(sessions)
+    .set({ status: 'skipped' })
     .where(and(eq(sessions.id, id), eq(sessions.userId, userId)));
 
   const session = await fetchSessionWithEntries(db, id, userId);

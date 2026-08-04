@@ -110,6 +110,23 @@ export function useStartSession() {
   });
 }
 
+/**
+ * Mark a planned session as skipped — the workout was scheduled and didn't
+ * happen. Reversible: useStartSession accepts a skipped session, so changing
+ * your mind still leads into the logger. 409s as `not_planned`.
+ */
+export function useSkipSession() {
+  const queryClient = useQueryClient();
+  return useMutation<SessionWithEntries, Error, { id: string }>({
+    mutationFn: ({ id }) =>
+      apiPost<{ session: SessionWithEntries }>(`/sessions/${id}/skip`, {}).then((r) => r.session),
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['session', variables.id] });
+      queryClient.invalidateQueries({ queryKey: ['sessions'] });
+    },
+  });
+}
+
 export function useDeleteSession() {
   const queryClient = useQueryClient();
   return useMutation<void, Error, { id: string }>({

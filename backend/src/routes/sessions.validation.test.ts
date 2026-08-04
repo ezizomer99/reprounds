@@ -247,6 +247,95 @@ describe('PUT /sessions/:id/focuses validation', () => {
   });
 });
 
+describe('POST /sessions/:id/skip', () => {
+  // 'skipped' has been in the enum and rendered by the UI since the first
+  // migration, but nothing could set it — a planned workout the user didn't do
+  // stayed "Overdue" forever, and deleting it was the only way out.
+  it('marks a planned session skipped', async () => {
+    ownedSession('planned');
+    mock.update.mockImplementation(() => ({ set: () => ({ where: async () => {} }) }));
+    mock.selectQueue.push([{
+      id: SESSION_ID,
+      userId: USER_ID,
+      status: 'skipped',
+      date: '2026-07-03',
+      createdAt: new Date(),
+      routineId: null,
+      name: null,
+      startedAt: null,
+      completedAt: null,
+      durationMinutes: null,
+      notes: null,
+    }]);
+    mock.selectQueue.push([]); // entries
+    mock.selectQueue.push([]); // focus links
+
+    const res = await send('POST', `/sessions/${SESSION_ID}/skip`, {});
+    expect(res.status).toBe(200);
+    expect(mock.update).toHaveBeenCalledTimes(1);
+    const json = await res.json() as { session: { status: string } };
+    expect(json.session.status).toBe('skipped');
+  });
+
+  it('409s on a session that is in progress — that is a delete, not a skip', async () => {
+    ownedSession('in_progress');
+    const res = await send('POST', `/sessions/${SESSION_ID}/skip`, {});
+    expect(res.status).toBe(409);
+    expect((await res.json() as { error: string }).error).toBe('not_planned');
+    expect(mock.update).not.toHaveBeenCalled();
+  });
+
+  it('409s on a completed session', async () => {
+    ownedSession('completed');
+    const res = await send('POST', `/sessions/${SESSION_ID}/skip`, {});
+    expect(res.status).toBe(409);
+    expect(mock.update).not.toHaveBeenCalled();
+  });
+
+  it('404s when the session is not owned by the caller', async () => {
+    mock.selectQueue.push([]);
+    const res = await send('POST', `/sessions/${SESSION_ID}/skip`, {});
+    expect(res.status).toBe(404);
+    expect(mock.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /sessions/:id/start accepts a skipped session', () => {
+  // Skipping is a dismissal, not a deletion, so changing your mind has to lead
+  // back into the logger.
+  it('starts a session that was previously skipped', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID, status: 'skipped' }]); // target
+    mock.selectQueue.push([]);                                       // no active session
+    mock.update.mockImplementation(() => ({ set: () => ({ where: async () => {} }) }));
+    mock.selectQueue.push([{
+      id: SESSION_ID,
+      userId: USER_ID,
+      status: 'in_progress',
+      date: '2026-07-03',
+      createdAt: new Date(),
+      routineId: null,
+      name: null,
+      startedAt: new Date(),
+      completedAt: null,
+      durationMinutes: null,
+      notes: null,
+    }]);
+    mock.selectQueue.push([]);
+    mock.selectQueue.push([]);
+
+    const res = await send('POST', `/sessions/${SESSION_ID}/start`, {});
+    expect(res.status).toBe(200);
+    expect(mock.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('still 409s on a completed session', async () => {
+    mock.selectQueue.push([{ id: SESSION_ID, status: 'completed' }]);
+    const res = await send('POST', `/sessions/${SESSION_ID}/start`, {});
+    expect(res.status).toBe(409);
+    expect((await res.json() as { error: string }).error).toBe('not_planned');
+  });
+});
+
 describe('POST /sessions/:id/complete status guard', () => {
   // A double-tap on Finish over a slow connection used to re-stamp completedAt
   // on a session that was already done.

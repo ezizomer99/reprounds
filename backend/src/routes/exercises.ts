@@ -4,7 +4,7 @@ import { createDb } from '../db';
 import { disciplines, exercises, sessionEntries, sessions, strengthSets } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
-import { estimatedOneRepMax, NAME_MAX_LENGTH } from '@app/shared';
+import { estimatedOneRepMax, MAX_CUSTOM_EXERCISES_PER_USER, NAME_MAX_LENGTH } from '@app/shared';
 import { epleyE1rmSql } from '../lib/e1rm';
 import { isIsoDate, isWithinLength } from '../lib/validate';
 import type {
@@ -117,6 +117,22 @@ exerciseRoutes.post('/', async (c) => {
   }
   if (!isWithinLength(body.name, NAME_MAX_LENGTH)) {
     return c.json({ error: `name must be ${NAME_MAX_LENGTH} characters or fewer` }, 400);
+  }
+
+  // Abuse ceiling, not the paywall — see the note on FREE_CUSTOM_EXERCISE_LIMIT
+  // in @app/shared. The Worker can't distinguish a paying Pro user from a free
+  // one, so this sits far above any real usage and only bounds a scripted
+  // client inserting in a loop.
+  const [{ count: customCount }] = await db
+    .select({ count: sql<number>`COUNT(*)::int` })
+    .from(exercises)
+    .where(eq(exercises.userId, userId));
+
+  if (Number(customCount) >= MAX_CUSTOM_EXERCISES_PER_USER) {
+    return c.json(
+      { error: `You've reached the maximum of ${MAX_CUSTOM_EXERCISES_PER_USER} custom exercises` },
+      409,
+    );
   }
 
   const [row] = await db
