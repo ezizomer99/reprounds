@@ -58,6 +58,8 @@ Package manager: **pnpm workspaces**. Always `pnpm install` from root. Each pack
 - All `id` columns are `uuid DEFAULT gen_random_uuid()`.
 - All tables have `created_at timestamptz NOT NULL DEFAULT now()`.
 - **Training Focuses** (`training_focuses` + the `session_focuses` join table) are user-owned goals with a `focus_status` (active/achieved/archived); a mat session ticks which focuses it worked on. Scope every focus query by `user_id`.
+- **An exercise's muscles are `muscle_group` (primary) + `secondary_muscles` (`text[]`)**, and the heat map weights the primary twice what a secondary gets (`frontend/src/lib/muscleSlugMap.ts`). Two vocabularies live in those columns: the seed's Title-Case anatomy (`Lats`, `Quadriceps`) and the pick-list's gym shorthand (`MUSCLE_GROUPS` in `@app/shared`). Reads accept either — `muscleSlugMap` normalizes; **writes accept only `MUSCLE_GROUPS`**.
+- **Re-tagging a seeded exercise writes to `exercise_muscle_overrides`, never to the `exercises` row.** Global rows are shared by every user, so editing Pull-ups in place would change it for everyone, and forking a personal copy would give it a new id that the user's existing `session_entries` don't point at. Every read of muscles must resolve the caller's override over the catalogue value — `GET /exercises`, `GET /exercises/:id`, and `GET /stats/muscles` all do. An override replaces the whole tagging rather than merging, so test for it on the NOT NULL `secondary_muscles` column, not with `COALESCE` on the primary alone.
 
 ---
 

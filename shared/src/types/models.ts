@@ -380,7 +380,19 @@ export interface CreateExerciseRequest {
   type: Exclude<ActivityType, 'martial_arts'>;
   target?: string | null;
   muscleGroup?: string | null;
+  secondaryMuscles?: string[];
   equipment?: string | null;
+}
+
+/**
+ * Replaces an exercise's whole muscle tagging in one call — same shape as
+ * PUT /sessions/:id/focuses. On an exercise you own this updates the row; on a
+ * seeded global one it stores a per-user override, since that row is shared by
+ * everybody. Values must be members of MUSCLE_GROUPS.
+ */
+export interface SetExerciseMusclesRequest {
+  muscleGroup: string | null;
+  secondaryMuscles: string[];
 }
 
 export interface UpdateExerciseRequest {

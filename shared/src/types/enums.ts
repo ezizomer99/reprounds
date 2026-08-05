@@ -9,3 +9,17 @@ export type FightResult    = 'win' | 'loss' | 'draw';
 export type FightMethod    = 'ko' | 'tko' | 'submission' | 'decision' | 'points' | 'other';
 export type FocusStatus    = 'active' | 'achieved' | 'archived';
 export type TechniqueKind  = 'position' | 'submission';
+
+/**
+ * The muscles a user can tag an exercise with. Deliberately gym shorthand rather
+ * than anatomy — it is the pick-list, not a description of the body.
+ *
+ * `Exercise.muscleGroup` / `secondaryMuscles` stay `string`, NOT this union: the
+ * seeded catalogue carries a second, Title-Case anatomical vocabulary ('Lats',
+ * 'Quadriceps') that predates this list. See the note atop
+ * frontend/src/lib/muscleSlugMap.ts. This union governs what the API accepts on
+ * a write; reads still surface whatever the seed put there.
+ */
+export type MuscleGroup =
+  | 'chest' | 'back' | 'shoulders' | 'biceps' | 'triceps' | 'forearms'
+  | 'abs' | 'glutes' | 'quads' | 'hamstrings' | 'calves' | 'full body' | 'cardio';

@@ -24,11 +24,18 @@ const DIMENSION_LABEL: Record<FilterDimension, string> = {
   muscle: 'Muscle group',
 };
 
+/** Every muscle an exercise works — primary first, then the secondaries. */
+function musclesOf(e: Exercise): string[] {
+  return [e.muscleGroup, ...(e.secondaryMuscles ?? [])].filter((m): m is string => !!m);
+}
+
 /** Apply the equipment + muscle selection to a list (client-side). */
 export function filterByChips(exercises: Exercise[], filter: ExerciseChipFilter): Exercise[] {
   return exercises.filter((e) => {
     if (filter.equipment && e.equipment !== filter.equipment) return false;
-    if (filter.muscle && e.muscleGroup !== filter.muscle) return false;
+    // Matches secondaries too: filtering by biceps should surface pull-ups,
+    // which are a back exercise that happens to work them.
+    if (filter.muscle && !musclesOf(e).includes(filter.muscle)) return false;
     return true;
   });
 }
@@ -64,7 +71,9 @@ export function ExerciseFilters({ exercises, filter, onChange, dimensions = ALL_
   const optionsByDim = useMemo(() => {
     const map = {} as Record<FilterDimension, string[]>;
     for (const dim of dimensions) {
-      const values = exercises.map((e) => (dim === 'equipment' ? e.equipment : e.muscleGroup));
+      const values = dim === 'equipment'
+        ? exercises.map((e) => e.equipment)
+        : exercises.flatMap(musclesOf);
       map[dim] = distinctSorted(values);
     }
     return map;
