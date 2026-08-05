@@ -90,6 +90,13 @@ export const DETAILS_MAX_BYTES = 64_000;
 export const MAX_REORDER_IDS = 500;
 
 /**
+ * How many secondary muscles one exercise may carry. The pick-list only offers
+ * thirteen and a lift that genuinely works more than a handful is "full body",
+ * so this is a ceiling on nonsense rather than a real editorial limit.
+ */
+export const MAX_SECONDARY_MUSCLES = 8;
+
+/**
  * Highest rep count the Epley estimate is meaningful at.
  *
  * Epley (`w * (1 + reps/30)`) is a linear extrapolation fitted to low-rep work

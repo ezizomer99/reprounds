@@ -27,6 +27,7 @@ Package manager: **pnpm workspaces**. Always `pnpm install` from root. Each pack
 - Hyperdrive binding is required in production — never call Neon directly from a Worker.
 - **Never use `@gorhom/bottom-sheet` `BottomSheetModal`** — its `present()` silently no-ops in release builds on RN 0.79 + New Architecture (two fix attempts failed on device, including `enableDynamicSizing={false}`). Use plain RN `Modal` with `presentationStyle="pageSheet"` like every existing dialog. The `BottomSheetModalProvider` in the root layout is vestigial.
 - **Tab screens must not carry their own `entering` animation.** `(tabs)/_layout.tsx` already slides scenes horizontally, and bottom-tabs mounts each screen lazily — so a screen-level `FadeInDown` fires *during* that slide on the first visit to a tab and the page appears to rise from underneath before sliding. Same applies to pushed stack screens, which get the platform's slide-from-right.
+- **Nothing inside a `DraggableFlatList` cell may animate its own height.** No Reanimated `layout={LinearTransition}` / `exiting=` on a row or anything it wraps, and no state that re-renders the list while a pan is active. `react-native-draggable-flatlist@4.0.3` is the last release published before Fabric; it caches cell offsets and re-parents the cell it is dragging, so a card whose height eases underneath it leaves those offsets stale — the list freezes mid-drag and the app dies natively (past the `ErrorBoundary`, so there's no error screen to read). This is exactly how in-session reorder broke. `entering=` on a subtree *inside* an expanded card is fine; it never takes part in a reorder. The session screen also parks its rest and elapsed countdowns for the length of a drag (`draggingRef`) for the same reason.
 
 ---
 
@@ -57,6 +58,8 @@ Package manager: **pnpm workspaces**. Always `pnpm install` from root. Each pack
 - All `id` columns are `uuid DEFAULT gen_random_uuid()`.
 - All tables have `created_at timestamptz NOT NULL DEFAULT now()`.
 - **Training Focuses** (`training_focuses` + the `session_focuses` join table) are user-owned goals with a `focus_status` (active/achieved/archived); a mat session ticks which focuses it worked on. Scope every focus query by `user_id`.
+- **An exercise's muscles are `muscle_group` (primary) + `secondary_muscles` (`text[]`)**, and the heat map weights the primary twice what a secondary gets (`frontend/src/lib/muscleSlugMap.ts`). Two vocabularies live in those columns: the seed's Title-Case anatomy (`Lats`, `Quadriceps`) and the pick-list's gym shorthand (`MUSCLE_GROUPS` in `@app/shared`). Reads accept either — `muscleSlugMap` normalizes; **writes accept only `MUSCLE_GROUPS`**.
+- **Re-tagging a seeded exercise writes to `exercise_muscle_overrides`, never to the `exercises` row.** Global rows are shared by every user, so editing Pull-ups in place would change it for everyone, and forking a personal copy would give it a new id that the user's existing `session_entries` don't point at. Every read of muscles must resolve the caller's override over the catalogue value — `GET /exercises`, `GET /exercises/:id`, and `GET /stats/muscles` all do. An override replaces the whole tagging rather than merging, so test for it on the NOT NULL `secondary_muscles` column, not with `COALESCE` on the primary alone.
 
 ---
 

@@ -76,8 +76,23 @@ describe('GET /stats/muscles', () => {
     await makeApp().request('/stats/muscles?since=2026-08-03', { headers: await bearer() }, env);
     const { sql } = issuedQuery();
     expect(sql).toContain('FILTER (WHERE ss.completed)');
-    expect(sql).toContain('GROUP BY se.id, e.muscle_group, e.secondary_muscles');
+    expect(sql).toContain(
+      'GROUP BY se.id, mo.muscle_group, e.muscle_group, mo.secondary_muscles, e.secondary_muscles',
+    );
     expect(mock.selectDistinct).not.toHaveBeenCalled();
+  });
+
+  // A user who re-tagged a seeded exercise's muscles must see their own tagging
+  // on the heat map, not the catalogue's — and the override replaces the whole
+  // tagging, so an override with no secondaries has to beat the catalogue's
+  // secondaries rather than COALESCE back to them.
+  it('resolves the caller\'s muscle override over the catalogue tagging', async () => {
+    await makeApp().request('/stats/muscles?since=2026-08-03', { headers: await bearer() }, env);
+    const { sql } = issuedQuery();
+    expect(sql).toContain('LEFT JOIN exercise_muscle_overrides mo');
+    expect(sql).toContain('mo.exercise_id = e.id AND mo.user_id = s.user_id');
+    expect(sql).toContain('COALESCE(mo.muscle_group, e.muscle_group)');
+    expect(sql).toContain('CASE WHEN mo.secondary_muscles IS NULL');
   });
 
   // An entry with no strength_sets at all (conditioning work) must survive the

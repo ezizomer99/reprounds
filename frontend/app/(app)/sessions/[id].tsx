@@ -18,7 +18,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import type { RenderItemParams } from 'react-native-draggable-flatlist';
-import Animated, { FadeIn, LinearTransition, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import Animated, { FadeIn, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type {
@@ -91,6 +91,7 @@ import {
   parseNumberInRangeResult,
 } from '../../../src/lib/parseNumber';
 import { suggestOverload } from '../../../src/lib/overload';
+import { isOptimisticId, reorderPayload } from '../../../src/lib/reorder';
 import { generateWarmupRamp } from '../../../src/lib/warmup';
 import { cancelScheduled, cancelScheduledByKind, scheduleInSeconds } from '../../../src/lib/notifications';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
@@ -452,6 +453,10 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
 
   const isDone = set.completed;
   const hasNote = (set.notes ?? '').trim().length > 0;
+  // A finished set is tinted by its type rather than a flat "done" green, so an
+  // AMRAP or a set taken to failure still says so once the checkmark lands.
+  // Normal sets resolve to the primary colour, which is what they always were.
+  const typeColor = SET_TYPE_COLOR[set.setType];
 
   function toggleComplete() {
     if (isOptimistic) return;
@@ -467,19 +472,19 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
 
   return (
     <View>
-    <View style={[styles.setRow, isDone && { backgroundColor: withAlpha(T.primary, 0.08) }]}>
+    <View style={[styles.setRow, isDone && { backgroundColor: withAlpha(typeColor, 0.08) }]}>
       {/* Number circle / warm-up — tap to toggle complete */}
       <View style={styles.setCircleCol}>
         <TouchableOpacity
           style={[
             styles.setCircle,
-            { borderColor: SET_TYPE_COLOR[set.setType] },
-            isDone && styles.setCircleDone,
+            { borderColor: typeColor },
+            isDone && { backgroundColor: typeColor },
           ]}
           onPress={toggleComplete}
           disabled={updateSet.isPending || isOptimistic}
           accessibilityRole="button"
-          accessibilityLabel={`Set ${displayNumber ?? 'warm-up'} — ${isDone ? 'completed, tap to un-complete' : 'tap to complete'}`}
+          accessibilityLabel={`Set ${displayNumber ?? 'warm-up'}, ${SET_TYPE_LABEL[set.setType]} — ${isDone ? 'completed, tap to un-complete' : 'tap to complete'}`}
         >
           {isDone ? (
             <Ionicons name="checkmark" size={16} color={T.onPrimary} />
@@ -489,8 +494,8 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
             <Text style={styles.setCircleText}>{displayNumber}</Text>
           )}
         </TouchableOpacity>
-        {!isDone && set.setType !== 'normal' && (
-          <Text style={[styles.setTypeLabel, { color: SET_TYPE_COLOR[set.setType] }]}>
+        {set.setType !== 'normal' && (
+          <Text style={[styles.setTypeLabel, { color: typeColor }]}>
             {SET_TYPE_SHORT[set.setType]}
           </Text>
         )}
@@ -978,7 +983,8 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
   const doneSets = entry.sets.filter((s) => s.completed).length;
 
   return (
-    <Animated.View style={styles.entryCard} layout={LinearTransition.duration(200)}>
+    // No `layout` animation here — see the DraggableFlatList note in CLAUDE.md.
+    <Animated.View style={styles.entryCard}>
       <View style={styles.entryHead}>
         <TouchableOpacity
           style={styles.entryNameBtn}
@@ -1284,7 +1290,7 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
 
   if (!discipline) {
     return (
-      <Animated.View style={styles.entryCard} layout={LinearTransition.duration(200)}>
+      <Animated.View style={styles.entryCard}>
         {head(entry.disciplineName ?? 'Discipline')}
         {!collapsed && <ActivityIndicator style={{ margin: 12 }} color={T.primary} />}
       </Animated.View>
@@ -1300,7 +1306,8 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
     : BOXING_WEAPONS;
 
   return (
-    <Animated.View style={styles.entryCard} layout={LinearTransition.duration(200)}>
+    // No `layout` animation here — see the DraggableFlatList note in CLAUDE.md.
+    <Animated.View style={styles.entryCard}>
       {head(discipline.name)}
 
       {!collapsed && (
@@ -1790,6 +1797,14 @@ export default function SessionScreen() {
   const prTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
+  // True from the moment a card is picked up until the drop is handled. The
+  // rest and elapsed ticks below re-render the whole screen twice a second
+  // between them, which rebuilds every cell while DraggableFlatList is midway
+  // through measuring them — so they hold still for the length of a drag. Both
+  // countdowns are derived from a stored timestamp, so the first tick after the
+  // drop snaps back to the right value rather than resuming where it paused.
+  // A ref, not state, so setting it doesn't itself cause the render it prevents.
+  const draggingRef = useRef(false);
 
   // Derive the visible rest countdown from the absolute end time. The interval
   // only recomputes from Date.now(), so on return from background it snaps to
@@ -1815,6 +1830,7 @@ export default function SessionScreen() {
   useEffect(() => {
     if (restEndsAt === null) return;
     const tick = () => {
+      if (draggingRef.current) return;
       const remaining = Math.max(0, Math.ceil((restEndsAt - Date.now()) / 1000));
       setRestSeconds(remaining);
       if (remaining <= 0) finishRestCountdown(false);
@@ -1829,6 +1845,9 @@ export default function SessionScreen() {
   // backgrounded the OS notification already alerted, so no extra buzz.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
+      // Backgrounding tears down the pan without a drop, so the drag flag would
+      // otherwise stay set and keep both countdowns paused for good.
+      if (state !== 'active') draggingRef.current = false;
       if (state === 'active' && restEndsAt !== null) {
         const remaining = Math.max(0, Math.ceil((restEndsAt - Date.now()) / 1000));
         setRestSeconds(remaining);
@@ -1842,11 +1861,23 @@ export default function SessionScreen() {
     if (!session?.startedAt || session.status !== 'in_progress') return;
     // Backdated log: the wall-clock elapsed time is meaningless, so don't run.
     if (session.date < localTodayISO()) return;
-    const tick = () => setElapsed(Math.floor((Date.now() - new Date(session.startedAt!).getTime()) / 1000));
+    const tick = () => {
+      if (draggingRef.current) return;
+      setElapsed(Math.floor((Date.now() - new Date(session.startedAt!).getTime()) / 1000));
+    };
     tick();
     const intervalId = setInterval(tick, 1000);
     return () => clearInterval(intervalId);
   }, [session?.startedAt, session?.status, session?.date]);
+
+  // Held stable across the rest countdown's twice-a-second ticks: only whether
+  // a timer is up matters for the entry list's bottom inset, not the number on
+  // it, and a fresh style array would re-render every cell each tick.
+  const restPillShowing = restSeconds !== null;
+  const listContentStyle = useMemo(
+    () => [styles.body, { paddingBottom: insets.bottom + (restPillShowing ? 140 : 48) }],
+    [styles, insets.bottom, restPillShowing],
+  );
 
   // A finished session has no next set to rest for — clear any pending
   // "Rest complete" notification (covers finishing mid-rest and reopening a
@@ -2143,6 +2174,8 @@ export default function SessionScreen() {
   const sessionVolume = session.entries.reduce((sum, e) => sum + totalVolume(e.sets), 0);
   const hasMartialArts = session.entries.some((e) => e.kind === 'martial_arts');
   const hasExercise = session.entries.some((e) => e.kind === 'exercise');
+  // An entry added seconds ago still holds a client id until the refetch lands.
+  const hasPendingEntry = session.entries.some((e) => isOptimisticId(e.id));
   const canFinish = doneCount > 0 || hasMartialArts;
   const isActive = session.status !== 'completed';
   const isPlanned = session.status === 'planned';
@@ -2324,16 +2357,20 @@ export default function SessionScreen() {
         removeClippedSubviews={false}
         initialNumToRender={50}
         windowSize={21}
+        activationDistance={12}
+        autoscrollThreshold={80}
+        onDragBegin={() => { draggingRef.current = true; }}
         onDragEnd={({ data }) => {
-          const order = data.map((e) => e.id);
-          if (order.every((id, i) => session.entries[i]?.id === id)) return;
+          draggingRef.current = false;
+          const order = reorderPayload(data, session.entries);
+          if (order === null) return;
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           reorderEntries.mutate(
             { sessionId: session.id, order },
             { onError: (err) => Alert.alert('Error', err.message || 'Failed to reorder.') },
           );
         }}
-        contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + (restSeconds !== null ? 140 : 48) }]}
+        contentContainerStyle={listContentStyle}
         ListHeaderComponent={
           <View style={styles.listHeader}>
             {session.entries.length === 0 && (
@@ -2373,8 +2410,11 @@ export default function SessionScreen() {
           const canLink = isActive && entry.kind === 'exercise' && prev?.kind === 'exercise';
           const isCollapsed = collapsedIds.has(entry.id);
           // Only a collapsed card can be dragged — an expanded one is full of
-          // inputs a long-press would fight with.
-          const dragHandler = isCollapsed && session.entries.length > 1 ? drag : undefined;
+          // inputs a long-press would fight with. Reordering is also off while
+          // any entry is still optimistic: its id isn't a UUID yet, so the
+          // whole PUT would come back 400.
+          const canDrag = isCollapsed && session.entries.length > 1 && !hasPendingEntry;
+          const dragHandler = canDrag ? drag : undefined;
 
           return (
             <ScaleDecorator activeScale={1.03}>
@@ -2770,8 +2810,6 @@ function makeStyles(T: ThemeColors) {
     width: 30, height: 30, borderRadius: R.sm, borderWidth: 1.5, borderColor: T.borderStrong,
     backgroundColor: T.surface2, alignItems: 'center', justifyContent: 'center',
   },
-  setCircleWarm: { borderColor: withAlpha(T.gold, 0.5) },
-  setCircleDone: { backgroundColor: T.primary, borderColor: T.primary },
   setCircleText: { fontFamily: F.monoBold, fontSize: 14, color: T.text },
   setTypeLabel: { fontSize: 7, fontFamily: F.uiBold, letterSpacing: 0.4 },
   setCirclePlaceholder: { width: 30 },

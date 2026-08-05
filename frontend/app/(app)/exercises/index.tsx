@@ -21,6 +21,7 @@ import {
   useExercises,
 } from '../../../src/hooks/useExercises';
 import { ExerciseForm } from '../../../src/components/ExerciseForm';
+import { ExerciseMusclesSheet } from '../../../src/components/ExerciseMusclesSheet';
 import { ExerciseFilters, filterByChips, EMPTY_FILTER, type ExerciseChipFilter } from '../../../src/components/ExerciseFilters';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useProGate } from '../../../src/hooks/useProGate';
@@ -43,16 +44,29 @@ function titleForTarget(target: string): string {
 }
 
 
+/**
+ * Row subtitle: equipment first, then every muscle the lift works. The muscles
+ * used to be a single fallback behind equipment, so a barbell bench press never
+ * showed one at all — and now that an exercise can carry several, seeing them
+ * here is the only confirmation a re-tag took without opening anything.
+ */
+function rowMeta(exercise: Exercise): string | null {
+  const muscles = [exercise.muscleGroup, ...(exercise.secondaryMuscles ?? [])].filter(Boolean);
+  const parts = [exercise.equipment, muscles.join(', ') || null, exercise.category];
+  return parts.filter(Boolean).slice(0, 2).join(' · ') || null;
+}
+
 interface ExerciseRowProps {
   exercise: Exercise;
   isOwned: boolean;
   onPress: (exercise: Exercise) => void;
+  onEditMuscles: (exercise: Exercise) => void;
   onDelete: (id: string) => void;
   styles: ReturnType<typeof makeStyles>;
   T: ThemeColors;
 }
 
-function ExerciseRow({ exercise, isOwned, onPress, onDelete, styles }: ExerciseRowProps) {
+function ExerciseRow({ exercise, isOwned, onPress, onEditMuscles, onDelete, styles, T }: ExerciseRowProps) {
   const swipeableRef = useRef<Swipeable>(null);
 
   function handleDelete() {
@@ -67,7 +81,7 @@ function ExerciseRow({ exercise, isOwned, onPress, onDelete, styles }: ExerciseR
     );
   }
 
-  const meta = exercise.equipment ?? exercise.muscleGroup ?? exercise.category;
+  const meta = rowMeta(exercise);
 
   const renderRightActions = () => (
     <RectButton style={styles.swipeDelete} onPress={handleDelete}>
@@ -82,18 +96,30 @@ function ExerciseRow({ exercise, isOwned, onPress, onDelete, styles }: ExerciseR
       rightThreshold={40}
       overshootRight={false}
     >
-      <TouchableOpacity
-        style={styles.row}
-        onPress={() => onPress(exercise)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.rowContent}>
-          <Text style={styles.rowName} numberOfLines={1}>{exercise.name}</Text>
-          {meta ? (
-            <Text style={styles.rowMeta} numberOfLines={1}>{meta}</Text>
-          ) : null}
-        </View>
-      </TouchableOpacity>
+      <View style={styles.rowOuter}>
+        <TouchableOpacity
+          style={styles.row}
+          onPress={() => onPress(exercise)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.rowContent}>
+            <Text style={styles.rowName} numberOfLines={1}>{exercise.name}</Text>
+            {meta ? (
+              <Text style={styles.rowMeta} numberOfLines={1}>{meta}</Text>
+            ) : null}
+          </View>
+        </TouchableOpacity>
+        {/* The exercise detail screen is entirely Pro-gated, so the muscle
+            editor can't live behind a row tap — it gets its own control. */}
+        <TouchableOpacity
+          style={styles.rowMuscleBtn}
+          onPress={() => onEditMuscles(exercise)}
+          accessibilityRole="button"
+          accessibilityLabel={`Edit muscles for ${exercise.name}`}
+        >
+          <Ionicons name="body-outline" size={18} color={T.muted} />
+        </TouchableOpacity>
+      </View>
     </Swipeable>
   );
 }
@@ -148,6 +174,7 @@ export default function ExercisesScreen() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ExerciseChipFilter>(EMPTY_FILTER);
   const [showAdd, setShowAdd] = useState(false);
+  const [muscleTarget, setMuscleTarget] = useState<Exercise | null>(null);
 
   const { data: exercises, isLoading, isError, error, refetch, isRefetching } = useExercises({
     search: search.trim() || undefined,
@@ -326,6 +353,7 @@ export default function ExercisesScreen() {
               exercise={item}
               isOwned={item.userId === currentUser?.id}
               onPress={handleRowPress}
+              onEditMuscles={setMuscleTarget}
               onDelete={handleDelete}
               styles={styles}
               T={T}
@@ -348,6 +376,8 @@ export default function ExercisesScreen() {
       )}
 
       <AddExerciseModal visible={showAdd} onClose={() => setShowAdd(false)} />
+
+      <ExerciseMusclesSheet exercise={muscleTarget} onClose={() => setMuscleTarget(null)} />
     </View>
   );
 }
@@ -412,12 +442,22 @@ function makeStyles(T: ThemeColors) {
     sectionTitle: { fontFamily: F.uiBold, fontSize: 16, color: T.text, letterSpacing: -0.2 },
     sectionCount: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim },
 
+    // The row's own background lives on rowOuter so the muscle button sits on
+    // the same opaque surface — a Swipeable reveals whatever is behind it.
+    rowOuter: { flexDirection: 'row', alignItems: 'center', backgroundColor: T.bg },
     row: {
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: D.pad,
+      paddingLeft: D.pad,
       paddingVertical: 12,
-      backgroundColor: T.bg,
+    },
+    rowMuscleBtn: {
+      width: 44,
+      alignSelf: 'stretch',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingRight: 4,
     },
     rowContent: { flex: 1, gap: 3 },
     rowName: { fontFamily: F.uiMed, fontSize: 15, color: T.text },

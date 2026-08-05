@@ -93,6 +93,11 @@ statsRoutes.get('/muscles', async (c) => {
   // The inner query rolls up per entry so an entry with no strength_sets at all
   // (conditioning work) still lands with a floor of one set instead of dropping
   // out through the LEFT JOIN.
+  // A user who has re-tagged a seeded exercise's muscles gets their override
+  // instead of the catalogue value — the whole tagging, not a merge, matching
+  // how GET /exercises resolves it. `mo.secondary_muscles` is NOT NULL on the
+  // override table, so it doubles as the "an override exists" test; COALESCE
+  // alone would be wrong for an override that deliberately sets no secondaries.
   const rows = await db.execute(sql`
     SELECT
       x.muscle_group,
@@ -101,21 +106,25 @@ statsRoutes.get('/muscles', async (c) => {
       SUM(x.volume_kg)::float  AS volume_kg
     FROM (
       SELECT
-        e.muscle_group,
-        e.secondary_muscles,
+        COALESCE(mo.muscle_group, e.muscle_group) AS muscle_group,
+        CASE WHEN mo.secondary_muscles IS NULL
+             THEN e.secondary_muscles
+             ELSE mo.secondary_muscles END        AS secondary_muscles,
         GREATEST(COUNT(ss.id) FILTER (WHERE ss.completed), 1) AS sets,
         COALESCE(SUM(ss.weight * ss.reps) FILTER (WHERE ss.completed), 0) AS volume_kg
       FROM session_entries se
       JOIN sessions  s ON se.session_id  = s.id
       JOIN exercises e ON se.exercise_id = e.id
+      LEFT JOIN exercise_muscle_overrides mo
+             ON mo.exercise_id = e.id AND mo.user_id = s.user_id
       LEFT JOIN strength_sets ss ON ss.session_entry_id = se.id
       WHERE s.user_id = ${userId}
         AND s.status  = 'completed'
         AND s.date   >= ${since}
         ${until ? sql`AND s.date < ${until}` : sql``}
         AND se.kind   = 'exercise'
-        AND e.muscle_group IS NOT NULL
-      GROUP BY se.id, e.muscle_group, e.secondary_muscles
+        AND COALESCE(mo.muscle_group, e.muscle_group) IS NOT NULL
+      GROUP BY se.id, mo.muscle_group, e.muscle_group, mo.secondary_muscles, e.secondary_muscles
     ) x
     GROUP BY x.muscle_group, x.secondary_muscles
   `);

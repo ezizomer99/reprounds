@@ -288,6 +288,28 @@ export const trainingFocuses = pgTable('training_focuses', {
   userIdStatusIdx: index('training_focuses_user_id_status_idx').on(t.userId, t.status),
 }));
 
+// One user's re-tagging of a SEEDED exercise's muscles. The ~800 catalogue rows
+// carry user_id = NULL and are shared by everyone, so editing one in place would
+// change Pull-ups for the whole app. Forking a personal copy of the row was the
+// other option and is worse: the copy gets a new id, so every session already
+// logged against the original would silently stop resolving to the exercise the
+// user now edits, and the library would list the same lift twice.
+//
+// Only global exercises are overridden. An exercise a user owns is edited in
+// place — one source of truth per row, nothing to coalesce.
+export const exerciseMuscleOverrides = pgTable('exercise_muscle_overrides', {
+  userId:           uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  exerciseId:       uuid('exercise_id').notNull().references(() => exercises.id, { onDelete: 'cascade' }),
+  muscleGroup:      text('muscle_group'),
+  // NOT NULL with an empty default, unlike exercises.secondary_muscles, so
+  // "overridden to no secondaries" is representable and distinct from absent.
+  secondaryMuscles: text('secondary_muscles').array().notNull().default(sql`'{}'::text[]`),
+  createdAt:        timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  // One override per user per exercise; also the lookup key for the read joins.
+  pk: primaryKey({ columns: [t.userId, t.exerciseId] }),
+}));
+
 // Join table linking a session to the focuses the user ticked as "worked on"
 // during that session. Drives each focus's auto session count + last-worked date.
 export const sessionFocuses = pgTable('session_focuses', {

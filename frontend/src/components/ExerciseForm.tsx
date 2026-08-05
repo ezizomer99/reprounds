@@ -13,21 +13,14 @@ import { FREE_CUSTOM_EXERCISE_LIMIT, NAME_MAX_LENGTH } from '@app/shared';
 import { useCreateExercise, useExercises } from '../hooks/useExercises';
 import { useCurrentUser } from '../hooks/useAuth';
 import { useProGate } from '../hooks/useProGate';
+import { MusclePicker, type MuscleSelection } from './MusclePicker';
+import { Chip } from './ui/Chip';
 import { F, R, type ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
-
-const MUSCLE_OPTIONS = [
-  'chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms',
-  'abs', 'glutes', 'quads', 'hamstrings', 'calves', 'full body', 'cardio',
-] as const;
 
 const EQUIPMENT_OPTIONS = [
   'Barbell', 'Dumbbell', 'Kettlebell', 'Machine', 'Bodyweight', 'Resistance Band', 'Other',
 ] as const;
-
-function titleCase(s: string): string {
-  return s.replace(/\b\w/g, (c) => c.toUpperCase());
-}
 
 export interface ExerciseFormProps {
   initialName?: string;
@@ -48,7 +41,7 @@ export function ExerciseForm({ initialName = '', submitLabel, onCreated }: Exerc
   const styles = useMemo(() => makeStyles(T), [T]);
   const [name, setName] = useState(initialName);
   const [type, setType] = useState<Exclude<ActivityType, 'martial_arts'>>('strength');
-  const [muscleGroup, setMuscleGroup] = useState<string | null>(null);
+  const [muscles, setMuscles] = useState<MuscleSelection>({ primary: null, secondary: [] });
   const [equipment, setEquipment] = useState<string | null>(null);
   const createExercise = useCreateExercise();
   const { data: allExercises } = useExercises();
@@ -77,7 +70,8 @@ export function ExerciseForm({ initialName = '', submitLabel, onCreated }: Exerc
       const newExercise = await createExercise.mutateAsync({
         name: trimmed,
         type,
-        muscleGroup: muscleGroup ?? undefined,
+        muscleGroup: muscles.primary ?? undefined,
+        secondaryMuscles: muscles.secondary,
         equipment: equipment ?? undefined,
       });
       onCreated(newExercise);
@@ -125,45 +119,19 @@ export function ExerciseForm({ initialName = '', submitLabel, onCreated }: Exerc
         </View>
       </View>
 
-      <View style={styles.field}>
-        <Text style={styles.label}>Muscle Group</Text>
-        <View style={styles.pillWrap}>
-          {MUSCLE_OPTIONS.map((m) => {
-            const active = muscleGroup === m;
-            return (
-              <TouchableOpacity
-                key={m}
-                style={[styles.pill, active && styles.pillActive]}
-                onPress={() => setMuscleGroup(active ? null : m)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                  {titleCase(m)}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
+      <MusclePicker value={muscles} onChange={setMuscles} />
 
       <View style={styles.field}>
         <Text style={styles.label}>Equipment</Text>
         <View style={styles.pillWrap}>
-          {EQUIPMENT_OPTIONS.map((eq) => {
-            const active = equipment === eq;
-            return (
-              <TouchableOpacity
-                key={eq}
-                style={[styles.pill, active && styles.pillActive]}
-                onPress={() => setEquipment(active ? null : eq)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.pillText, active && styles.pillTextActive]}>
-                  {eq}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+          {EQUIPMENT_OPTIONS.map((eq) => (
+            <Chip
+              key={eq}
+              label={eq}
+              selected={equipment === eq}
+              onPress={() => setEquipment(equipment === eq ? null : eq)}
+            />
+          ))}
         </View>
       </View>
 
@@ -219,17 +187,6 @@ function makeStyles(T: ThemeColors) {
     segmentText: { fontFamily: F.uiMed, fontSize: 14, color: T.textDim },
     segmentTextActive: { fontFamily: F.uiBold, color: T.onPrimary },
     pillWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-    pill: {
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: R.sm,
-      borderWidth: 1,
-      borderColor: T.borderStrong,
-      backgroundColor: T.surface,
-    },
-    pillActive: { backgroundColor: T.primary, borderColor: T.primary },
-    pillText: { fontFamily: F.uiMed, fontSize: 13, color: T.text },
-    pillTextActive: { color: T.onPrimary },
     submitBtn: {
       marginTop: 8,
       backgroundColor: T.primary,

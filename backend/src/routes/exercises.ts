@@ -1,11 +1,19 @@
 import { Hono } from 'hono';
 import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import { createDb } from '../db';
-import { disciplines, exercises, sessionEntries, sessions, strengthSets } from '../db/schema';
+import {
+  disciplines,
+  exerciseMuscleOverrides,
+  exercises,
+  sessionEntries,
+  sessions,
+  strengthSets,
+} from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
 import { estimatedOneRepMax, MAX_CUSTOM_EXERCISES_PER_USER, NAME_MAX_LENGTH } from '@app/shared';
 import { epleyE1rmSql } from '../lib/e1rm';
+import { parseMuscleSelection } from '../lib/muscles';
 import { isIsoDate, isWithinLength } from '../lib/validate';
 import type {
   CreateExerciseRequest,
@@ -29,7 +37,10 @@ exerciseRoutes.use('*', authMiddleware);
 
 type ExerciseRow = typeof exercises.$inferSelect;
 
-function mapExercise(r: ExerciseRow): Exercise {
+/** The caller's override of a seeded exercise's muscles, when they have one. */
+type OverrideRow = { muscleGroup: string | null; secondaryMuscles: string[] } | null;
+
+function mapExercise(r: ExerciseRow, override?: OverrideRow): Exercise {
   return {
     id: r.id,
     userId: r.userId,
@@ -39,10 +50,52 @@ function mapExercise(r: ExerciseRow): Exercise {
     category: r.category,
     bodyPart: r.bodyPart,
     equipment: r.equipment,
-    muscleGroup: r.muscleGroup,
-    secondaryMuscles: r.secondaryMuscles,
+    // An override replaces the catalogue tagging wholesale rather than merging
+    // into it — the user is saying what the lift works, not adding to a list.
+    muscleGroup: override ? override.muscleGroup : r.muscleGroup,
+    secondaryMuscles: override ? override.secondaryMuscles : r.secondaryMuscles,
     target: r.target,
   };
+}
+
+/**
+ * Rows shaped for `mapExercise` with the caller's muscle override attached.
+ * A LEFT JOIN, so an exercise with no override still comes back.
+ */
+function selectExercisesForUser(
+  db: ReturnType<typeof createDb>,
+  userId: string,
+) {
+  return db
+    .select({
+      exercise: exercises,
+      override: {
+        muscleGroup: exerciseMuscleOverrides.muscleGroup,
+        secondaryMuscles: exerciseMuscleOverrides.secondaryMuscles,
+      },
+    })
+    .from(exercises)
+    .leftJoin(
+      exerciseMuscleOverrides,
+      and(
+        eq(exerciseMuscleOverrides.exerciseId, exercises.id),
+        eq(exerciseMuscleOverrides.userId, userId),
+      ),
+    );
+}
+
+/**
+ * "Did an override row match?" — the question the LEFT JOIN above leaves open.
+ * Drizzle can express a miss either as a null nested object or as an object of
+ * nulls depending on how the selection is shaped, so both are treated as absent.
+ * The test on a NOT NULL column (`secondary_muscles`) is what makes the second
+ * case unambiguous: an override that deliberately clears the muscles still has
+ * an array there, so it stays distinguishable from having no override at all.
+ */
+function overrideOf(row: { override: { muscleGroup: string | null; secondaryMuscles: string[] | null } | null }): OverrideRow {
+  const o = row.override;
+  if (!o || o.secondaryMuscles === null) return null;
+  return { muscleGroup: o.muscleGroup, secondaryMuscles: o.secondaryMuscles };
 }
 
 // GET /exercises
@@ -81,16 +134,14 @@ exerciseRoutes.get('/', async (c) => {
   const limit = Number.isInteger(limitParam) && limitParam > 0 ? Math.min(limitParam, 1000) : 1000;
   const offset = Number.isInteger(offsetParam) && offsetParam > 0 ? offsetParam : 0;
 
-  const rows = await db
-    .select()
-    .from(exercises)
+  const rows = await selectExercisesForUser(db, userId)
     .where(and(...conditions))
     .orderBy(exercises.name)
     .limit(limit)
     .offset(offset);
 
   const result: ExerciseListResponse = {
-    exercises: rows.map((r) => mapExercise(r)),
+    exercises: rows.map((r) => mapExercise(r.exercise, overrideOf(r))),
   };
 
   return c.json(result);
@@ -119,6 +170,9 @@ exerciseRoutes.post('/', async (c) => {
     return c.json({ error: `name must be ${NAME_MAX_LENGTH} characters or fewer` }, 400);
   }
 
+  const muscles = parseMuscleSelection(body);
+  if ('error' in muscles) return c.json({ error: muscles.error }, 400);
+
   // Abuse ceiling, not the paywall — see the note on FREE_CUSTOM_EXERCISE_LIMIT
   // in @app/shared. The Worker can't distinguish a paying Pro user from a free
   // one, so this sits far above any real usage and only bounds a scripted
@@ -142,12 +196,93 @@ exerciseRoutes.post('/', async (c) => {
       name: body.name,
       type: body.type,
       target: body.target ?? null,
-      muscleGroup: body.muscleGroup ?? null,
+      muscleGroup: muscles.value.muscleGroup,
+      secondaryMuscles: muscles.value.secondaryMuscles,
       equipment: body.equipment ?? null,
     })
     .returning();
 
   return c.json({ exercise: mapExercise(row) }, 201);
+});
+
+// PUT /exercises/:id/muscles — replace an exercise's whole muscle tagging.
+//
+// Works on any exercise the caller can see, but by two different mechanisms:
+// their own row is updated in place, while a seeded global row (user_id NULL,
+// shared by every user) gets a per-user override instead. See the note on
+// exercise_muscle_overrides in the schema for why it isn't a copied row.
+exerciseRoutes.put('/:id/muscles', async (c) => {
+  const userId = c.get('userId');
+  const id = c.req.param('id');
+  const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid request body' }, 400);
+  }
+
+  const muscles = parseMuscleSelection(body);
+  if ('error' in muscles) return c.json({ error: muscles.error }, 400);
+  const { muscleGroup, secondaryMuscles } = muscles.value;
+
+  // Same visibility predicate as GET /:id — own rows plus the global catalogue.
+  const [existing] = await db
+    .select()
+    .from(exercises)
+    .where(and(eq(exercises.id, id), or(isNull(exercises.userId), eq(exercises.userId, userId))!))
+    .limit(1);
+
+  if (!existing) return c.json({ error: 'Not found' }, 404);
+
+  if (existing.userId === userId) {
+    const [row] = await db
+      .update(exercises)
+      .set({ muscleGroup, secondaryMuscles })
+      .where(and(eq(exercises.id, id), eq(exercises.userId, userId)))
+      .returning();
+
+    return c.json({ exercise: mapExercise(row) });
+  }
+
+  await db
+    .insert(exerciseMuscleOverrides)
+    .values({ userId, exerciseId: id, muscleGroup, secondaryMuscles })
+    .onConflictDoUpdate({
+      target: [exerciseMuscleOverrides.userId, exerciseMuscleOverrides.exerciseId],
+      set: { muscleGroup: sql`excluded.muscle_group`, secondaryMuscles: sql`excluded.secondary_muscles` },
+    });
+
+  return c.json({ exercise: mapExercise(existing, { muscleGroup, secondaryMuscles }) });
+});
+
+// DELETE /exercises/:id/muscles — drop the caller's override, restoring the
+// catalogue tagging. Idempotent, and a no-op on an exercise they own: that row
+// holds the muscles directly, so there is nothing to restore it to.
+exerciseRoutes.delete('/:id/muscles', async (c) => {
+  const userId = c.get('userId');
+  const id = c.req.param('id');
+  const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+
+  const [existing] = await db
+    .select()
+    .from(exercises)
+    .where(and(eq(exercises.id, id), or(isNull(exercises.userId), eq(exercises.userId, userId))!))
+    .limit(1);
+
+  if (!existing) return c.json({ error: 'Not found' }, 404);
+
+  await db
+    .delete(exerciseMuscleOverrides)
+    .where(
+      and(
+        eq(exerciseMuscleOverrides.exerciseId, id),
+        eq(exerciseMuscleOverrides.userId, userId),
+      ),
+    );
+
+  return c.json({ exercise: mapExercise(existing) });
 });
 
 // GET /exercises/:id  — single exercise with its metadata
@@ -156,15 +291,13 @@ exerciseRoutes.get('/:id', async (c) => {
   const id = c.req.param('id');
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
-  const [row] = await db
-    .select()
-    .from(exercises)
+  const [row] = await selectExercisesForUser(db, userId)
     .where(and(eq(exercises.id, id), or(isNull(exercises.userId), eq(exercises.userId, userId))!))
     .limit(1);
 
   if (!row) return c.json({ error: 'Not found' }, 404);
 
-  return c.json({ exercise: mapExercise(row) });
+  return c.json({ exercise: mapExercise(row.exercise, overrideOf(row)) });
 });
 
 // PATCH /exercises/:id

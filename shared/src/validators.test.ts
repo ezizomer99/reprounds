@@ -6,6 +6,7 @@ import {
   isFightResult,
   isFocusStatus,
   isGiType,
+  isMuscleGroup,
   isNumberInRange,
   isSetType,
 } from './validators';
@@ -33,6 +34,12 @@ describe('enum guards', () => {
 
     expect(isFocusStatus('achieved')).toBe(true);
     expect(isFocusStatus('done')).toBe(false);
+
+    expect(isMuscleGroup('back')).toBe(true);
+    expect(isMuscleGroup('full body')).toBe(true);
+    // The seeded catalogue's anatomical vocabulary is readable but not writable.
+    expect(isMuscleGroup('Lats')).toBe(false);
+    expect(isMuscleGroup('quadriceps')).toBe(false);
   });
 
   it('reject non-string values', () => {
