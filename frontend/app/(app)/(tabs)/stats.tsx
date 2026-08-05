@@ -16,23 +16,26 @@ import Body from 'react-native-body-highlighter';
 import { MAX_SESSIONS_PAGE, useSessions } from '../../../src/hooks/useSession';
 import { useProGate } from '../../../src/hooks/useProGate';
 import {
-  mondayISO,
   nextMondayISO,
-  sessionsThisWeek,
-  avgPerWeek,
+  weeksAgoMonday,
   computeWeekStreak,
-  getWeeklyBarData,
+  avgPerWeekFromBuckets,
+  weeklyBarLabel,
+  statsRange,
+  STATS_RANGES,
+  type StatsRangeKey,
 } from '../../../src/lib/statsHelpers';
-import { useMuscleSummary, useTopLifts } from '../../../src/hooks/useStats';
+import { useMuscleSummary, useTopLifts, useWeeklyStats } from '../../../src/hooks/useStats';
 import { useTodayISO } from '../../../src/hooks/useTodayISO';
 import { aggregateMuscles } from '../../../src/lib/muscleSlugMap';
 import { parseLocalDate } from '../../../src/lib/calendar';
 import { useUnit } from '../../../src/units/UnitContext';
-import { fmtWeight } from '../../../src/units/units';
+import { fmtWeight, kgToUnit } from '../../../src/units/units';
 import { Skeleton } from '../../../src/components/Skeleton';
 import { InlineError } from '../../../src/components/InlineError';
 import { MatStatsView } from '../../../src/components/stats/MatStatsView';
 import { RecentNotesCard } from '../../../src/components/stats/RecentNotesCard';
+import { PRFeedCard } from '../../../src/components/stats/PRFeedCard';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -50,7 +53,14 @@ export default function StatsTab() {
   const { unit } = useUnit();
   const [muscleView, setMuscleView] = useState<'front' | 'back'>('front');
   const [statsView, setStatsView] = useState<'gym' | 'mat'>('gym');
+  // One range drives both halves of the tab, so switching Gym/Mat keeps it.
+  const [rangeKey, setRangeKey] = useState<StatsRangeKey>('8w');
+  const range = statsRange(rangeKey);
 
+  // Still fetched, but only for the streak: a streak can reach back further than
+  // the selected range, so it can't come from the range's buckets. Everything
+  // else on this screen now reads server-side aggregates, which stay correct
+  // past the 200-session page cap this list is subject to.
   const { data: sessions, isLoading, isError, refetch } = useSessions('completed', MAX_SESSIONS_PAGE);
 
   // Local, not UTC: toISOString() sent the preceding Sunday as the window
@@ -60,29 +70,59 @@ export default function StatsTab() {
   // are query keys, so unlike the helpers below they do not self-correct on
   // re-render, and an app resumed the next morning kept asking for last week.
   const todayISO = useTodayISO();
-  const thisWeekMonday = useMemo(() => mondayISO(parseLocalDate(todayISO)), [todayISO]);
+  const rangeStart = useMemo(
+    () => weeksAgoMonday(range.weeks, parseLocalDate(todayISO)),
+    [range.weeks, todayISO],
+  );
   const nextWeekMonday = useMemo(() => nextMondayISO(parseLocalDate(todayISO)), [todayISO]);
   const {
     data: muscleData,
     isLoading: muscleLoading,
     isError: muscleError,
     refetch: refetchMuscles,
-  } = useMuscleSummary(thisWeekMonday, nextWeekMonday);
+  } = useMuscleSummary(rangeStart, nextWeekMonday);
   const {
     data: topLiftsData,
     isLoading: topLiftsLoading,
     isError: topLiftsError,
     refetch: refetchTopLifts,
-  } = useTopLifts();
+  } = useTopLifts(rangeStart);
+  const {
+    data: weeklyData,
+    isLoading: weeklyLoading,
+    isError: weeklyError,
+    refetch: refetchWeekly,
+  } = useWeeklyStats(rangeStart, range.weeks);
 
-  const thisWeek = useMemo(() => (sessions ? sessionsThisWeek(sessions) : 0), [sessions]);
-  const avg = useMemo(() => (sessions ? avgPerWeek(sessions) : 0), [sessions]);
+  const weeks = useMemo(() => weeklyData?.weeks ?? [], [weeklyData]);
+  // The newest bucket is the current week by construction — rangeStart is the
+  // Monday `weeks - 1` weeks back, so the series always ends on this week.
+  const thisWeek = weeks.length ? weeks[weeks.length - 1].sessions : 0;
+  const avg = useMemo(() => avgPerWeekFromBuckets(weeks), [weeks]);
   const streak = useMemo(
     () => (sessions ? computeWeekStreak(sessions.map((s) => s.date)) : 0),
     [sessions],
   );
 
-  const weeklyBarData = useMemo(() => getWeeklyBarData(sessions ?? []), [sessions]);
+  const sessionBarData = useMemo(
+    () =>
+      weeks.map((w, i) => ({
+        value: w.sessions,
+        label: weeklyBarLabel(w.weekStart, i, weeks.length),
+      })),
+    [weeks],
+  );
+  const volumeBarData = useMemo(
+    () =>
+      weeks.map((w, i) => ({
+        // Charted in the user's display unit so the axis matches every other
+        // weight on screen; the API is always kg. Whole units — weekly tonnage
+        // runs to thousands and a decimal place on the axis is noise.
+        value: Math.round(kgToUnit(w.volumeKg, unit)),
+        label: weeklyBarLabel(w.weekStart, i, weeks.length),
+      })),
+    [weeks, unit],
+  );
 
   const bodyData = useMemo(
     () => aggregateMuscles(muscleData?.muscles ?? []),
@@ -90,7 +130,8 @@ export default function StatsTab() {
   );
 
   const hasMuscles = bodyData.length > 0;
-  const hasSessions = (sessions?.length ?? 0) > 0;
+  const hasSessions = weeks.some((w) => w.sessions > 0);
+  const hasVolume = weeks.some((w) => w.volumeKg > 0);
 
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
@@ -154,8 +195,27 @@ export default function StatsTab() {
           ))}
         </View>
 
+        {/* ── Range ── */}
+        <View style={styles.rangeRow}>
+          {STATS_RANGES.map((r) => (
+            <TouchableOpacity
+              key={r.key}
+              style={[styles.rangeBtn, rangeKey === r.key && styles.rangeBtnActive]}
+              onPress={() => setRangeKey(r.key)}
+              activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={r.longLabel}
+              accessibilityState={{ selected: rangeKey === r.key }}
+            >
+              <Text style={[styles.rangeText, rangeKey === r.key && styles.rangeTextActive]}>
+                {r.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         {statsView === 'mat' ? (
-          <MatStatsView />
+          <MatStatsView weeks={range.weeks} rangeLabel={range.longLabel} />
         ) : (
           <>
         {/* ── Highlights ── */}
@@ -165,13 +225,19 @@ export default function StatsTab() {
             <Text style={styles.highlightsTitle}>Highlights</Text>
           </View>
 
-          {/* The error guard sits here, not around the whole gym view: Muscles
-              This Week and Top Lifts are separate queries with their own error
-              and retry handling, and blanking them on a failed session fetch
-              hid data that had loaded fine. */}
-          {isError ? (
-            <InlineError message="Couldn't load your gym stats." onRetry={() => void refetch()} />
-          ) : isLoading || proLoading ? (
+          {/* The error guard sits here, not around the whole gym view: the muscle
+              map and Top Lifts are separate queries with their own error and
+              retry handling, and blanking them on a failed fetch here hid data
+              that had loaded fine. */}
+          {weeklyError || isError ? (
+            <InlineError
+              message="Couldn't load your gym stats."
+              onRetry={() => {
+                void refetch();
+                void refetchWeekly();
+              }}
+            />
+          ) : weeklyLoading || isLoading || proLoading ? (
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
               <Skeleton width="30%" height={72} radius={12} />
               <Skeleton width="30%" height={72} radius={12} />
@@ -226,14 +292,17 @@ export default function StatsTab() {
           )}
         </View>
 
-        {/* ── Muscles This Week (FREE) ── */}
+        {/* ── Muscles over the selected range (FREE) ── */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.cardHeaderLeft}>
               <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.performance, 0.15) }]}>
                 <Ionicons name="body-outline" size={16} color={T.performance} />
               </View>
-              <Text style={styles.cardTitle}>Muscles This Week</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardTitle}>Muscles Trained</Text>
+                <Text style={styles.cardSub}>{range.longLabel}</Text>
+              </View>
             </View>
             <View style={styles.toggleRow}>
               {(['front', 'back'] as const).map((side) => (
@@ -275,7 +344,7 @@ export default function StatsTab() {
           ) : (
             <View style={styles.muscleEmpty}>
               <Text style={styles.muscleEmptyText}>
-                Log a gym workout this week to see muscles trained.
+                Log a gym workout in this range to see muscles trained.
               </Text>
             </View>
           )}
@@ -288,7 +357,10 @@ export default function StatsTab() {
               <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.conditioning, 0.15) }]}>
                 <Ionicons name="bar-chart-outline" size={16} color={T.conditioning} />
               </View>
-              <Text style={styles.cardTitle}>Sessions per Week</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardTitle}>Sessions per Week</Text>
+                <Text style={styles.cardSub}>{range.longLabel}</Text>
+              </View>
             </View>
             {!isPro && !proLoading && (
               <TouchableOpacity onPress={showPaywall} activeOpacity={0.7}>
@@ -298,7 +370,7 @@ export default function StatsTab() {
           </View>
 
           {isPro || proLoading ? (
-            isLoading || proLoading ? (
+            weeklyLoading || proLoading ? (
               <Skeleton width="100%" height={100} radius={8} />
             ) : !hasSessions ? (
               <Text style={styles.emptyText}>
@@ -311,7 +383,7 @@ export default function StatsTab() {
                 style={{ marginTop: 8 }}
               >
                 <BarChart
-                  data={weeklyBarData}
+                  data={sessionBarData}
                   barWidth={28}
                   spacing={8}
                   roundedTop
@@ -334,6 +406,73 @@ export default function StatsTab() {
             <TouchableOpacity onPress={showPaywall} activeOpacity={0.85}>
               <View style={styles.proBlur}>
                 <Text style={styles.proBlurText}>Upgrade to Pro to see your weekly activity chart</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* ── Volume per Week (PRO) ──
+            Session count says how often you showed up; tonnage says whether the
+            work went anywhere. Same buckets as the chart above, so the two read
+            against each other. */}
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardHeaderLeft}>
+              <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.performance, 0.15) }]}>
+                <Ionicons name="trending-up-outline" size={16} color={T.performance} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardTitle}>Volume per Week</Text>
+                <Text style={styles.cardSub}>{range.longLabel} · {unit}</Text>
+              </View>
+            </View>
+            {!isPro && !proLoading && (
+              <TouchableOpacity onPress={showPaywall} activeOpacity={0.7}>
+                <Ionicons name="lock-closed" size={16} color={T.muted} />
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {isPro || proLoading ? (
+            weeklyLoading || proLoading ? (
+              <Skeleton width="100%" height={100} radius={8} />
+            ) : !hasVolume ? (
+              // Distinct from the sessions chart's empty copy: a month of
+              // bodyweight or conditioning work is real training that logs no
+              // tonnage, and shouldn't read as "you did nothing".
+              <Text style={styles.emptyText}>
+                Log sets with weight and reps to see your weekly tonnage.
+              </Text>
+            ) : (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={{ marginTop: 8 }}
+              >
+                <BarChart
+                  data={volumeBarData}
+                  barWidth={28}
+                  spacing={8}
+                  roundedTop
+                  frontColor={T.performance}
+                  gradientColor={withAlpha(T.performance, 0.5)}
+                  isAnimated
+                  height={100}
+                  noOfSections={4}
+                  yAxisColor="transparent"
+                  xAxisColor={T.border}
+                  yAxisTextStyle={{ color: T.muted, fontSize: 10, fontFamily: F.mono }}
+                  xAxisLabelTextStyle={{ color: T.muted, fontSize: 8, fontFamily: F.uiMed }}
+                  hideRules
+                  barBorderRadius={4}
+                  showGradient
+                />
+              </ScrollView>
+            )
+          ) : (
+            <TouchableOpacity onPress={showPaywall} activeOpacity={0.85}>
+              <View style={styles.proBlur}>
+                <Text style={styles.proBlurText}>Upgrade to Pro to see your weekly volume</Text>
               </View>
             </TouchableOpacity>
           )}
@@ -405,6 +544,11 @@ export default function StatsTab() {
             </TouchableOpacity>
           )}
         </View>
+
+        {/* ── New PRs (PRO) ──
+            Under Top Lifts by design: that board is your best ever, this is what
+            actually moved inside the selected range. */}
+        <PRFeedCard since={rangeStart} rangeLabel={range.longLabel} />
           </>
         )}
 
@@ -472,6 +616,21 @@ function makeStyles(T: ThemeColors) {
     segmentText: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim },
     segmentTextActive: { color: T.onPrimary, fontFamily: F.uiSemi },
 
+    // Range selector — deliberately lighter than the Gym/Mat segment above it:
+    // that switches what you're looking at, this only reframes it.
+    rangeRow: { flexDirection: 'row', gap: 6, marginTop: 10 },
+    rangeBtn: {
+      flex: 1,
+      alignItems: 'center',
+      paddingVertical: 6,
+      borderRadius: R.chip,
+      borderWidth: 1,
+      borderColor: T.border,
+    },
+    rangeBtnActive: { backgroundColor: withAlpha(T.primary, 0.14), borderColor: T.primary },
+    rangeText: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
+    rangeTextActive: { color: T.primary, fontFamily: F.uiSemi },
+
     // Broadsheet: sections are flat, separated by rules — not floating cards.
     card: {
       borderTopWidth: 1,
@@ -510,6 +669,8 @@ function makeStyles(T: ThemeColors) {
       justifyContent: 'center',
     },
     cardTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
+    // Names the window a card is showing, so no title has to claim "this week".
+    cardSub: { fontFamily: F.ui, fontSize: 11, color: T.muted, marginTop: 2 },
 
     // Muscles card
     toggleRow: { flexDirection: 'row', gap: 4 },

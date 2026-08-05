@@ -88,3 +88,21 @@ export const DETAILS_MAX_BYTES = 64_000;
  * Far above any realistic routine or session length.
  */
 export const MAX_REORDER_IDS = 500;
+
+/**
+ * Highest rep count the Epley estimate is meaningful at.
+ *
+ * Epley (`w * (1 + reps/30)`) is a linear extrapolation fitted to low-rep work
+ * and degrades badly past roughly a dozen reps: it was applied at any rep count,
+ * so a 60 kg × 20 back-off set estimated 100 kg and outranked a genuine
+ * 100 kg × 3 in Top Lifts and in the exercise's own PR.
+ *
+ * A set above this gets **no** estimate rather than a clamped one — a clamped
+ * number is neither a real estimate nor what was lifted. What that means depends
+ * on the surface: on a leaderboard the set simply does not rank; on an
+ * exercise's own PR card the estimate reads "—" while the heaviest actual set is
+ * still shown. Both the TS calculator and the SQL helper (`backend/src/lib/e1rm.ts`)
+ * key off this constant and must agree — `/exercises/:id/prs` picks the winning
+ * row in SQL and recomputes the number in TS.
+ */
+export const E1RM_MAX_REPS = 12;

@@ -142,7 +142,11 @@ export default function ExerciseHistoryScreen() {
   const volMin = volumes.length ? Math.round(Math.min(...volumes)) : 0;
   const volMax = volumes.length ? Math.round(Math.max(...volumes)) : 0;
 
-  const e1rms = progression.map((p) => p.bestEstimatedOneRepMax).filter((v) => v > 0);
+  // Null = the session had no set the Epley estimate can speak for (all high-rep).
+  // Dropping it omits that session from the trend rather than plotting a zero.
+  const e1rms = progression
+    .map((p) => p.bestEstimatedOneRepMax)
+    .filter((v): v is number => v !== null && v > 0);
   const e1rmMin = e1rms.length ? Math.min(...e1rms) : 0;
   const e1rmMax = e1rms.length ? Math.max(...e1rms) : 0;
 

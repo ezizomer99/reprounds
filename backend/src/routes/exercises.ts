@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import { createDb } from '../db';
 import { disciplines, exercises, sessionEntries, sessions, strengthSets } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
@@ -356,6 +356,12 @@ exerciseRoutes.get('/:id/prs', async (c) => {
   // The PR is a max — compute it in the database instead of shipping every
   // completed set ever logged into the Worker (grows unboundedly with
   // training history). Mirrors estimatedOneRepMax: Epley, reps=1 → weight.
+  //
+  // Unlike the Top Lifts leaderboard, over-cap sets are NOT filtered out here.
+  // This is the exercise's own page: excluding them would blank the card for
+  // someone who only trains in high reps, when what they want is "your heaviest
+  // set was X" with the 1RM estimate reading "—". The ordering below keeps that
+  // working — see the NULLS LAST note.
   const e1rmExpr = epleyE1rmSql(sql`${strengthSets.weight}`, sql`${strengthSets.reps}`);
 
   const baseJoin = () =>
@@ -381,12 +387,23 @@ exerciseRoutes.get('/:id/prs', async (c) => {
       and(
         eq(sessionEntries.exerciseId, exerciseId),
         eq(sessions.userId, userId),
+        // This route was the only one of the three that never checked the
+        // session's status (/history and /progression both do), so a set logged
+        // in an in-progress session — or one later skipped and abandoned —
+        // counted as a personal record permanently.
+        eq(sessions.status, 'completed'),
         eq(strengthSets.completed, true),
+        // A warm-up ticked off is not a lift.
+        ne(strengthSets.setType, 'warmup'),
         isNotNull(strengthSets.weight),
         isNotNull(strengthSets.reps),
       ),
     )
-    .orderBy(sql`${e1rmExpr} DESC`)
+    // NULLS LAST or Postgres puts the unestimable sets first on a DESC sort —
+    // the exact rows the rep cap exists to reject. The weight/reps tiebreak is
+    // what makes the "keep the set, drop the estimate" behaviour work: when no
+    // set is estimable every e1rm is NULL, and the heaviest should still win.
+    .orderBy(sql`${e1rmExpr} DESC NULLS LAST, ${strengthSets.weight} DESC, ${strengthSets.reps} DESC`)
     .limit(1);
 
   const [countRow] = await db
@@ -398,6 +415,9 @@ exerciseRoutes.get('/:id/prs', async (c) => {
       and(
         eq(sessionEntries.exerciseId, exerciseId),
         eq(sessions.userId, userId),
+        // Same omission as the query above: "total sessions" was counting
+        // sessions the user started and never finished.
+        eq(sessions.status, 'completed'),
         eq(strengthSets.completed, true),
       ),
     );
@@ -423,6 +443,11 @@ exerciseRoutes.get('/:id/prs', async (c) => {
 // the 5-entry /history endpoint can't provide. Aggregated in the DB so a power
 // user's full history isn't shipped into the Worker; bounded to a window and a
 // point cap. The CASE mirrors the shared estimatedOneRepMax calculator (Epley).
+//
+// MAX() skips NULLs, so a session of nothing but high-rep work yields a null
+// bestEstimatedOneRepMax while keeping its topWeight and totalVolume — the
+// session still charts on the other two series, it just contributes no point to
+// the 1RM trend. Hence the nullable field on ExerciseProgressionPoint.
 exerciseRoutes.get('/:id/progression', async (c) => {
   const userId = c.get('userId');
   const exerciseId = c.req.param('id');
@@ -447,6 +472,7 @@ exerciseRoutes.get('/:id/progression', async (c) => {
       AND s.status       = 'completed'
       AND s.date         >= ${since}
       AND ss.completed   = TRUE
+      AND ss.set_type   <> 'warmup'
       AND ss.weight      IS NOT NULL
       AND ss.reps        IS NOT NULL
     GROUP BY s.id, s.date

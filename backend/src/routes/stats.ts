@@ -5,10 +5,18 @@ import { partners, sessionEntries, sessions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
 import { aggregateMatStats, type MatEntryRow } from '../lib/matStats';
+import { buildWeeklyBuckets } from '../lib/weeklyStats';
 import { aggregatePartnerStats } from '../lib/partnerStats';
 import { epleyE1rmSql } from '../lib/e1rm';
 import { isIsoDate } from '../lib/validate';
-import type { MuscleSummaryResponse, PartnerStatsResponse, TopLiftsResponse } from '@app/shared';
+import { E1RM_MAX_REPS } from '@app/shared';
+import type {
+  MuscleSummaryResponse,
+  PartnerStatsResponse,
+  PersonalRecordsResponse,
+  TopLiftsResponse,
+  WeeklyStatsResponse,
+} from '@app/shared';
 
 type Env = AppEnv;
 
@@ -18,6 +26,38 @@ statsRoutes.use('*', authMiddleware);
 
 function getDb(env: Env['Bindings']) {
   return createDb(env.HYPERDRIVE?.connectionString ?? env.DATABASE_URL!);
+}
+
+/**
+ * Longest window the weekly endpoints will aggregate: one year, matching the
+ * widest range the stats tab offers. Was 26, which silently served six months
+ * of data to anything asking for a year.
+ */
+const MAX_WEEKS = 52;
+const DEFAULT_WEEKS = 8;
+
+/**
+ * Parse the `since`/`weeks` pair shared by /stats/weekly and /stats/mat.
+ *
+ * `weeks` is deliberately parsed from the raw string rather than via Number():
+ * `Number('')` is 0, which passes Number.isInteger and clamped to a one-week
+ * window, so `?weeks=` returned a single bucket instead of the default.
+ */
+function weekWindow(sinceParam: string | undefined, weeksParam: string | undefined) {
+  const parsedWeeks = weeksParam !== undefined && weeksParam !== '' ? Number(weeksParam) : NaN;
+  const weeks = Number.isInteger(parsedWeeks)
+    ? Math.min(Math.max(parsedWeeks, 1), MAX_WEEKS)
+    : DEFAULT_WEEKS;
+
+  if (isIsoDate(sinceParam)) return { since: sinceParam, weeks };
+
+  // Default: UTC Monday of the week (weeks - 1) weeks back. Callers should send
+  // their local Monday — this fallback can be a day off for a device far from
+  // UTC, which is why the client always passes one.
+  const now = new Date();
+  const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7) - (weeks - 1) * 7);
+  return { since: monday.toISOString().slice(0, 10), weeks };
 }
 
 // GET /stats/muscles?since=YYYY-MM-DD&until=YYYY-MM-DD
@@ -113,6 +153,14 @@ statsRoutes.get('/top-lifts', async (c) => {
   // DISTINCT ON picks the best set per exercise (highest estimated 1RM), then we
   // sort across exercises and take the top 10. The CASE mirrors the shared
   // estimatedOneRepMax calculator (Epley, reps=1 → weight).
+  //
+  // This is a leaderboard, so sets the estimate can't speak for are filtered out
+  // in the WHERE rather than ranked last: an exercise trained only in high reps
+  // simply doesn't place, and no NULL can reach TopLift.estimatedOneRepMax.
+  // (The exercise's *own* PR card takes the opposite approach and keeps the set
+  // while showing "—" — see /exercises/:id/prs.) NULLS LAST on both ORDER BYs
+  // regardless: Postgres sorts NULLS FIRST for DESC, and a filter that later
+  // loosens would otherwise silently promote exactly the wrong rows.
   const e1rm = epleyE1rmSql(sql`ss.weight::numeric`, sql`ss.reps::numeric`);
   const rows = await db.execute(sql`
     SELECT x.exercise_id, x.exercise_name, x.weight::float AS weight, x.reps,
@@ -134,9 +182,11 @@ statsRoutes.get('/top-lifts', async (c) => {
         AND ss.completed = TRUE
         AND ss.weight    IS NOT NULL
         AND ss.reps      IS NOT NULL
-      ORDER BY e.id, (${e1rm}) DESC
+        AND ss.reps      <= ${E1RM_MAX_REPS}
+        AND ss.set_type <> 'warmup'
+      ORDER BY e.id, (${e1rm}) DESC NULLS LAST
     ) x
-    ORDER BY x.estimated_1rm DESC
+    ORDER BY x.estimated_1rm DESC NULLS LAST
     LIMIT 10
   `);
 
@@ -158,6 +208,149 @@ statsRoutes.get('/top-lifts', async (c) => {
   return c.json(result);
 });
 
+// GET /stats/prs?since=YYYY-MM-DD
+// Lifts whose best estimated 1RM inside the window beats their best from before
+// it — "what you actually improved this month", which no other endpoint answers.
+statsRoutes.get('/prs', async (c) => {
+  const userId = c.get('userId');
+  const db = getDb(c.env);
+
+  const sinceParam = c.req.query('since');
+  const since =
+    isIsoDate(sinceParam)
+      ? sinceParam
+      : new Date(Date.now() - 28 * 86_400_000).toISOString().slice(0, 10);
+
+  // `qualifying` applies the same rules as every other PR surface — completed
+  // sessions, completed non-warm-up sets, reps within the estimable range — so a
+  // high-rep back-off set can't be celebrated as a record.
+  //
+  // DISTINCT ON picks the single best set inside the window per exercise; the
+  // LEFT JOIN against the pre-window max decides whether it beat anything. A
+  // NULL there means no prior qualifying set at all, which counts as a record
+  // (a first-ever lift) rather than being filtered out by the comparison.
+  const e1rm = epleyE1rmSql(sql`ss.weight::numeric`, sql`ss.reps::numeric`);
+  const rows = await db.execute(sql`
+    WITH qualifying AS (
+      SELECT
+        e.id   AS exercise_id,
+        e.name AS exercise_name,
+        s.date AS date,
+        ss.weight::numeric AS weight,
+        ss.reps            AS reps,
+        ${e1rm}            AS e1rm
+      FROM strength_sets ss
+      JOIN session_entries se ON ss.session_entry_id = se.id
+      JOIN sessions s         ON se.session_id = s.id
+      JOIN exercises e        ON se.exercise_id = e.id
+      WHERE s.user_id    = ${userId}
+        AND s.status     = 'completed'
+        AND ss.completed = TRUE
+        AND ss.set_type <> 'warmup'
+        AND ss.weight    IS NOT NULL
+        AND ss.reps      IS NOT NULL
+        AND ss.reps     <= ${E1RM_MAX_REPS}
+    ),
+    current AS (
+      SELECT DISTINCT ON (exercise_id)
+        exercise_id, exercise_name, date, weight, reps, e1rm
+      FROM qualifying
+      WHERE date >= ${since}
+      ORDER BY exercise_id, e1rm DESC NULLS LAST, date ASC
+    ),
+    prior AS (
+      SELECT exercise_id, MAX(e1rm) AS best_e1rm
+      FROM qualifying
+      WHERE date < ${since}
+      GROUP BY exercise_id
+    )
+    SELECT
+      c.exercise_id,
+      c.exercise_name,
+      c.date,
+      c.weight::float AS weight,
+      c.reps,
+      c.e1rm::float   AS e1rm,
+      p.best_e1rm::float AS previous_e1rm
+    FROM current c
+    LEFT JOIN prior p ON p.exercise_id = c.exercise_id
+    WHERE p.best_e1rm IS NULL OR c.e1rm > p.best_e1rm
+    ORDER BY c.date DESC, c.e1rm DESC
+    LIMIT 20
+  `);
+
+  const result: PersonalRecordsResponse = {
+    since,
+    records: (rows as unknown as Array<{
+      exercise_id: string;
+      exercise_name: string;
+      date: string;
+      weight: number;
+      reps: number;
+      e1rm: number;
+      previous_e1rm: number | null;
+    }>).map((r) => ({
+      exerciseId: r.exercise_id,
+      exerciseName: r.exercise_name,
+      weight: r.weight,
+      reps: r.reps,
+      estimatedOneRepMax: r.e1rm,
+      previousOneRepMax: r.previous_e1rm,
+      date: r.date,
+    })),
+  };
+  return c.json(result);
+});
+
+// GET /stats/weekly?since=YYYY-MM-DD&weeks=8
+// Per-week completed sessions, tonnage and set count over the window. `since`
+// should be the Monday of the oldest bucket, computed client-side so week
+// boundaries follow the device's timezone.
+statsRoutes.get('/weekly', async (c) => {
+  const userId = c.get('userId');
+  const db = getDb(c.env);
+
+  const { since, weeks } = weekWindow(c.req.query('since'), c.req.query('weeks'));
+
+  // Aggregated in SQL rather than rolled up on the client from GET /sessions:
+  // that list caps at 200 rows ordered newest-first, so at a year and five
+  // sessions a week the oldest buckets quietly undercounted. Bucketing on
+  // `s.date - since` keeps this a single grouped scan over the window.
+  //
+  // COUNT(DISTINCT s.id) is required, not stylistic: the joins fan a session out
+  // to one row per set, so a plain COUNT would report a heavy session as dozens.
+  const rows = await db.execute(sql`
+    SELECT
+      (FLOOR((s.date - ${since}::date) / 7))::int                            AS bucket,
+      COUNT(DISTINCT s.id)::int                                              AS sessions,
+      COALESCE(SUM(ss.weight * ss.reps), 0)::float                           AS volume_kg,
+      COUNT(ss.id)::int                                                      AS completed_sets
+    FROM sessions s
+    LEFT JOIN session_entries se ON se.session_id = s.id
+    LEFT JOIN strength_sets  ss ON ss.session_entry_id = se.id AND ss.completed = TRUE
+    WHERE s.user_id = ${userId}
+      AND s.status  = 'completed'
+      AND s.date   >= ${since}::date
+      AND s.date    < (${since}::date + ${weeks * 7})
+    GROUP BY bucket
+  `);
+
+  const parsed = (rows as unknown as Array<{
+    bucket: number;
+    sessions: number;
+    volume_kg: number;
+    completed_sets: number;
+  }>).map((r) => ({
+    bucket: r.bucket,
+    sessions: r.sessions,
+    volumeKg: r.volume_kg,
+    completedSets: r.completed_sets,
+  }));
+
+  const result: WeeklyStatsResponse = { weeks: buildWeeklyBuckets(parsed, since, weeks) };
+  return c.json(result);
+});
+
 // GET /stats/mat?since=YYYY-MM-DD&weeks=8
 // Weekly rounds/mat-time buckets plus intensity and sparring aggregates over
 // the window. `since` should be the Monday of the oldest bucket, computed
@@ -166,20 +359,7 @@ statsRoutes.get('/mat', async (c) => {
   const userId = c.get('userId');
   const db = getDb(c.env);
 
-  const weeksParam = Number(c.req.query('weeks'));
-  const weeks = Number.isInteger(weeksParam) ? Math.min(Math.max(weeksParam, 1), 26) : 8;
-
-  const sinceParam = c.req.query('since');
-  let since: string;
-  if (isIsoDate(sinceParam)) {
-    since = sinceParam;
-  } else {
-    // Default: UTC Monday of the week (weeks - 1) weeks back.
-    const now = new Date();
-    const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7) - (weeks - 1) * 7);
-    since = monday.toISOString().slice(0, 10);
-  }
+  const { since, weeks } = weekWindow(c.req.query('since'), c.req.query('weeks'));
 
   // The rounds payload is a discriminated jsonb union with a legacy variant,
   // so aggregation happens in TS (reusing the shared isRoundsSession guard)
