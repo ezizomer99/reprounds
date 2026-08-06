@@ -26,6 +26,14 @@ function isoDate(ms: number): string {
   return new Date(ms).toISOString().slice(0, 10);
 }
 
+/** The four buckets MatStatsResponse.intensity declares — anything else folds into 'unspecified'. */
+const INTENSITY_KEYS = ['light', 'medium', 'hard', 'unspecified'] as const;
+type IntensityKey = (typeof INTENSITY_KEYS)[number];
+
+function intensityKey(value: unknown): IntensityKey {
+  return INTENSITY_KEYS.includes(value as IntensityKey) ? (value as IntensityKey) : 'unspecified';
+}
+
 /**
  * Aggregate martial-arts entries into weekly buckets + totals.
  *
@@ -112,7 +120,14 @@ export function aggregateMatStats(
 
       for (const round of details.rounds) {
         session.roundSeconds += round.durationSeconds ?? 0;
-        result.intensity[round.intensity ?? 'unspecified'] += 1;
+        // Whitelisted, unlike the plain `result.intensity[round.intensity]++`
+        // this replaces. `details` is stored verbatim, so a value outside the
+        // three known ones indexed a key that didn't exist: `undefined + 1` is
+        // NaN, and the response came back with an extra `{ brutal: null }` that
+        // MatStatsResponse.intensity doesn't declare and that turns any client
+        // summing Object.values into NaN. Every other accumulator in this file
+        // already guards its input; this was the one that didn't.
+        result.intensity[intensityKey(round.intensity)] += 1;
       }
 
       // Branch on the payload's own discriminant — the joined discipline row

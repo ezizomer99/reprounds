@@ -9,6 +9,10 @@ import {
   weeklyBarLabel,
   statsRange,
   STATS_RANGES,
+  bodyScale,
+  BODY_BASE_SIZE,
+  barSizing,
+  cardState,
 } from './statsHelpers';
 
 /** Local `YYYY-MM-DD` — the convention every helper in this module uses. */
@@ -257,5 +261,118 @@ describe('weeklyBarLabel', () => {
 
   it('formats a dated label as month and day', () => {
     expect(weeklyBarLabel('2026-06-01', 0, 8)).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
+  });
+});
+
+describe('bodyScale', () => {
+  const PAD = 18;
+  // width × height in dp: a small phone, a current phone, and a tablet.
+  const SMALL = [375, 667] as const;
+  const PHONE = [393, 852] as const;
+  const TABLET = [834, 1194] as const;
+
+  const box = (w: number, h: number) => {
+    const s = bodyScale(w, h, PAD);
+    return { w: BODY_BASE_SIZE.width * s, h: BODY_BASE_SIZE.height * s };
+  };
+
+  // The old flat scale={1.1} was 220 × 440 dp everywhere. This can only shrink.
+  it('never renders larger than the fixed size it replaced', () => {
+    for (const [w, h] of [SMALL, PHONE, TABLET]) {
+      expect(bodyScale(w, h, PAD)).toBeLessThanOrEqual(1.1);
+    }
+  });
+
+  it('keeps the figure inside the card gutters', () => {
+    for (const [w, h] of [SMALL, PHONE, TABLET]) {
+      expect(box(w, h).w).toBeLessThanOrEqual(w - 2 * PAD);
+    }
+  });
+
+  // The whole point: on a phone the body used to eat over half the page.
+  it('leaves room for the rest of the page on a phone', () => {
+    for (const [w, h] of [SMALL, PHONE]) {
+      expect(box(w, h).h).toBeLessThan(h * 0.5);
+    }
+  });
+
+  it('stays legible on a narrow device rather than shrinking without limit', () => {
+    expect(bodyScale(320, 480, PAD)).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it('grows with the viewport up to the cap', () => {
+    expect(bodyScale(...PHONE, PAD)).toBeGreaterThanOrEqual(bodyScale(...SMALL, PAD));
+    expect(bodyScale(...TABLET, PAD)).toBeGreaterThanOrEqual(bodyScale(...PHONE, PAD));
+  });
+});
+
+describe('barSizing', () => {
+  // 390 dp phone: content width minus the page gutters and the y-axis labels.
+  const AVAILABLE = 390 - 2 * 18 - 40;
+
+  const totalWidth = (count: number, available = AVAILABLE) => {
+    const { barWidth, spacing } = barSizing(count, available);
+    return count * (barWidth + spacing);
+  };
+
+  // The whole point: the charts used a fixed 28/8 inside a horizontal
+  // ScrollView, so a 52-week range was ~1870 dp of content that opened on the
+  // OLDEST week and scrolled its own y-axis off screen.
+  it('fits every range the tab offers inside the card', () => {
+    for (const weeks of [4, 8, 26, 52]) {
+      expect(totalWidth(weeks)).toBeLessThanOrEqual(AVAILABLE);
+    }
+  });
+
+  it('keeps bars visible rather than shrinking without limit', () => {
+    expect(barSizing(52, AVAILABLE).barWidth).toBeGreaterThanOrEqual(3);
+    expect(barSizing(200, AVAILABLE).barWidth).toBeGreaterThanOrEqual(3);
+  });
+
+  it('never exceeds the width the short ranges always used', () => {
+    for (const weeks of [1, 4, 8, 26, 52]) {
+      expect(barSizing(weeks, AVAILABLE).barWidth).toBeLessThanOrEqual(28);
+    }
+  });
+
+  it('gives wider bars at shorter ranges', () => {
+    expect(barSizing(4, AVAILABLE).barWidth).toBeGreaterThanOrEqual(barSizing(26, AVAILABLE).barWidth);
+    expect(barSizing(26, AVAILABLE).barWidth).toBeGreaterThanOrEqual(barSizing(52, AVAILABLE).barWidth);
+  });
+
+  it('always leaves a gap between bars', () => {
+    for (const weeks of [4, 8, 26, 52]) {
+      expect(barSizing(weeks, AVAILABLE).spacing).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('handles an empty series without dividing by zero', () => {
+    const { barWidth, spacing } = barSizing(0, AVAILABLE);
+    expect(Number.isFinite(barWidth)).toBe(true);
+    expect(Number.isFinite(spacing)).toBe(true);
+  });
+
+  it('adapts to a narrower device', () => {
+    const narrow = 320 - 2 * 18 - 40;
+    expect(totalWidth(26, narrow)).toBeLessThanOrEqual(narrow);
+  });
+});
+
+describe('cardState', () => {
+  it('shows data even when the last refetch failed', () => {
+    // The persisted cache means this is the ordinary flaky-network path, not an
+    // edge case: cached data on screen, background refetch fails.
+    expect(cardState(true, true)).toBe('ready');
+    expect(cardState(true, false)).toBe('ready');
+  });
+
+  it('shows an error only when there is nothing to fall back on', () => {
+    expect(cardState(false, true)).toBe('error');
+  });
+
+  it('treats no data and no error as still loading', () => {
+    // Covers the offline-paused query too: isLoading is false while data is
+    // undefined, which is how "you haven't trained" reached people on a plane.
+    expect(cardState(false, false)).toBe('loading');
   });
 });

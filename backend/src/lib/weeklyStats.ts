@@ -10,14 +10,48 @@ export interface WeeklyRow {
 }
 
 const WEEK_MS = 7 * 86_400_000;
+const DAY_MS = 86_400_000;
 
 function utcMs(isoDate: string): number {
   const [y, m, d] = isoDate.split('-').map(Number);
   return Date.UTC(y, m - 1, d);
 }
 
+/**
+ * Format a UTC timestamp as `YYYY-MM-DD`.
+ *
+ * Built by hand rather than `toISOString().slice(0, 10)`: past year 9999 that
+ * method switches to the expanded form `+010000-11-29T…`, so slicing ten
+ * characters yields `"+010000-11"` — which binds straight into `${until}::date`
+ * and 500s the endpoint. `isIsoDate` accepts `9999-12-01`, and a 52-week window
+ * from there crosses the boundary, so the input reaches here legitimately.
+ * Padding the year keeps the output a real date Postgres accepts (its own
+ * ceiling is year 5874897, far past anything this can produce).
+ */
 function isoDate(ms: number): string {
-  return new Date(ms).toISOString().slice(0, 10);
+  const d = new Date(ms);
+  const year = String(d.getUTCFullYear()).padStart(4, '0');
+  const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * `days` after a `YYYY-MM-DD` date, as another `YYYY-MM-DD`.
+ *
+ * Exists so the weekly window's upper bound can be computed here rather than in
+ * SQL. `${since}::date + ${weeks * 7}` looked equivalent but wasn't: postgres-js
+ * binds a JS number with an unspecified type OID, so Postgres saw `date + unknown`
+ * and could not choose between `date + integer`, `date + interval`, `date + time`
+ * and `date + timetz` — three type categories, so resolution fails outright with
+ * "operator is not unique" and every call to /stats/weekly 500'd. A date on both
+ * sides of the comparison has only one meaning.
+ *
+ * Pure UTC on the string, matching buildWeeklyBuckets below: `sessions.date` is a
+ * Postgres `date` with no time in it, so a timezone here could only shift it.
+ */
+export function addDaysISO(from: string, days: number): string {
+  return isoDate(utcMs(from) + days * DAY_MS);
 }
 
 /**

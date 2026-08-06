@@ -108,9 +108,43 @@ describe('GET /stats/prs', () => {
   it('splits the window on since for the current and prior maxima', async () => {
     await callPRs('?since=2026-06-01');
     const { sql, params } = issuedQuery();
-    expect(sql).toContain('WHERE date >= $');
-    expect(sql).toContain('WHERE date < $');
+    expect(sql).toContain('s.date >= $');
+    expect(sql).toContain('s.date < $');
     expect(params.filter((p) => p === '2026-06-01')).toHaveLength(2);
+  });
+
+  // `current` and `prior` used to share a `qualifying` CTE that had no date
+  // filter of its own and was referenced twice, so Postgres materialised every
+  // set the user had ever logged — name, date, weight, reps — on every call.
+  // The rules now live in one interpolated fragment instead, so the two halves
+  // still can't drift while each scans only what it needs.
+  it('does not funnel both halves through one unbounded CTE', async () => {
+    await callPRs('?since=2026-06-01');
+    const { sql } = issuedQuery();
+    expect(sql).not.toContain('qualifying');
+    // Both halves carry the full qualifying predicate, not just one.
+    expect(sql.match(/ss\.set_type <> 'warmup'/g)).toHaveLength(2);
+    expect(sql.match(/s\.status = 'completed'/g)).toHaveLength(2);
+  });
+
+  // Session dates are accepted arbitrarily far into the future, so without a
+  // ceiling a mistyped year becomes a brand-new PR — and lands first, because
+  // the feed orders by date descending.
+  it('bounds the current window at the top when until is given', async () => {
+    await callPRs('?since=2026-06-01&until=2026-06-29');
+    const { sql, params } = issuedQuery();
+    expect(sql).toContain('s.date < $');
+    expect(params).toContain('2026-06-29');
+  });
+
+  it('leaves the window open-ended when until is absent or invalid', async () => {
+    for (const q of ['?since=2026-06-01', '?since=2026-06-01&until=nope']) {
+      await callPRs(q);
+      const { params } = issuedQuery();
+      // Only `since`, bound once for `current` and once for `prior`.
+      expect(params.filter((p) => typeof p === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p)))
+        .toHaveLength(2);
+    }
   });
 
   // Every other PR surface applies these; a feed that celebrated a warm-up or a
@@ -128,8 +162,8 @@ describe('GET /stats/prs', () => {
   it('picks one row per exercise, best first, and bounds the result', async () => {
     await callPRs();
     const { sql } = issuedQuery();
-    expect(sql).toContain('DISTINCT ON (exercise_id)');
-    expect(sql).toContain('e1rm DESC NULLS LAST');
+    expect(sql).toContain('DISTINCT ON (e.id)');
+    expect(sql).toContain('DESC NULLS LAST');
     expect(sql).toContain('LIMIT 20');
   });
 

@@ -75,11 +75,24 @@ describe('GET /stats/muscles', () => {
   it('aggregates by completed sets rather than returning distinct rows', async () => {
     await makeApp().request('/stats/muscles?since=2026-08-03', { headers: await bearer() }, env);
     const { sql } = issuedQuery();
-    expect(sql).toContain('FILTER (WHERE ss.completed)');
+    expect(sql).toContain('FILTER (WHERE ss.completed AND ss.set_type <> \'warmup\')');
     expect(sql).toContain(
       'GROUP BY se.id, mo.muscle_group, e.muscle_group, mo.secondary_muscles, e.secondary_muscles',
     );
     expect(mock.selectDistinct).not.toHaveBeenCalled();
+  });
+
+  // The heat map weights each muscle by sets and aggregateMuscles normalises
+  // against the max, so counting warm-ups turned "I ramp up on bench and not on
+  // rows" into a colour difference. Every other lifting surface — /top-lifts,
+  // /prs, /exercises/:id/prs — already filtered them; this one didn't, while
+  // MuscleSummaryItem.sets was documented as "completed *working* sets".
+  it('counts working sets only, excluding warm-ups from both sets and volume', async () => {
+    await makeApp().request('/stats/muscles?since=2026-08-03', { headers: await bearer() }, env);
+    const { sql } = issuedQuery();
+    const filters = sql.match(/FILTER \(WHERE [^)]*\)/g) ?? [];
+    expect(filters).toHaveLength(2); // the set count and the volume sum
+    for (const f of filters) expect(f).toContain("ss.set_type <> 'warmup'");
   });
 
   // A user who re-tagged a seeded exercise's muscles must see their own tagging
@@ -99,7 +112,9 @@ describe('GET /stats/muscles', () => {
   // LEFT JOIN with a floor of one set instead of dropping out of the map.
   it('floors an entry with no sets at 1', async () => {
     await makeApp().request('/stats/muscles?since=2026-08-03', { headers: await bearer() }, env);
-    expect(issuedQuery().sql).toContain('GREATEST(COUNT(ss.id) FILTER (WHERE ss.completed), 1)');
+    expect(issuedQuery().sql).toContain(
+      'GREATEST(COUNT(ss.id) FILTER (WHERE ss.completed AND ss.set_type <> \'warmup\'), 1)',
+    );
   });
 
   it('bounds the window at both ends when until is given', async () => {

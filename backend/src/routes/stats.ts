@@ -1,12 +1,13 @@
 import { Hono } from 'hono';
-import { and, eq, gte, inArray, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, lt, sql } from 'drizzle-orm';
 import { createDb } from '../db';
 import { partners, sessionEntries, sessions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
 import { aggregateMatStats, type MatEntryRow } from '../lib/matStats';
-import { buildWeeklyBuckets } from '../lib/weeklyStats';
+import { addDaysISO, buildWeeklyBuckets } from '../lib/weeklyStats';
 import { aggregatePartnerStats } from '../lib/partnerStats';
+import { mondayOfISO, weekStreak } from '../lib/streak';
 import { epleyE1rmSql } from '../lib/e1rm';
 import { isIsoDate } from '../lib/validate';
 import { E1RM_MAX_REPS } from '@app/shared';
@@ -16,6 +17,7 @@ import type {
   PersonalRecordsResponse,
   TopLiftsResponse,
   WeeklyStatsResponse,
+  WeekStreakResponse,
 } from '@app/shared';
 
 type Env = AppEnv;
@@ -37,6 +39,36 @@ const MAX_WEEKS = 52;
 const DEFAULT_WEEKS = 8;
 
 /**
+ * Parse a `since`/`until` pair for the endpoints that take explicit dates.
+ *
+ * `until` is exclusive and optional, but callers showing a bounded window should
+ * always send it. Session dates are accepted arbitrarily far into the future, so
+ * an open-ended top bound means a workout logged with a mistyped year counts as
+ * current — showing up as a top lift, or sorted first in the PR feed because the
+ * feed orders by date descending. /stats/muscles was fixed for exactly this; the
+ * endpoints beside it were not.
+ *
+ * An absent or malformed `until` keeps the old open-ended behaviour rather than
+ * inventing a ceiling: a client that doesn't send one is asking for everything
+ * from `since` onward, and silently truncating that would be the worse surprise.
+ */
+function dateWindow(
+  sinceParam: string | undefined,
+  untilParam: string | undefined,
+  fallbackSince: () => string,
+): { since: string; until: string | null } {
+  return {
+    since: isIsoDate(sinceParam) ? sinceParam : fallbackSince(),
+    until: isIsoDate(untilParam) ? untilParam : null,
+  };
+}
+
+/** `days` before today, as a `YYYY-MM-DD` — the shape every `since` default uses. */
+function daysAgoISO(days: number): string {
+  return new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+}
+
+/**
  * Parse the `since`/`weeks` pair shared by /stats/weekly and /stats/mat.
  *
  * `weeks` is deliberately parsed from the raw string rather than via Number():
@@ -49,7 +81,11 @@ function weekWindow(sinceParam: string | undefined, weeksParam: string | undefin
     ? Math.min(Math.max(parsedWeeks, 1), MAX_WEEKS)
     : DEFAULT_WEEKS;
 
-  if (isIsoDate(sinceParam)) return { since: sinceParam, weeks };
+  // `until` is the exclusive end of the window, computed here rather than in SQL
+  // — see addDaysISO for why adding to a date in SQL broke this endpoint.
+  if (isIsoDate(sinceParam)) {
+    return { since: sinceParam, until: addDaysISO(sinceParam, weeks * 7), weeks };
+  }
 
   // Default: UTC Monday of the week (weeks - 1) weeks back. Callers should send
   // their local Monday — this fallback can be a day off for a device far from
@@ -57,7 +93,8 @@ function weekWindow(sinceParam: string | undefined, weeksParam: string | undefin
   const now = new Date();
   const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7) - (weeks - 1) * 7);
-  return { since: monday.toISOString().slice(0, 10), weeks };
+  const since = monday.toISOString().slice(0, 10);
+  return { since, until: addDaysISO(since, weeks * 7), weeks };
 }
 
 // GET /stats/muscles?since=YYYY-MM-DD&until=YYYY-MM-DD
@@ -67,22 +104,13 @@ statsRoutes.get('/muscles', async (c) => {
   const userId = c.get('userId');
   const db = getDb(c.env);
 
-  const defaultSince = new Date();
-  defaultSince.setDate(defaultSince.getDate() - 7);
-  // The other three stats endpoints validate `since` and fall back on garbage;
-  // this one passed the raw param straight into a date comparison, so a bad
-  // value was a 500 instead of a default window.
-  const sinceParam = c.req.query('since');
-  const since = isIsoDate(sinceParam) ? sinceParam : defaultSince.toISOString().slice(0, 10);
-
-  // Bounded at both ends, exclusive at the top. `>= since` alone counted a
-  // completed session dated *ahead* of the window — session dates are accepted
-  // years into the future — so a workout logged forward showed up in "Muscles
-  // This Week". The client's own sessionsThisWeek was fixed for exactly this;
-  // the endpoint it sits next to was not. An absent/invalid `until` keeps the
-  // old open-ended behaviour rather than inventing a ceiling.
-  const untilParam = c.req.query('until');
-  const until = isIsoDate(untilParam) ? untilParam : null;
+  // Bounded at both ends, exclusive at the top — see dateWindow. The `since`
+  // fallback also matters on its own: this endpoint used to pass the raw param
+  // straight into a date comparison, so a malformed value was a 500 rather than
+  // a default window.
+  const { since, until } = dateWindow(c.req.query('since'), c.req.query('until'), () =>
+    daysAgoISO(7),
+  );
 
   // Weight per muscle grouping = completed sets, not row count. This was a
   // selectDistinct, so a single set of curls and eight sets of bench produced
@@ -110,8 +138,21 @@ statsRoutes.get('/muscles', async (c) => {
         CASE WHEN mo.secondary_muscles IS NULL
              THEN e.secondary_muscles
              ELSE mo.secondary_muscles END        AS secondary_muscles,
-        GREATEST(COUNT(ss.id) FILTER (WHERE ss.completed), 1) AS sets,
-        COALESCE(SUM(ss.weight * ss.reps) FILTER (WHERE ss.completed), 0) AS volume_kg
+        -- Working sets, not every set: warm-ups are excluded here exactly as
+        -- they are in /top-lifts, /prs and the per-exercise PR query. Counting
+        -- them made the heat map a picture of warm-up habits — five ramp-up
+        -- sets on bench and none on rows reported 8 vs 3 for equal work, and
+        -- aggregateMuscles normalises against the max, so the difference became
+        -- a colour. MuscleSummaryItem.sets has always been documented as
+        -- "completed *working* sets"; the SQL just didn't say so.
+        --
+        -- The GREATEST floor stays: an entry with no strength_sets at all is
+        -- conditioning work, and it should still colour the muscle it trains
+        -- rather than drop out through the LEFT JOIN.
+        GREATEST(COUNT(ss.id) FILTER (WHERE ss.completed AND ss.set_type <> 'warmup'), 1) AS sets,
+        COALESCE(
+          SUM(ss.weight * ss.reps) FILTER (WHERE ss.completed AND ss.set_type <> 'warmup'), 0
+        ) AS volume_kg
       FROM session_entries se
       JOIN sessions  s ON se.session_id  = s.id
       JOIN exercises e ON se.exercise_id = e.id
@@ -145,7 +186,7 @@ statsRoutes.get('/muscles', async (c) => {
   return c.json(result);
 });
 
-// GET /stats/top-lifts
+// GET /stats/top-lifts?since=YYYY-MM-DD&until=YYYY-MM-DD
 // Returns the top 10 exercises by estimated 1RM (Epley formula: w*(1+reps/30)).
 statsRoutes.get('/top-lifts', async (c) => {
   const userId = c.get('userId');
@@ -153,11 +194,9 @@ statsRoutes.get('/top-lifts', async (c) => {
 
   // Bound the scan: default to the last two years so the join chain doesn't
   // traverse a power user's entire training history on every stats view.
-  const sinceParam = c.req.query('since');
-  const since =
-    isIsoDate(sinceParam)
-      ? sinceParam
-      : new Date(Date.now() - 2 * 365.25 * 86_400_000).toISOString().slice(0, 10);
+  const { since, until } = dateWindow(c.req.query('since'), c.req.query('until'), () =>
+    daysAgoISO(2 * 365.25),
+  );
 
   // DISTINCT ON picks the best set per exercise (highest estimated 1RM), then we
   // sort across exercises and take the top 10. The CASE mirrors the shared
@@ -188,6 +227,7 @@ statsRoutes.get('/top-lifts', async (c) => {
       WHERE s.user_id    = ${userId}
         AND s.status     = 'completed'
         AND s.date       >= ${since}
+        ${until ? sql`AND s.date < ${until}` : sql``}
         AND ss.completed = TRUE
         AND ss.weight    IS NOT NULL
         AND ss.reps      IS NOT NULL
@@ -224,54 +264,62 @@ statsRoutes.get('/prs', async (c) => {
   const userId = c.get('userId');
   const db = getDb(c.env);
 
-  const sinceParam = c.req.query('since');
-  const since =
-    isIsoDate(sinceParam)
-      ? sinceParam
-      : new Date(Date.now() - 28 * 86_400_000).toISOString().slice(0, 10);
+  const { since, until } = dateWindow(c.req.query('since'), c.req.query('until'), () =>
+    daysAgoISO(28),
+  );
 
-  // `qualifying` applies the same rules as every other PR surface — completed
-  // sessions, completed non-warm-up sets, reps within the estimable range — so a
-  // high-rep back-off set can't be celebrated as a record.
+  // The rules every PR surface applies — completed sessions, completed
+  // non-warm-up sets, reps within the estimable range — so a high-rep back-off
+  // set can't be celebrated as a record. Defined once and interpolated into both
+  // halves below so the two can't drift apart.
   //
+  // They used to share a `qualifying` CTE instead, which read better but was the
+  // expensive shape: the CTE had no date filter of its own (`since` was applied
+  // only downstream) and was referenced twice, so Postgres materialised every
+  // set the user had ever logged — name, date, weight and reps — on every call.
+  // Splitting it lets `current` use the window and `prior` aggregate to two
+  // columns. `prior` still reads all history before `since`, which is inherent
+  // to "beat your best ever" and is why a plain date floor was not the fix.
+  const e1rm = epleyE1rmSql(sql`ss.weight::numeric`, sql`ss.reps::numeric`);
+  const qualifyingFrom = sql`
+      FROM strength_sets ss
+      JOIN session_entries se ON ss.session_entry_id = se.id
+      JOIN sessions s         ON se.session_id = s.id
+      JOIN exercises e        ON se.exercise_id = e.id`;
+  const qualifyingWhere = sql`
+        s.user_id    = ${userId}
+        AND s.status     = 'completed'
+        AND ss.completed = TRUE
+        AND ss.set_type <> 'warmup'
+        AND ss.weight    IS NOT NULL
+        AND ss.reps      IS NOT NULL
+        AND ss.reps     <= ${E1RM_MAX_REPS}`;
+
   // DISTINCT ON picks the single best set inside the window per exercise; the
   // LEFT JOIN against the pre-window max decides whether it beat anything. A
   // NULL there means no prior qualifying set at all, which counts as a record
   // (a first-ever lift) rather than being filtered out by the comparison.
-  const e1rm = epleyE1rmSql(sql`ss.weight::numeric`, sql`ss.reps::numeric`);
   const rows = await db.execute(sql`
-    WITH qualifying AS (
-      SELECT
+    WITH current AS (
+      SELECT DISTINCT ON (e.id)
         e.id   AS exercise_id,
         e.name AS exercise_name,
         s.date AS date,
         ss.weight::numeric AS weight,
         ss.reps            AS reps,
         ${e1rm}            AS e1rm
-      FROM strength_sets ss
-      JOIN session_entries se ON ss.session_entry_id = se.id
-      JOIN sessions s         ON se.session_id = s.id
-      JOIN exercises e        ON se.exercise_id = e.id
-      WHERE s.user_id    = ${userId}
-        AND s.status     = 'completed'
-        AND ss.completed = TRUE
-        AND ss.set_type <> 'warmup'
-        AND ss.weight    IS NOT NULL
-        AND ss.reps      IS NOT NULL
-        AND ss.reps     <= ${E1RM_MAX_REPS}
-    ),
-    current AS (
-      SELECT DISTINCT ON (exercise_id)
-        exercise_id, exercise_name, date, weight, reps, e1rm
-      FROM qualifying
-      WHERE date >= ${since}
-      ORDER BY exercise_id, e1rm DESC NULLS LAST, date ASC
+      ${qualifyingFrom}
+      WHERE ${qualifyingWhere}
+        AND s.date >= ${since}
+        ${until ? sql`AND s.date < ${until}` : sql``}
+      ORDER BY e.id, (${e1rm}) DESC NULLS LAST, s.date ASC
     ),
     prior AS (
-      SELECT exercise_id, MAX(e1rm) AS best_e1rm
-      FROM qualifying
-      WHERE date < ${since}
-      GROUP BY exercise_id
+      SELECT e.id AS exercise_id, MAX(${e1rm}) AS best_e1rm
+      ${qualifyingFrom}
+      WHERE ${qualifyingWhere}
+        AND s.date < ${since}
+      GROUP BY e.id
     )
     SELECT
       c.exercise_id,
@@ -319,7 +367,7 @@ statsRoutes.get('/weekly', async (c) => {
   const userId = c.get('userId');
   const db = getDb(c.env);
 
-  const { since, weeks } = weekWindow(c.req.query('since'), c.req.query('weeks'));
+  const { since, until, weeks } = weekWindow(c.req.query('since'), c.req.query('weeks'));
 
   // Aggregated in SQL rather than rolled up on the client from GET /sessions:
   // that list caps at 200 rows ordered newest-first, so at a year and five
@@ -340,7 +388,7 @@ statsRoutes.get('/weekly', async (c) => {
     WHERE s.user_id = ${userId}
       AND s.status  = 'completed'
       AND s.date   >= ${since}::date
-      AND s.date    < (${since}::date + ${weeks * 7})
+      AND s.date    < ${until}::date
     GROUP BY bucket
   `);
 
@@ -360,6 +408,47 @@ statsRoutes.get('/weekly', async (c) => {
   return c.json(result);
 });
 
+// GET /stats/streak?today=YYYY-MM-DD
+// Consecutive Monday-aligned weeks with a completed session, ending at the
+// caller's current week. `today` is the device's *local* date — week boundaries
+// have to follow the device, same reason /stats/weekly takes a client-computed
+// Monday rather than deriving one from UTC.
+statsRoutes.get('/streak', async (c) => {
+  const userId = c.get('userId');
+  const db = getDb(c.env);
+
+  const todayParam = c.req.query('today');
+  const today = isIsoDate(todayParam) ? todayParam : new Date().toISOString().slice(0, 10);
+  const anchorWeek = mondayOfISO(today);
+
+  // Distinct trained weeks, not sessions: the streak asks "did I train that
+  // week", so collapsing in SQL keeps the payload to one short row per week
+  // however many sessions each contains.
+  //
+  // `s.date::timestamp` is cast explicitly rather than left to an implicit
+  // date → timestamp promotion: `date_trunc(text, timestamp)` and
+  // `date_trunc(text, timestamptz)` are both reachable from `date`, and this
+  // endpoint's neighbour already shipped one "operator is not unique" outage.
+  // date_trunc('week') is Monday-aligned, matching the client's own week keys.
+  //
+  // Bounded above at the anchor week so a session dated years into the future —
+  // which the schema allows — can't manufacture a streak, and below at the 520
+  // weeks the walk can actually use.
+  const rows = await db.execute(sql`
+    SELECT DISTINCT date_trunc('week', s.date::timestamp)::date AS week_start
+    FROM sessions s
+    WHERE s.user_id = ${userId}
+      AND s.status  = 'completed'
+      AND s.date   >= ${addDaysISO(anchorWeek, -520 * 7)}::date
+      AND s.date    < ${addDaysISO(anchorWeek, 7)}::date
+    ORDER BY week_start DESC
+  `);
+
+  const weekStarts = (rows as unknown as Array<{ week_start: string }>).map((r) => r.week_start);
+  const result: WeekStreakResponse = { weeks: weekStreak(weekStarts, anchorWeek), anchorWeek };
+  return c.json(result);
+});
+
 // GET /stats/mat?since=YYYY-MM-DD&weeks=8
 // Weekly rounds/mat-time buckets plus intensity and sparring aggregates over
 // the window. `since` should be the Monday of the oldest bucket, computed
@@ -368,13 +457,15 @@ statsRoutes.get('/mat', async (c) => {
   const userId = c.get('userId');
   const db = getDb(c.env);
 
-  const { since, weeks } = weekWindow(c.req.query('since'), c.req.query('weeks'));
+  const { since, until, weeks } = weekWindow(c.req.query('since'), c.req.query('weeks'));
 
   // The rounds payload is a discriminated jsonb union with a legacy variant,
   // so aggregation happens in TS (reusing the shared isRoundsSession guard)
   // rather than triple-implementing the schema in SQL. Volume is bounded by
-  // the window: tens of entries, not thousands.
-  const entryRows = await fetchMatEntries(db, userId, since);
+  // the window: tens of entries, not thousands — which only holds because
+  // `until` is passed. aggregateMatStats drops out-of-window rows anyway, so
+  // omitting it was invisible in the response and expensive in the query.
+  const entryRows = await fetchMatEntries(db, userId, since, until);
 
   // Sessions that also contain gym entries must not attribute their whole
   // duration to mat time when rounds carry no durations of their own.
@@ -402,14 +493,12 @@ statsRoutes.get('/partners', async (c) => {
   const userId = c.get('userId');
   const db = getDb(c.env);
 
-  const sinceParam = c.req.query('since');
-  const since =
-    isIsoDate(sinceParam)
-      ? sinceParam
-      : new Date(Date.now() - 365 * 86_400_000).toISOString().slice(0, 10);
+  const { since, until } = dateWindow(c.req.query('since'), c.req.query('until'), () =>
+    daysAgoISO(365),
+  );
 
   const [entryRows, partnerRows] = await Promise.all([
-    fetchMatEntries(db, userId, since),
+    fetchMatEntries(db, userId, since, until),
     db.select({ id: partners.id, name: partners.name }).from(partners).where(eq(partners.userId, userId)),
   ]);
 
@@ -420,11 +509,20 @@ statsRoutes.get('/partners', async (c) => {
   return c.json(result);
 });
 
-// Completed martial-arts entries (with session date/duration) since a date.
+/**
+ * Completed martial-arts entries (with session date/duration) over [since, until).
+ *
+ * `until` is exclusive and worth passing whenever the caller has one: this pulls
+ * whole `details` JSONB payloads across the wire into the Worker, and /stats/mat
+ * then discards everything outside its buckets anyway. Left open-ended it means
+ * `?since=1990-01-01&weeks=8` reads a user's entire mat history to render eight
+ * weeks — and the follow-up `inArray` binds one parameter per session it found.
+ */
 function fetchMatEntries(
   db: ReturnType<typeof getDb>,
   userId: string,
   since: string,
+  until: string | null = null,
 ): Promise<MatEntryRow[]> {
   return db
     .select({
@@ -441,6 +539,7 @@ function fetchMatEntries(
         eq(sessions.status, 'completed'),
         eq(sessionEntries.kind, 'martial_arts'),
         gte(sessions.date, since),
+        ...(until ? [lt(sessions.date, until)] : []),
       ),
     );
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildWeeklyBuckets, type WeeklyRow } from './weeklyStats';
+import { addDaysISO, buildWeeklyBuckets, type WeeklyRow } from './weeklyStats';
 
 const SINCE = '2026-06-01'; // a Monday
 
@@ -85,6 +85,37 @@ describe('buildWeeklyBuckets', () => {
   it('never shifts a week start across a date boundary', () => {
     for (const start of ['2026-01-05', '2026-03-30', '2026-10-26', '2026-12-28']) {
       expect(buildWeeklyBuckets([], start, 1)[0].weekStart).toBe(start);
+    }
+  });
+});
+
+describe('addDaysISO', () => {
+  it('advances a date by whole days', () => {
+    expect(addDaysISO('2026-06-01', 28)).toBe('2026-06-29');
+    expect(addDaysISO('2026-06-01', 0)).toBe('2026-06-01');
+    expect(addDaysISO('2026-06-01', 364)).toBe('2027-05-31');
+  });
+
+  it('crosses month, year and leap-day boundaries', () => {
+    expect(addDaysISO('2026-01-31', 1)).toBe('2026-02-01');
+    expect(addDaysISO('2026-12-28', 7)).toBe('2027-01-04');
+    expect(addDaysISO('2028-02-28', 1)).toBe('2028-02-29'); // 2028 is a leap year
+  });
+
+  // toISOString() switches to the expanded form `+010000-11-29T...` past year
+  // 9999, so `.slice(0, 10)` yielded "+010000-11" — which bound straight into
+  // `${until}::date` and 500'd the endpoint. isIsoDate accepts 9999-12-01 and a
+  // 52-week window from there crosses the boundary, so this input is reachable.
+  it('stays a real date past year 9999 instead of the expanded ISO form', () => {
+    const until = addDaysISO('9999-12-01', 364);
+    expect(until).toBe('10000-11-29');
+    expect(until).toMatch(/^\d{4,}-\d{2}-\d{2}$/);
+    expect(until.startsWith('+')).toBe(false);
+  });
+
+  it('pads every component so the result is always parseable', () => {
+    for (const [from, days] of [['2026-01-01', 5], ['9999-12-31', 1], ['2026-09-30', 1]] as const) {
+      expect(addDaysISO(from, days)).toMatch(/^\d{4,}-\d{2}-\d{2}$/);
     }
   });
 });

@@ -697,6 +697,24 @@ export interface WeeklyStatsResponse {
   weeks: WeeklyBucket[];
 }
 
+/**
+ * Consecutive Monday-aligned weeks with at least one completed session, ending
+ * at the caller's current week. The current week not yet trained does not break
+ * the run.
+ *
+ * Server-side because the client's version read `GET /sessions`, which caps at
+ * 200 rows: at five sessions a week that is ~40 weeks of visibility, so a longer
+ * streak was silently truncated. It also meant the Stats tab downloaded 200 full
+ * session rows on every visit to render one integer — one that free users only
+ * ever see as a padlock.
+ */
+export interface WeekStreakResponse {
+  /** Weeks in the current run, 0 when the streak is broken. */
+  weeks: number;
+  /** Monday the run was measured back from — the caller's `today`, echoed. */
+  anchorWeek: string;
+}
+
 // ---- Mat (martial arts) stats ----
 
 export interface MatWeekBucket {

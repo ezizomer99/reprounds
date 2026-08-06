@@ -5,8 +5,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { usePersonalRecords } from '../../hooks/useStats';
 import { useProGate } from '../../hooks/useProGate';
 import { useUnit } from '../../units/UnitContext';
-import { fmtWeight, kgToUnit } from '../../units/units';
+import { fmtWeight } from '../../units/units';
 import { parseLocalDate } from '../../lib/calendar';
+import { cardState } from '../../lib/statsHelpers';
 import { Skeleton } from '../Skeleton';
 import { InlineError } from '../InlineError';
 import { F, R, ThemeColors } from '../../theme/colors';
@@ -16,6 +17,14 @@ import { withAlpha } from '../../lib/color';
 export interface PRFeedCardProps {
   /** Window start (local ISO date) — records are measured against everything before it. */
   since: string;
+  /**
+   * Exclusive window end (local ISO date).
+   *
+   * Session dates are accepted arbitrarily far into the future, and this feed
+   * orders by date descending — so without a ceiling a workout logged with a
+   * mistyped year became the first "new PR" in the list.
+   */
+  until: string;
   /** Human label for that window, e.g. "Last 8 weeks". */
   rangeLabel: string;
 }
@@ -30,14 +39,15 @@ function fmtDate(iso: string): string {
  * A card rather than a Highlights tile: the third tile is the week streak, and a
  * PR is worth more than a count — which lift, by how much, and when.
  */
-export function PRFeedCard({ since, rangeLabel }: PRFeedCardProps) {
+export function PRFeedCard({ since, until, rangeLabel }: PRFeedCardProps) {
   const router = useRouter();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { isPro, isLoading: proLoading, showPaywall } = useProGate();
   const { unit } = useUnit();
 
-  const { data, isLoading, isError, refetch } = usePersonalRecords(since);
+  const { data, isError, refetch } = usePersonalRecords(since, until, isPro && !proLoading);
+  const state = cardState(!!data, isError);
   const records = data?.records ?? [];
 
   return (
@@ -48,12 +58,18 @@ export function PRFeedCard({ since, rangeLabel }: PRFeedCardProps) {
             <Ionicons name="ribbon-outline" size={16} color={T.gold} />
           </View>
           <View style={{ flex: 1 }}>
-            <Text style={styles.cardTitle}>New PRs</Text>
-            <Text style={styles.cardSub}>{rangeLabel}</Text>
+            <Text style={styles.cardTitle} numberOfLines={1}>New PRs</Text>
+            <Text style={styles.cardSub} numberOfLines={1}>{rangeLabel}</Text>
           </View>
         </View>
         {!isPro && !proLoading && (
-          <TouchableOpacity onPress={showPaywall} activeOpacity={0.7}>
+          <TouchableOpacity
+            onPress={showPaywall}
+            activeOpacity={0.7}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="PR tracking is a Pro feature — upgrade to unlock"
+          >
             <Ionicons name="lock-closed" size={16} color={T.muted} />
           </TouchableOpacity>
         )}
@@ -65,9 +81,9 @@ export function PRFeedCard({ since, rangeLabel }: PRFeedCardProps) {
             <Text style={styles.proBlurText}>Upgrade to Pro to track your PRs</Text>
           </View>
         </TouchableOpacity>
-      ) : isError ? (
+      ) : state === 'error' ? (
         <InlineError message="Couldn't load your PRs." onRetry={() => void refetch()} />
-      ) : isLoading || proLoading ? (
+      ) : state === 'loading' || proLoading ? (
         <View style={{ gap: 8, marginTop: 4 }}>
           {Array.from({ length: 2 }).map((_, i) => (
             <Skeleton key={i} width="100%" height={44} radius={8} />
@@ -83,8 +99,11 @@ export function PRFeedCard({ since, rangeLabel }: PRFeedCardProps) {
         <View style={{ marginTop: 4 }}>
           {records.map((pr, i) => {
             const gain =
+              // Subtract in kg and convert once. Converting each side first and
+              // then rounding the difference rounded twice, so a genuine
+              // improvement could land on "+0.0".
               pr.previousOneRepMax !== null
-                ? kgToUnit(pr.estimatedOneRepMax, unit) - kgToUnit(pr.previousOneRepMax, unit)
+                ? pr.estimatedOneRepMax - pr.previousOneRepMax
                 : null;
             return (
               <TouchableOpacity
@@ -111,9 +130,11 @@ export function PRFeedCard({ since, rangeLabel }: PRFeedCardProps) {
                     {fmtWeight(pr.estimatedOneRepMax, unit)} {unit}
                   </Text>
                   {/* A first-ever lift has nothing to beat, so it gets its own
-                      label rather than a meaningless "+0". */}
+                      label rather than a meaningless "+0". The gain carries its
+                      unit: a bare "+2.5" sat directly under a line reading
+                      "225 lbs" and read as kg to half the audience. */}
                   <Text style={[styles.delta, gain === null && { color: T.muted }]}>
-                    {gain === null ? 'New lift' : `+${(Math.round(gain * 10) / 10).toFixed(1)}`}
+                    {gain === null ? 'New lift' : `+${fmtWeight(gain, unit)} ${unit}`}
                   </Text>
                 </View>
               </TouchableOpacity>

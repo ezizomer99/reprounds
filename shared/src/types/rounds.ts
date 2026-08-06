@@ -133,12 +133,24 @@ export type RoundFor<C extends DisciplineCat> = C extends 'grappling'
     ? StrikingRound
     : MmaRound;
 
-/** True when an entry's `details` is a structured rounds session (vs legacy field_config). */
+/**
+ * True when an entry's `details` is a structured rounds session (vs legacy
+ * field_config).
+ *
+ * `rounds` is checked, not just `schema`. Every caller reaches straight for
+ * `details.rounds.length` or iterates it, and `session_entries.details` is
+ * stored verbatim after a size check alone — so a row carrying
+ * `{ schema: 'rounds.v1' }` with no array made this guard return true and the
+ * caller throw. That is a permanent 500 on GET /stats/mat, /stats/partners and
+ * /notes for the affected user, unrecoverable except by deleting the row. The
+ * app doesn't write that shape today; the guard shouldn't depend on it.
+ */
 export function isRoundsSession(details: unknown): details is RoundsSessionDetails {
   return (
     typeof details === 'object' &&
     details !== null &&
-    (details as { schema?: unknown }).schema === ROUNDS_SCHEMA
+    (details as { schema?: unknown }).schema === ROUNDS_SCHEMA &&
+    Array.isArray((details as { rounds?: unknown }).rounds)
   );
 }
 
