@@ -129,3 +129,35 @@ export function weeklyBarLabel(weekStart: string, index: number, total: number):
     day: 'numeric',
   });
 }
+
+/**
+ * Intrinsic size of the react-native-body-highlighter figure at scale 1. The
+ * library exposes no width/height prop — SvgMaleWrapper hardcodes
+ * `width={200 * scale} height={400 * scale}` — so `scale` is the only handle on
+ * how big it renders, and these are the numbers it is a multiple of.
+ */
+export const BODY_BASE_SIZE = { width: 200, height: 400 } as const;
+
+/** Never larger than the flat 1.1 the stats tab used to pass. */
+const BODY_MAX_SCALE = 1.1;
+/** Below this the muscle shading stops being readable on a small phone. */
+const BODY_MIN_SCALE = 0.8;
+/** Share of the viewport height the figure may occupy. */
+const BODY_MAX_HEIGHT_FRACTION = 0.45;
+
+/**
+ * Fit the body heat map to the device.
+ *
+ * The stats tab passed a flat `scale={1.1}`, so the figure was 220 × 440 dp
+ * whatever it was rendered on — well over half the visible page on a phone, and
+ * the reason the Muscles Trained card reads as oversized. Bounded here by the
+ * card's content width and by a share of the viewport height, then clamped: the
+ * ceiling means this can only ever shrink the figure, never grow it.
+ *
+ * `gutter` is the horizontal padding either side of the card (D.pad).
+ */
+export function bodyScale(windowWidth: number, windowHeight: number, gutter: number): number {
+  const byWidth = (windowWidth - 2 * gutter) / BODY_BASE_SIZE.width;
+  const byHeight = (windowHeight * BODY_MAX_HEIGHT_FRACTION) / BODY_BASE_SIZE.height;
+  return Math.max(BODY_MIN_SCALE, Math.min(BODY_MAX_SCALE, byWidth, byHeight));
+}

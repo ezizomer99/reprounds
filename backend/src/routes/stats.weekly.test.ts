@@ -117,8 +117,39 @@ describe('GET /stats/weekly', () => {
     const { sql, params } = issuedQuery();
     expect(sql).toContain('COUNT(DISTINCT s.id)');
     expect(sql).toContain('s.date >= $');
-    expect(sql).toContain('s.date < ($');
-    expect(params).toContain(28); // weeks * 7
+    expect(sql).toContain('s.date < $');
+    // Both bounds are dates: `since` and `since + weeks * 7` days.
+    expect(params).toContain('2026-06-01');
+    expect(params).toContain('2026-06-29');
+  });
+
+  // Regression guard. The upper bound used to be `${since}::date + ${weeks * 7}`,
+  // and postgres-js binds a JS number with an unspecified type OID — so Postgres
+  // saw `date + unknown`, could not pick between the integer/interval/time
+  // operators, and threw "operator is not unique" on every single call. These
+  // tests mock the driver, so nothing here can catch that at runtime; what they
+  // can do is pin the shape that made it possible.
+  it('never binds a bare number into the window bounds', async () => {
+    await callWeekly('?since=2026-06-01&weeks=4');
+    const { sql, params } = issuedQuery();
+    expect(sql).not.toMatch(/::date\s*\+/);
+    expect(params.every((p) => typeof p !== 'number')).toBe(true);
+  });
+
+  it('computes the upper bound from the default window too', async () => {
+    await callWeekly('?weeks=4');
+    const { params } = issuedQuery();
+    // `since` is bound twice — once for the bucket expression, once for the
+    // lower bound — so the distinct dates are exactly {since, until}.
+    const dates = [
+      ...new Set(
+        params.filter((p): p is string => typeof p === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(p)),
+      ),
+    ].sort();
+    expect(dates).toHaveLength(2);
+    const [since, until] = dates;
+    expect(new Date(since + 'T00:00:00Z').getUTCDay()).toBe(1);
+    expect(Date.parse(until) - Date.parse(since)).toBe(28 * 86_400_000);
   });
 
   it('scopes to the caller and to completed sessions, and counts only completed sets', async () => {

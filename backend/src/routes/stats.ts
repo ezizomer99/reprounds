@@ -5,7 +5,7 @@ import { partners, sessionEntries, sessions } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
 import { aggregateMatStats, type MatEntryRow } from '../lib/matStats';
-import { buildWeeklyBuckets } from '../lib/weeklyStats';
+import { addDaysISO, buildWeeklyBuckets } from '../lib/weeklyStats';
 import { aggregatePartnerStats } from '../lib/partnerStats';
 import { epleyE1rmSql } from '../lib/e1rm';
 import { isIsoDate } from '../lib/validate';
@@ -49,7 +49,11 @@ function weekWindow(sinceParam: string | undefined, weeksParam: string | undefin
     ? Math.min(Math.max(parsedWeeks, 1), MAX_WEEKS)
     : DEFAULT_WEEKS;
 
-  if (isIsoDate(sinceParam)) return { since: sinceParam, weeks };
+  // `until` is the exclusive end of the window, computed here rather than in SQL
+  // — see addDaysISO for why adding to a date in SQL broke this endpoint.
+  if (isIsoDate(sinceParam)) {
+    return { since: sinceParam, until: addDaysISO(sinceParam, weeks * 7), weeks };
+  }
 
   // Default: UTC Monday of the week (weeks - 1) weeks back. Callers should send
   // their local Monday — this fallback can be a day off for a device far from
@@ -57,7 +61,8 @@ function weekWindow(sinceParam: string | undefined, weeksParam: string | undefin
   const now = new Date();
   const monday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7) - (weeks - 1) * 7);
-  return { since: monday.toISOString().slice(0, 10), weeks };
+  const since = monday.toISOString().slice(0, 10);
+  return { since, until: addDaysISO(since, weeks * 7), weeks };
 }
 
 // GET /stats/muscles?since=YYYY-MM-DD&until=YYYY-MM-DD
@@ -319,7 +324,7 @@ statsRoutes.get('/weekly', async (c) => {
   const userId = c.get('userId');
   const db = getDb(c.env);
 
-  const { since, weeks } = weekWindow(c.req.query('since'), c.req.query('weeks'));
+  const { since, until, weeks } = weekWindow(c.req.query('since'), c.req.query('weeks'));
 
   // Aggregated in SQL rather than rolled up on the client from GET /sessions:
   // that list caps at 200 rows ordered newest-first, so at a year and five
@@ -340,7 +345,7 @@ statsRoutes.get('/weekly', async (c) => {
     WHERE s.user_id = ${userId}
       AND s.status  = 'completed'
       AND s.date   >= ${since}::date
-      AND s.date    < (${since}::date + ${weeks * 7})
+      AND s.date    < ${until}::date
     GROUP BY bucket
   `);
 

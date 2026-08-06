@@ -4,6 +4,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useState, useMemo, useCallback } from 'react';
@@ -23,6 +24,8 @@ import {
   weeklyBarLabel,
   statsRange,
   STATS_RANGES,
+  bodyScale,
+  BODY_BASE_SIZE,
   type StatsRangeKey,
 } from '../../../src/lib/statsHelpers';
 import { useMuscleSummary, useTopLifts, useWeeklyStats } from '../../../src/hooks/useStats';
@@ -128,6 +131,19 @@ export default function StatsTab() {
     () => aggregateMuscles(muscleData?.muscles ?? []),
     [muscleData],
   );
+
+  // The body diagram is the one child on this screen with an intrinsic size the
+  // library won't let us override, so it gets sized against the device instead
+  // of trusting a constant to suit every phone.
+  const { width: winWidth, height: winHeight } = useWindowDimensions();
+  const bodyBox = useMemo(() => {
+    const scale = bodyScale(winWidth, winHeight, D.pad);
+    return {
+      scale,
+      width: Math.round(BODY_BASE_SIZE.width * scale),
+      height: Math.round(BODY_BASE_SIZE.height * scale),
+    };
+  }, [winWidth, winHeight]);
 
   const hasMuscles = bodyData.length > 0;
   const hasSessions = weeks.some((w) => w.sessions > 0);
@@ -300,8 +316,8 @@ export default function StatsTab() {
                 <Ionicons name="body-outline" size={16} color={T.performance} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Muscles Trained</Text>
-                <Text style={styles.cardSub}>{range.longLabel}</Text>
+                <Text style={styles.cardTitle} numberOfLines={1}>Muscles Trained</Text>
+                <Text style={styles.cardSub} numberOfLines={1}>{range.longLabel}</Text>
               </View>
             </View>
             <View style={styles.toggleRow}>
@@ -326,16 +342,18 @@ export default function StatsTab() {
             />
           ) : muscleLoading ? (
             // Without this the empty copy below doubled as the loading state, so
-            // a user who had trained this week was told to go train.
+            // a user who had trained this week was told to go train. Sized to the
+            // figure it stands in for — at a fixed 140 × 220 it was half the real
+            // thing, so the card jumped ~200 dp taller the moment data arrived.
             <View style={styles.bodyContainer}>
-              <Skeleton width={140} height={220} radius={12} />
+              <Skeleton width={bodyBox.width} height={bodyBox.height} radius={12} />
             </View>
           ) : hasMuscles ? (
             <View style={styles.bodyContainer}>
               <Body
                 data={bodyData}
                 side={muscleView}
-                scale={1.1}
+                scale={bodyBox.scale}
                 colors={[withAlpha(T.primary, 0.4), T.primary, T.performance]}
                 border={T.border}
                 defaultFill={T.surface2}
@@ -358,8 +376,8 @@ export default function StatsTab() {
                 <Ionicons name="bar-chart-outline" size={16} color={T.conditioning} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Sessions per Week</Text>
-                <Text style={styles.cardSub}>{range.longLabel}</Text>
+                <Text style={styles.cardTitle} numberOfLines={1}>Sessions per Week</Text>
+                <Text style={styles.cardSub} numberOfLines={1}>{range.longLabel}</Text>
               </View>
             </View>
             {!isPro && !proLoading && (
@@ -422,8 +440,8 @@ export default function StatsTab() {
                 <Ionicons name="trending-up-outline" size={16} color={T.performance} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle}>Volume per Week</Text>
-                <Text style={styles.cardSub}>{range.longLabel} · {unit}</Text>
+                <Text style={styles.cardTitle} numberOfLines={1}>Volume per Week</Text>
+                <Text style={styles.cardSub} numberOfLines={1}>{range.longLabel} · {unit}</Text>
               </View>
             </View>
             {!isPro && !proLoading && (
@@ -485,7 +503,7 @@ export default function StatsTab() {
               <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.gold, 0.15) }]}>
                 <Ionicons name="trophy-outline" size={16} color={T.gold} />
               </View>
-              <Text style={styles.cardTitle}>Top Lifts</Text>
+              <Text style={styles.cardTitle} numberOfLines={1}>Top Lifts</Text>
             </View>
             {!isPro && !proLoading && (
               <TouchableOpacity onPress={showPaywall} activeOpacity={0.7}>
@@ -660,10 +678,19 @@ function makeStyles(T: ThemeColors) {
       justifyContent: 'space-between',
       marginBottom: 12,
     },
-    cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    // `flex: 1` is what stops the Front/Back toggle rendering off-screen. The
+    // title block inside carries its own `flex: 1` for ellipsizing — flexBasis 0,
+    // flexGrow 1 — and in an auto-width parent that made this row swell to the
+    // full header width, so `space-between` parked the toggle on the right
+    // padding edge and the chips landed past it. Constraining the parent is what
+    // makes that inner `flex: 1` mean "the leftover space" rather than "all of
+    // it". minWidth is belt-and-braces: Yoga has no `min-width: auto`, so it
+    // changes nothing today, but it states the intent that this may shrink.
+    cardHeaderLeft: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 },
     cardIconBox: {
       width: 28,
       height: 28,
+      flexShrink: 0,
       borderRadius: R.sm,
       alignItems: 'center',
       justifyContent: 'center',
@@ -673,7 +700,8 @@ function makeStyles(T: ThemeColors) {
     cardSub: { fontFamily: F.ui, fontSize: 11, color: T.muted, marginTop: 2 },
 
     // Muscles card
-    toggleRow: { flexDirection: 'row', gap: 4 },
+    // Never squeezed: the header shrinks the title before it shrinks the control.
+    toggleRow: { flexDirection: 'row', gap: 4, flexShrink: 0 },
     toggleBtn: {
       paddingHorizontal: 10,
       paddingVertical: 4,

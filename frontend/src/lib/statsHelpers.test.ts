@@ -9,6 +9,8 @@ import {
   weeklyBarLabel,
   statsRange,
   STATS_RANGES,
+  bodyScale,
+  BODY_BASE_SIZE,
 } from './statsHelpers';
 
 /** Local `YYYY-MM-DD` — the convention every helper in this module uses. */
@@ -257,5 +259,47 @@ describe('weeklyBarLabel', () => {
 
   it('formats a dated label as month and day', () => {
     expect(weeklyBarLabel('2026-06-01', 0, 8)).toMatch(/^[A-Z][a-z]{2} \d{1,2}$/);
+  });
+});
+
+describe('bodyScale', () => {
+  const PAD = 18;
+  // width × height in dp: a small phone, a current phone, and a tablet.
+  const SMALL = [375, 667] as const;
+  const PHONE = [393, 852] as const;
+  const TABLET = [834, 1194] as const;
+
+  const box = (w: number, h: number) => {
+    const s = bodyScale(w, h, PAD);
+    return { w: BODY_BASE_SIZE.width * s, h: BODY_BASE_SIZE.height * s };
+  };
+
+  // The old flat scale={1.1} was 220 × 440 dp everywhere. This can only shrink.
+  it('never renders larger than the fixed size it replaced', () => {
+    for (const [w, h] of [SMALL, PHONE, TABLET]) {
+      expect(bodyScale(w, h, PAD)).toBeLessThanOrEqual(1.1);
+    }
+  });
+
+  it('keeps the figure inside the card gutters', () => {
+    for (const [w, h] of [SMALL, PHONE, TABLET]) {
+      expect(box(w, h).w).toBeLessThanOrEqual(w - 2 * PAD);
+    }
+  });
+
+  // The whole point: on a phone the body used to eat over half the page.
+  it('leaves room for the rest of the page on a phone', () => {
+    for (const [w, h] of [SMALL, PHONE]) {
+      expect(box(w, h).h).toBeLessThan(h * 0.5);
+    }
+  });
+
+  it('stays legible on a narrow device rather than shrinking without limit', () => {
+    expect(bodyScale(320, 480, PAD)).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it('grows with the viewport up to the cap', () => {
+    expect(bodyScale(...PHONE, PAD)).toBeGreaterThanOrEqual(bodyScale(...SMALL, PAD));
+    expect(bodyScale(...TABLET, PAD)).toBeGreaterThanOrEqual(bodyScale(...PHONE, PAD));
   });
 });

@@ -182,7 +182,7 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
                 <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.primary, 0.15) }]}>
                   <Ionicons name="flame-outline" size={16} color={T.primary} />
                 </View>
-                <Text style={styles.cardTitle}>Intensity Split</Text>
+                <Text style={styles.cardTitle} numberOfLines={1}>Intensity Split</Text>
               </View>
             </View>
 
@@ -221,7 +221,7 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
                 <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.grappling, 0.15) }]}>
                   <Ionicons name="bar-chart-outline" size={16} color={T.grappling} />
                 </View>
-                <Text style={styles.cardTitle}>Rounds per Week</Text>
+                <Text style={styles.cardTitle} numberOfLines={1}>Rounds per Week</Text>
               </View>
               {!isPro && !proLoading && (
                 <TouchableOpacity onPress={showPaywall} activeOpacity={0.7}>
@@ -277,7 +277,7 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
                 <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.performance, 0.15) }]}>
                   <Ionicons name="fitness-outline" size={16} color={T.performance} />
                 </View>
-                <Text style={styles.cardTitle}>Sparring Numbers</Text>
+                <Text style={styles.cardTitle} numberOfLines={1}>Sparring Numbers</Text>
               </View>
               {!isPro && !proLoading && (
                 <TouchableOpacity onPress={showPaywall} activeOpacity={0.7}>
@@ -434,7 +434,7 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
               <Ionicons name="people-outline" size={16} color={T.grappling} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.cardTitle}>Training partners</Text>
+              <Text style={styles.cardTitle} numberOfLines={1}>Training partners</Text>
               <Text style={styles.partnersSub}>Who you roll with most, subs for & against</Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={T.muted} />
@@ -484,8 +484,12 @@ function makeStyles(T: ThemeColors) {
       justifyContent: 'space-between',
       marginBottom: 12,
     },
-    cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    // Constrained and shrinkable, matching the Gym tab: an auto-width header row
+    // whose title block carries `flex: 1` swells to the full width and pushes
+    // whatever sits opposite it off the right edge.
+    cardHeaderLeft: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 },
     cardIconBox: {
+      flexShrink: 0,
       width: 28,
       height: 28,
       borderRadius: R.sm,
