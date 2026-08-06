@@ -1,12 +1,27 @@
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type {
   MatStatsResponse,
   MuscleSummaryResponse,
   PersonalRecordsResponse,
   TopLiftsResponse,
   WeeklyStatsResponse,
+  WeekStreakResponse,
 } from '@app/shared';
 import { apiGet } from '../lib/api';
+
+/**
+ * Shared options for every stats query on the tab.
+ *
+ * `keepPreviousData` is what stops the range selector blanking the page: the
+ * window is part of every key, so 4W→8W→6M minted a fresh key with no data and
+ * all six cards dropped to skeletons with jumping heights on the most-tapped
+ * control on the screen. The previous window now stays up until the new one
+ * arrives; callers dim on `isFetching`.
+ */
+const statsQueryOptions = {
+  staleTime: 5 * 60 * 1000,
+  placeholderData: keepPreviousData,
+} as const;
 
 /**
  * Muscle groups trained over `[since, until)` — both ends local ISO dates.
@@ -19,16 +34,25 @@ export function useMuscleSummary(since: string, until: string) {
   return useQuery<MuscleSummaryResponse, Error>({
     queryKey: ['stats', 'muscles', since, until],
     queryFn: () => apiGet<MuscleSummaryResponse>(`/stats/muscles?since=${since}&until=${until}`),
-    staleTime: 5 * 60 * 1000,
+    ...statsQueryOptions,
   });
 }
 
-/** Top lifts by est. 1RM. `since` bounds the scan to the selected range. */
-export function useTopLifts(since: string) {
+/**
+ * Top lifts by est. 1RM over `[since, until)`.
+ *
+ * `enabled` matters as much as the window: this is Pro-only content that a free
+ * user only ever sees as a paywall blur, so fetching it for them was pure waste.
+ * `proLoading` has to gate it too — a mid-race `isPro === false` is
+ * indistinguishable from a genuine free user, and skipping the fetch on that
+ * basis would leave a paying user staring at a permanent skeleton.
+ */
+export function useTopLifts(since: string, until: string, enabled = true) {
   return useQuery<TopLiftsResponse, Error>({
-    queryKey: ['stats', 'top-lifts', since],
-    queryFn: () => apiGet<TopLiftsResponse>(`/stats/top-lifts?since=${since}`),
-    staleTime: 5 * 60 * 1000,
+    queryKey: ['stats', 'top-lifts', since, until],
+    queryFn: () => apiGet<TopLiftsResponse>(`/stats/top-lifts?since=${since}&until=${until}`),
+    enabled,
+    ...statsQueryOptions,
   });
 }
 
@@ -42,16 +66,34 @@ export function useWeeklyStats(since: string, weeks: number) {
   return useQuery<WeeklyStatsResponse, Error>({
     queryKey: ['stats', 'weekly', since, weeks],
     queryFn: () => apiGet<WeeklyStatsResponse>(`/stats/weekly?since=${since}&weeks=${weeks}`),
-    staleTime: 5 * 60 * 1000,
+    ...statsQueryOptions,
   });
 }
 
-/** Lifts improved on since `since` — best estimate in the window vs. before it. */
-export function usePersonalRecords(since: string) {
+/** Lifts improved on within `[since, until)` — best estimate in the window vs. before it. */
+export function usePersonalRecords(since: string, until: string, enabled = true) {
   return useQuery<PersonalRecordsResponse, Error>({
-    queryKey: ['stats', 'prs', since],
-    queryFn: () => apiGet<PersonalRecordsResponse>(`/stats/prs?since=${since}`),
-    staleTime: 5 * 60 * 1000,
+    queryKey: ['stats', 'prs', since, until],
+    queryFn: () => apiGet<PersonalRecordsResponse>(`/stats/prs?since=${since}&until=${until}`),
+    enabled,
+    ...statsQueryOptions,
+  });
+}
+
+/**
+ * Consecutive trained weeks ending at the caller's current week.
+ *
+ * `today` is the device's local date and part of the key, so the streak
+ * re-derives itself when the day rolls over — the local version read
+ * `new Date()` inside a `useMemo` keyed on the session list, so an app left open
+ * across Monday 00:00 kept showing last week's number.
+ */
+export function useWeekStreak(today: string, enabled = true) {
+  return useQuery<WeekStreakResponse, Error>({
+    queryKey: ['stats', 'streak', today],
+    queryFn: () => apiGet<WeekStreakResponse>(`/stats/streak?today=${today}`),
+    enabled,
+    ...statsQueryOptions,
   });
 }
 
@@ -60,6 +102,6 @@ export function useMatStats(since: string, weeks = 8) {
   return useQuery<MatStatsResponse, Error>({
     queryKey: ['stats', 'mat', since, weeks],
     queryFn: () => apiGet<MatStatsResponse>(`/stats/mat?since=${since}&weeks=${weeks}`),
-    staleTime: 5 * 60 * 1000,
+    ...statsQueryOptions,
   });
 }

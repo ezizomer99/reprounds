@@ -212,3 +212,45 @@ describe('aggregateMatStats', () => {
     expect(res.totals.minutes).toBe(10);
   });
 });
+
+// `session_entries.details` is stored verbatim after a size check alone, so the
+// aggregator is the last line of defence against a payload it didn't write.
+describe('aggregateMatStats — malformed details', () => {
+  it('folds an unrecognised intensity into unspecified instead of emitting NaN', () => {
+    const res = aggregateMatStats(
+      [row({ details: grappling([{ intensity: 'brutal' }, { intensity: 'hard' }] as never) })],
+      new Set(),
+      SINCE,
+      WEEKS,
+    );
+    // The response must carry exactly the four keys MatStatsResponse declares —
+    // an unknown key indexed `undefined + 1`, so the payload came back with
+    // `{ brutal: null }` and any client summing Object.values got NaN.
+    expect(Object.keys(res.intensity).sort()).toEqual(['hard', 'light', 'medium', 'unspecified']);
+    expect(res.intensity.unspecified).toBe(1);
+    expect(res.intensity.hard).toBe(1);
+    expect(Object.values(res.intensity).every(Number.isFinite)).toBe(true);
+  });
+
+  it('ignores a rounds.v1 payload whose rounds array is missing or not an array', () => {
+    for (const details of [
+      { schema: ROUNDS_SCHEMA, category: 'grappling' },
+      { schema: ROUNDS_SCHEMA, category: 'striking', rounds: null },
+      { schema: ROUNDS_SCHEMA, category: 'mixed', rounds: { 0: {} } },
+    ]) {
+      // Previously `details.rounds.length` threw here, and because /stats/mat
+      // and /stats/partners both read every entry, one such row 500'd them
+      // permanently for that user.
+      expect(() =>
+        aggregateMatStats([row({ details })], new Set(), SINCE, WEEKS),
+      ).not.toThrow();
+    }
+    const res = aggregateMatStats(
+      [row({ details: { schema: ROUNDS_SCHEMA, category: 'grappling' } })],
+      new Set(),
+      SINCE,
+      WEEKS,
+    );
+    expect(res.totals.rounds).toBe(0);
+  });
+});

@@ -19,7 +19,12 @@ export function Skeleton({
   style?: ViewStyle;
 }) {
   const { T } = useTheme();
-  const opacity = useRef(new Animated.Value(0.5)).current;
+  // Lazy init: `useRef(new Animated.Value(0.5))` runs the constructor on every
+  // render and throws the result away — a placeholder shouldn't cost an
+  // allocation per frame of the thing it's standing in for.
+  const opacityRef = useRef<Animated.Value | null>(null);
+  if (opacityRef.current === null) opacityRef.current = new Animated.Value(0.5);
+  const opacity = opacityRef.current;
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -38,6 +43,10 @@ export function Skeleton({
         { width, height, borderRadius: radius, backgroundColor: T.surface2, opacity },
         style,
       ]}
+      // A screen reader landing on a stack of empty pulsing blocks learns
+      // nothing; loading states belong to sighted layout, not the a11y tree.
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
     />
   );
 }

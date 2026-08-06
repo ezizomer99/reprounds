@@ -1,4 +1,4 @@
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -8,10 +8,10 @@ import { grapplingPositionLabel, submissionLabel } from '@app/shared';
 import { useMatStats } from '../../hooks/useStats';
 import { useProGate } from '../../hooks/useProGate';
 import { useTodayISO } from '../../hooks/useTodayISO';
-import { weeksAgoMonday, weeklyBarLabel } from '../../lib/statsHelpers';
+import { barSizing, cardState, weeksAgoMonday, weeklyBarLabel } from '../../lib/statsHelpers';
 import { Skeleton } from '../Skeleton';
 import { InlineError } from '../InlineError';
-import { F, R, ThemeColors } from '../../theme/colors';
+import { D, F, R, ThemeColors } from '../../theme/colors';
 import { useTheme } from '../../theme/ThemeContext';
 import { withAlpha } from '../../lib/color';
 import { parseLocalDate } from '../../lib/calendar';
@@ -51,6 +51,16 @@ function topEntries(map: Record<string, number> | undefined, limit: number): [st
     .slice(0, limit);
 }
 
+/** Width gifted-charts reserves for its y-axis labels before the plot area starts. */
+const Y_AXIS_ALLOWANCE = 40;
+
+/**
+ * Ceiling on OS text scaling in the stat tiles. Three `flex: 1` tiles in a fixed
+ * row, one holding fmtMatTime output like "12h 30m" — at the 3.1× iOS allows
+ * they overflow the card.
+ */
+const TILE_MAX_FONT_SCALE = 1.3;
+
 function fmtMatTime(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
   const h = Math.floor(minutes / 60);
@@ -74,7 +84,8 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
     () => weeksAgoMonday(weeks, parseLocalDate(todayISO)),
     [weeks, todayISO],
   );
-  const { data, isLoading, isError, refetch } = useMatStats(since, weeks);
+  const { data, isError, refetch } = useMatStats(since, weeks);
+  const state = cardState(!!data, isError);
 
   const barData = useMemo(
     () =>
@@ -87,22 +98,47 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
     [data],
   );
 
-  const intensityTotal = data
-    ? data.intensity.light + data.intensity.medium + data.intensity.hard + data.intensity.unspecified
-    : 0;
-  const intensitySegments = data
-    ? (
-        [
-          { key: 'Light', count: data.intensity.light, color: T.conditioning },
-          { key: 'Medium', count: data.intensity.medium, color: T.gold },
-          { key: 'Hard', count: data.intensity.hard, color: T.primary },
-          { key: 'Unrated', count: data.intensity.unspecified, color: T.muted },
-        ] as const
-      ).filter((s) => s.count > 0)
-    : [];
+  // Sized to fit rather than scrolled, same as the gym charts: gifted-charts
+  // draws its y-axis inside the chart, so a horizontal ScrollView around it took
+  // the scale off screen after the first swipe.
+  const { width: winWidth } = useWindowDimensions();
+  const bars = useMemo(
+    () => barSizing(barData.length, winWidth - 2 * D.pad - Y_AXIS_ALLOWANCE),
+    [barData.length, winWidth],
+  );
+
+  const intensity = useMemo(() => {
+    if (!data) return { total: 0, segments: [] as { key: string; count: number; color: string }[] };
+    const { light, medium, hard, unspecified } = data.intensity;
+    return {
+      total: light + medium + hard + unspecified,
+      segments: [
+        { key: 'Light', count: light, color: T.conditioning },
+        { key: 'Medium', count: medium, color: T.gold },
+        { key: 'Hard', count: hard, color: T.primary },
+        { key: 'Unrated', count: unspecified, color: T.muted },
+      ].filter((s) => s.count > 0),
+    };
+  }, [data, T.conditioning, T.gold, T.primary, T.muted]);
+  const intensityTotal = intensity.total;
+  const intensitySegments = intensity.segments;
 
   const grap = data?.grappling;
   const strik = data?.striking;
+
+  // Computed once. Each of these used to be called twice per render — once to
+  // test `.length > 0` and again to map — so every breakdown sorted its map
+  // twice on every render, including theme changes and Pro-state settling.
+  const breakdown = useMemo(
+    () => ({
+      positions: topEntries(grap?.positions, 5),
+      submissionsFor: topEntries(grap?.submissionsForByType, 4),
+      submissionsAgainst: topEntries(grap?.submissionsAgainstByType, 4),
+      roundTypes: topEntries(strik?.roundsByType, 6).filter(([k]) => k in ROUND_TYPE_LABELS),
+      strikes: topEntries(strik?.strikes, 8).filter(([k]) => k in WEAPON_LABELS),
+    }),
+    [grap, strik],
+  );
   const hasGrappling =
     !!grap &&
     (grap.rounds > 0 ||
@@ -116,12 +152,22 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
   // without fetching, so `isLoading` is false while `data` is still undefined —
   // and "you haven't trained" is the wrong thing to tell someone on a plane.
   const isEmpty = !!data && data.totals.sessions === 0;
-  const showSkeletons = isLoading || !data;
+  const showSkeletons = state === 'loading';
 
   // One guard above all four loading branches: a failed fetch used to render as
   // an all-zeroes view, indistinguishable from "you haven't trained".
-  if (isError) {
-    return <InlineError message="Couldn't load your mat stats." onRetry={() => void refetch()} />;
+  //
+  // `state`, not `isError`: this is an early return, so keying it off the error
+  // flag alone meant a failed *background* refetch wiped the entire Mat view —
+  // the cache is persisted for 24 hours, so there was usually good data behind
+  // it. It also renders inside the card frame now; every other state on this tab
+  // sits under the broadsheet rule and this one hung above it.
+  if (state === 'error') {
+    return (
+      <View style={styles.card}>
+        <InlineError message="Couldn't load your mat stats." onRetry={() => void refetch()} />
+      </View>
+    );
   }
 
   return (
@@ -142,22 +188,22 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
         ) : (
           <View style={styles.statCardsRow}>
             <View style={[styles.statCard, { backgroundColor: withAlpha(T.grappling, 0.12) }]}>
-              <Text style={[styles.statCardNum, { color: T.grappling }]}>
+              <Text style={[styles.statCardNum, { color: T.grappling }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
                 {data?.totals.rounds ?? 0}
               </Text>
-              <Text style={[styles.statCardLabel, { color: T.grappling }]}>Rounds</Text>
+              <Text style={[styles.statCardLabel, { color: T.grappling }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>Rounds</Text>
             </View>
             <View style={[styles.statCard, { backgroundColor: withAlpha(T.conditioning, 0.12) }]}>
-              <Text style={[styles.statCardNum, { color: T.conditioning }]}>
+              <Text style={[styles.statCardNum, { color: T.conditioning }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
                 {fmtMatTime(data?.totals.minutes ?? 0)}
               </Text>
-              <Text style={[styles.statCardLabel, { color: T.conditioning }]}>Mat Time</Text>
+              <Text style={[styles.statCardLabel, { color: T.conditioning }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>Mat Time</Text>
             </View>
             <View style={[styles.statCard, { backgroundColor: withAlpha(T.gold, 0.12) }]}>
-              <Text style={[styles.statCardNum, { color: T.gold }]}>
+              <Text style={[styles.statCardNum, { color: T.gold }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
                 {data?.totals.sessions ?? 0}
               </Text>
-              <Text style={[styles.statCardLabel, { color: T.gold }]}>Sessions</Text>
+              <Text style={[styles.statCardLabel, { color: T.gold }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>Sessions</Text>
             </View>
           </View>
         )}
@@ -224,7 +270,13 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
                 <Text style={styles.cardTitle} numberOfLines={1}>Rounds per Week</Text>
               </View>
               {!isPro && !proLoading && (
-                <TouchableOpacity onPress={showPaywall} activeOpacity={0.7}>
+                <TouchableOpacity
+                  onPress={showPaywall}
+                  activeOpacity={0.7}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="This section is a Pro feature — upgrade to unlock"
+                >
                   <Ionicons name="lock-closed" size={16} color={T.muted} />
                 </TouchableOpacity>
               )}
@@ -234,15 +286,11 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
               showSkeletons || proLoading ? (
                 <Skeleton width="100%" height={100} radius={8} />
               ) : (
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  style={{ marginTop: 8 }}
-                >
+                <View style={{ marginTop: 8 }}>
                   <BarChart
                     data={barData}
-                    barWidth={28}
-                    spacing={8}
+                    barWidth={bars.barWidth}
+                    spacing={bars.spacing}
                     roundedTop
                     frontColor={T.grappling}
                     gradientColor={withAlpha(T.grappling, 0.5)}
@@ -257,7 +305,7 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
                     barBorderRadius={4}
                     showGradient
                   />
-                </ScrollView>
+                </View>
               )
             ) : (
               <TouchableOpacity onPress={showPaywall} activeOpacity={0.85}>
@@ -280,7 +328,13 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
                 <Text style={styles.cardTitle} numberOfLines={1}>Sparring Numbers</Text>
               </View>
               {!isPro && !proLoading && (
-                <TouchableOpacity onPress={showPaywall} activeOpacity={0.7}>
+                <TouchableOpacity
+                  onPress={showPaywall}
+                  activeOpacity={0.7}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="This section is a Pro feature — upgrade to unlock"
+                >
                   <Ionicons name="lock-closed" size={16} color={T.muted} />
                 </TouchableOpacity>
               )}
@@ -328,11 +382,11 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
                         </View>
                       </View>
 
-                      {topEntries(grap.positions, 5).length > 0 && (
+                      {breakdown.positions.length > 0 && (
                         <View style={styles.subBlock}>
                           <Text style={styles.subBlockLabel}>Top positions</Text>
                           <View style={styles.chipRow}>
-                            {topEntries(grap.positions, 5).map(([pos, n]) => (
+                            {breakdown.positions.map(([pos, n]) => (
                               <View key={pos} style={styles.chip}>
                                 <Text style={styles.chipText}>
                                   {grapplingPositionLabel(pos)} · {n}
@@ -343,11 +397,11 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
                         </View>
                       )}
 
-                      {topEntries(grap.submissionsForByType, 4).length > 0 && (
+                      {breakdown.submissionsFor.length > 0 && (
                         <View style={styles.subBlock}>
                           <Text style={styles.subBlockLabel}>Most landed</Text>
                           <View style={styles.chipRow}>
-                            {topEntries(grap.submissionsForByType, 4).map(([sub, n]) => (
+                            {breakdown.submissionsFor.map(([sub, n]) => (
                               <View key={sub} style={styles.chip}>
                                 <Text style={styles.chipText}>
                                   {submissionLabel(sub)} · {n}
@@ -358,11 +412,11 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
                         </View>
                       )}
 
-                      {topEntries(grap.submissionsAgainstByType, 4).length > 0 && (
+                      {breakdown.submissionsAgainst.length > 0 && (
                         <View style={styles.subBlock}>
                           <Text style={styles.subBlockLabel}>Most tapped to</Text>
                           <View style={styles.chipRow}>
-                            {topEntries(grap.submissionsAgainstByType, 4).map(([sub, n]) => (
+                            {breakdown.submissionsAgainst.map(([sub, n]) => (
                               <View key={sub} style={styles.chip}>
                                 <Text style={styles.chipText}>
                                   {submissionLabel(sub)} · {n}
@@ -378,29 +432,36 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
                   {hasStriking && strik && (
                     <View>
                       <Text style={styles.blockLabel}>Striking · {strik.rounds} rounds</Text>
-                      {Object.keys(strik.roundsByType).length > 0 && (
+                      {/* Sorted and label-guarded, like every other breakdown on
+                          this card. These two came straight off Object.entries,
+                          so their order was whichever weapon or round type
+                          happened to appear first in the backend fold — and a
+                          key outside the label maps (an older or newer schema
+                          variant) rendered a blank row rather than being
+                          skipped. topEntries handles both. */}
+                      {breakdown.roundTypes.length > 0 && (
                         <View style={styles.chipRow}>
-                          {(Object.entries(strik.roundsByType) as [StrikingRoundType, number][]).map(
-                            ([type, n]) => (
+                          {breakdown.roundTypes
+                            .map(([type, n]) => (
                               <View key={type} style={styles.chip}>
                                 <Text style={styles.chipText}>
-                                  {ROUND_TYPE_LABELS[type]} · {n}
+                                  {ROUND_TYPE_LABELS[type as StrikingRoundType]} · {n}
                                 </Text>
                               </View>
-                            ),
-                          )}
+                            ))}
                         </View>
                       )}
                       {strik.totalStrikes > 0 && (
                         <View style={{ marginTop: 8 }}>
-                          {(Object.entries(strik.strikes) as [StrikeWeapon, number][]).map(
-                            ([weapon, n]) => (
+                          {breakdown.strikes
+                            .map(([weapon, n]) => (
                               <View key={weapon} style={styles.strikeRow}>
-                                <Text style={styles.strikeName}>{WEAPON_LABELS[weapon]}</Text>
+                                <Text style={styles.strikeName}>
+                                  {WEAPON_LABELS[weapon as StrikeWeapon]}
+                                </Text>
                                 <Text style={styles.strikeCount}>{n}</Text>
                               </View>
-                            ),
-                          )}
+                            ))}
                           <View style={[styles.strikeRow, styles.strikeTotalRow]}>
                             <Text style={[styles.strikeName, { color: T.text }]}>Total strikes</Text>
                             <Text style={[styles.strikeCount, { color: T.text }]}>

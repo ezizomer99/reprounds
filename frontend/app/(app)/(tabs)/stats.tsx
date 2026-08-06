@@ -14,21 +14,26 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { BarChart } from 'react-native-gifted-charts';
 import Body from 'react-native-body-highlighter';
-import { MAX_SESSIONS_PAGE, useSessions } from '../../../src/hooks/useSession';
 import { useProGate } from '../../../src/hooks/useProGate';
 import {
   nextMondayISO,
   weeksAgoMonday,
-  computeWeekStreak,
   avgPerWeekFromBuckets,
   weeklyBarLabel,
   statsRange,
   STATS_RANGES,
   bodyScale,
   BODY_BASE_SIZE,
+  barSizing,
+  cardState,
   type StatsRangeKey,
 } from '../../../src/lib/statsHelpers';
-import { useMuscleSummary, useTopLifts, useWeeklyStats } from '../../../src/hooks/useStats';
+import {
+  useMuscleSummary,
+  useTopLifts,
+  useWeeklyStats,
+  useWeekStreak,
+} from '../../../src/hooks/useStats';
 import { useTodayISO } from '../../../src/hooks/useTodayISO';
 import { aggregateMuscles } from '../../../src/lib/muscleSlugMap';
 import { parseLocalDate } from '../../../src/lib/calendar';
@@ -42,6 +47,46 @@ import { PRFeedCard } from '../../../src/components/stats/PRFeedCard';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
+
+/**
+ * Ceiling on OS text scaling inside the Highlights tiles.
+ *
+ * Three `flex: 1` tiles in a fixed row, each holding a 24 pt number — at the
+ * 3.1× iOS allows they overflow the card. Same value and same reason as
+ * CELL_MAX_FONT_SCALE in the session screen's set grid.
+ */
+const TILE_MAX_FONT_SCALE = 1.3;
+
+/** Width gifted-charts reserves for the y-axis labels before the bars start. */
+const Y_AXIS_ALLOWANCE = 40;
+
+/**
+ * Key for the body map's three shades.
+ *
+ * aggregateMuscles buckets each muscle into intensity 1–3 relative to the
+ * hardest-worked one, and nothing on the card said so — a user seeing a blue
+ * chest and pale-green shoulders had no way to know that meant "more" rather
+ * than "different". Three swatches and two words is the whole fix.
+ */
+function MuscleIntensityLegend({ colors, T }: { colors: string[]; T: ThemeColors }) {
+  return (
+    <View
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10 }}
+      accessible
+      accessibilityLabel="Shading shows how much each muscle was trained, from less to more"
+    >
+      <Text style={{ fontFamily: F.ui, fontSize: 10, color: T.muted }}>Less</Text>
+      {colors.map((c) => (
+        <View
+          key={c}
+          style={{ width: 18, height: 8, borderRadius: 2, backgroundColor: c }}
+          importantForAccessibility="no"
+        />
+      ))}
+      <Text style={{ fontFamily: F.ui, fontSize: 10, color: T.muted }}>More</Text>
+    </View>
+  );
+}
 
 export default function StatsTab() {
   const router = useRouter();
@@ -60,12 +105,6 @@ export default function StatsTab() {
   const [rangeKey, setRangeKey] = useState<StatsRangeKey>('8w');
   const range = statsRange(rangeKey);
 
-  // Still fetched, but only for the streak: a streak can reach back further than
-  // the selected range, so it can't come from the range's buckets. Everything
-  // else on this screen now reads server-side aggregates, which stay correct
-  // past the 200-session page cap this list is subject to.
-  const { data: sessions, isLoading, isError, refetch } = useSessions('completed', MAX_SESSIONS_PAGE);
-
   // Local, not UTC: toISOString() sent the preceding Sunday as the window
   // start for anyone ahead of UTC, pulling an extra day into the summary.
   //
@@ -78,34 +117,37 @@ export default function StatsTab() {
     [range.weeks, todayISO],
   );
   const nextWeekMonday = useMemo(() => nextMondayISO(parseLocalDate(todayISO)), [todayISO]);
+  // Pro content is only ever a paywall blur for a free user, so don't fetch it
+  // for them — but wait for the gate to settle first: a mid-race `isPro ===
+  // false` looks exactly like a genuine free user, and skipping the fetch on
+  // that basis would leave a paying user on a permanent skeleton.
+  const proContentEnabled = isPro && !proLoading;
   const {
     data: muscleData,
-    isLoading: muscleLoading,
     isError: muscleError,
     refetch: refetchMuscles,
   } = useMuscleSummary(rangeStart, nextWeekMonday);
   const {
     data: topLiftsData,
-    isLoading: topLiftsLoading,
     isError: topLiftsError,
     refetch: refetchTopLifts,
-  } = useTopLifts(rangeStart);
+  } = useTopLifts(rangeStart, nextWeekMonday, proContentEnabled);
   const {
     data: weeklyData,
-    isLoading: weeklyLoading,
     isError: weeklyError,
     refetch: refetchWeekly,
   } = useWeeklyStats(rangeStart, range.weeks);
+  const {
+    data: streakData,
+    isError: streakError,
+    refetch: refetchStreak,
+  } = useWeekStreak(todayISO, proContentEnabled);
 
   const weeks = useMemo(() => weeklyData?.weeks ?? [], [weeklyData]);
   // The newest bucket is the current week by construction — rangeStart is the
   // Monday `weeks - 1` weeks back, so the series always ends on this week.
   const thisWeek = weeks.length ? weeks[weeks.length - 1].sessions : 0;
   const avg = useMemo(() => avgPerWeekFromBuckets(weeks), [weeks]);
-  const streak = useMemo(
-    () => (sessions ? computeWeekStreak(sessions.map((s) => s.date)) : 0),
-    [sessions],
-  );
 
   const sessionBarData = useMemo(
     () =>
@@ -132,10 +174,27 @@ export default function StatsTab() {
     [muscleData],
   );
 
+  // One hue, increasing saturation. This used to end on T.performance — a blue —
+  // so the scale ran pale green → green → blue, and a hue jump at the top reads
+  // as a different category rather than as "more". Memoized as well as recoloured:
+  // a fresh array identity each render meant the ~30-path SVG could never be skipped.
+  const muscleColors = useMemo(
+    () => [withAlpha(T.primary, 0.35), withAlpha(T.primary, 0.7), T.primary],
+    [T.primary],
+  );
+
   // The body diagram is the one child on this screen with an intrinsic size the
   // library won't let us override, so it gets sized against the device instead
   // of trusting a constant to suit every phone.
   const { width: winWidth, height: winHeight } = useWindowDimensions();
+  // Bars are sized to fit the card rather than scrolled: gifted-charts draws its
+  // y-axis inside the chart, so the horizontal ScrollView that used to wrap this
+  // took the scale off screen with it. Y_AXIS_ALLOWANCE is the width its labels
+  // occupy before the plot area starts.
+  const bars = useMemo(
+    () => barSizing(weeks.length, winWidth - 2 * D.pad - Y_AXIS_ALLOWANCE),
+    [weeks.length, winWidth],
+  );
   const bodyBox = useMemo(() => {
     const scale = bodyScale(winWidth, winHeight, D.pad);
     return {
@@ -145,24 +204,34 @@ export default function StatsTab() {
     };
   }, [winWidth, winHeight]);
 
+  // Data beats an error everywhere on this tab — see cardState.
+  const weeklyState = cardState(!!weeklyData, weeklyError);
+  const muscleState = cardState(!!muscleData, muscleError);
+  const topLiftsState = cardState(!!topLiftsData, topLiftsError);
+
+  // Two different empty states, not one. `bodyData` is what survives slug
+  // mapping, and muscleSlugMap deliberately maps 'cardio' and 'full body' to no
+  // slug at all — so a month of conditioning, or of custom exercises tagged with
+  // names the map doesn't know, produced an empty figure and the copy told a
+  // user who had trained all month that they hadn't.
   const hasMuscles = bodyData.length > 0;
+  const loggedUnmappedOnly = !hasMuscles && (muscleData?.muscles.length ?? 0) > 0;
   const hasSessions = weeks.some((w) => w.sessions > 0);
   const hasVolume = weeks.some((w) => w.volumeKg > 0);
 
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    // Invalidate by prefix rather than calling each refetch: ['stats'] covers
-    // muscles, top lifts and the mat view's own query, so one pull refreshes
-    // whichever half is showing. Until now the tab had no way to force this at
-    // all — every stats query holds a 5-minute staleTime.
+    // Invalidate by prefix: ['stats'] covers muscles, top lifts, PRs, the weekly
+    // buckets, the streak and the mat view's own query, so one pull refreshes
+    // whichever half is showing. Every stats query holds a 5-minute staleTime,
+    // so without this the tab had no way to force a refresh at all.
     await Promise.allSettled([
-      refetch(),
       queryClient.invalidateQueries({ queryKey: ['stats'] }),
       queryClient.invalidateQueries({ queryKey: ['notes'] }),
     ]);
     setRefreshing(false);
-  }, [refetch, queryClient]);
+  }, [queryClient]);
 
   return (
     <View style={styles.screen}>
@@ -196,6 +265,9 @@ export default function StatsTab() {
               style={[styles.segmentBtn, statsView === seg.key && styles.segmentBtnActive]}
               onPress={() => setStatsView(seg.key)}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel={`${seg.label} stats`}
+              accessibilityState={{ selected: statsView === seg.key }}
             >
               <Ionicons
                 name={seg.icon}
@@ -241,19 +313,18 @@ export default function StatsTab() {
             <Text style={styles.highlightsTitle}>Highlights</Text>
           </View>
 
-          {/* The error guard sits here, not around the whole gym view: the muscle
-              map and Top Lifts are separate queries with their own error and
-              retry handling, and blanking them on a failed fetch here hid data
-              that had loaded fine. */}
-          {weeklyError || isError ? (
+          {/* Gated on the weekly query alone. It used to also gate on the 200-row
+              session list, which fed nothing here but the Pro-only streak — so a
+              /sessions failure blanked "This Week" and "Avg/Week" even though
+              both had loaded, and a free user lost two visible numbers to a
+              query backing a locked tile. The streak degrades on its own below,
+              and the muscle map and Top Lifts have their own error handling. */}
+          {weeklyState === 'error' ? (
             <InlineError
               message="Couldn't load your gym stats."
-              onRetry={() => {
-                void refetch();
-                void refetchWeekly();
-              }}
+              onRetry={() => void refetchWeekly()}
             />
-          ) : weeklyLoading || isLoading || proLoading ? (
+          ) : weeklyState === 'loading' || proLoading ? (
             <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
               <Skeleton width="30%" height={72} radius={12} />
               <Skeleton width="30%" height={72} radius={12} />
@@ -261,46 +332,88 @@ export default function StatsTab() {
             </View>
           ) : (
             <View style={styles.statCardsRow}>
-              <View style={[styles.statCard, { backgroundColor: withAlpha(T.primary, 0.12) }]}>
-                <Text style={[styles.statCardNum, { color: T.primary }]}>{thisWeek}</Text>
-                <Text style={[styles.statCardLabel, { color: T.primary }]}>This Week</Text>
+              <View
+                style={[styles.statCard, { backgroundColor: withAlpha(T.primary, 0.12) }]}
+                accessible
+                accessibilityLabel={`${thisWeek} ${thisWeek === 1 ? 'session' : 'sessions'} this week`}
+              >
+                <Text style={[styles.statCardNum, { color: T.primary }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
+                  {thisWeek}
+                </Text>
+                <Text style={[styles.statCardLabel, { color: T.primary }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
+                  This Week
+                </Text>
               </View>
               <TouchableOpacity
                 style={[styles.statCard, { backgroundColor: withAlpha(T.conditioning, 0.12) }]}
                 onPress={isPro ? undefined : showPaywall}
                 activeOpacity={isPro ? 1 : 0.7}
+                accessibilityRole={isPro ? undefined : 'button'}
+                accessibilityLabel={
+                  isPro ? `${avg} sessions per week on average` : 'Average sessions per week, locked — upgrade to Pro'
+                }
               >
                 {isPro ? (
                   <>
-                    <Text style={[styles.statCardNum, { color: T.conditioning }]}>{avg}</Text>
-                    <Text style={[styles.statCardLabel, { color: T.conditioning }]}>Avg/Week</Text>
+                    <Text style={[styles.statCardNum, { color: T.conditioning }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
+                      {avg}
+                    </Text>
+                    <Text style={[styles.statCardLabel, { color: T.conditioning }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
+                      Avg/Week
+                    </Text>
                   </>
                 ) : (
                   <>
                     <Ionicons name="lock-closed" size={18} color={T.conditioning} />
-                    <Text style={[styles.statCardLabel, { color: T.conditioning }]}>Avg/Week</Text>
+                    <Text style={[styles.statCardLabel, { color: T.conditioning }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
+                      Avg/Week
+                    </Text>
                   </>
                 )}
               </TouchableOpacity>
               {/* Was the length of the top-lifts list, which the endpoint caps at
                   10 — so it read "10" forever once you had ten lifts, a page size
-                  dressed as a metric. The week streak is a real number and the
-                  helper behind it (grace for an untrained current week) already
-                  exists and is tested. */}
+                  dressed as a metric.
+
+                  The number now comes from GET /stats/streak. Computing it here
+                  meant downloading 200 session rows on every visit for one
+                  integer, and the streak could only reach as far back as those
+                  rows — ~40 weeks for someone training five times a week. It
+                  degrades to "—" on its own rather than taking the row with it. */}
               <TouchableOpacity
                 style={[styles.statCard, { backgroundColor: withAlpha(T.gold, 0.12) }]}
-                onPress={isPro ? () => router.push('/history' as never) : showPaywall}
+                onPress={
+                  !isPro
+                    ? showPaywall
+                    : streakError && !streakData
+                      ? () => void refetchStreak()
+                      : () => router.push('/history' as never)
+                }
                 activeOpacity={0.7}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  !isPro
+                    ? 'Week streak, locked — upgrade to Pro'
+                    : streakData
+                      ? `${streakData.weeks} week streak`
+                      : 'Week streak unavailable, tap to retry'
+                }
               >
                 {isPro ? (
                   <>
-                    <Text style={[styles.statCardNum, { color: T.gold }]}>{streak}</Text>
-                    <Text style={[styles.statCardLabel, { color: T.gold }]}>Week Streak</Text>
+                    <Text style={[styles.statCardNum, { color: T.gold }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
+                      {streakData ? streakData.weeks : '—'}
+                    </Text>
+                    <Text style={[styles.statCardLabel, { color: T.gold }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
+                      Week Streak
+                    </Text>
                   </>
                 ) : (
                   <>
                     <Ionicons name="lock-closed" size={18} color={T.gold} />
-                    <Text style={[styles.statCardLabel, { color: T.gold }]}>Streak</Text>
+                    <Text style={[styles.statCardLabel, { color: T.gold }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
+                      Streak
+                    </Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -321,26 +434,33 @@ export default function StatsTab() {
               </View>
             </View>
             <View style={styles.toggleRow}>
-              {(['front', 'back'] as const).map((side) => (
-                <TouchableOpacity
-                  key={side}
-                  style={[styles.toggleBtn, muscleView === side && styles.toggleBtnActive]}
-                  onPress={() => setMuscleView(side)}
-                >
-                  <Text style={[styles.toggleText, muscleView === side && styles.toggleTextActive]}>
-                    {side.charAt(0).toUpperCase() + side.slice(1)}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              {(['front', 'back'] as const).map((side) => {
+                const label = side.charAt(0).toUpperCase() + side.slice(1);
+                return (
+                  <TouchableOpacity
+                    key={side}
+                    style={[styles.toggleBtn, muscleView === side && styles.toggleBtnActive]}
+                    onPress={() => setMuscleView(side)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${label} of body`}
+                    accessibilityState={{ selected: muscleView === side }}
+                  >
+                    <Text style={[styles.toggleText, muscleView === side && styles.toggleTextActive]}>
+                      {label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           </View>
 
-          {muscleError ? (
+          {muscleState === 'error' ? (
             <InlineError
               message="Couldn't load your muscle breakdown."
               onRetry={() => void refetchMuscles()}
             />
-          ) : muscleLoading ? (
+          ) : muscleState === 'loading' ? (
             // Without this the empty copy below doubled as the loading state, so
             // a user who had trained this week was told to go train. Sized to the
             // figure it stands in for — at a fixed 140 × 220 it was half the real
@@ -354,10 +474,20 @@ export default function StatsTab() {
                 data={bodyData}
                 side={muscleView}
                 scale={bodyBox.scale}
-                colors={[withAlpha(T.primary, 0.4), T.primary, T.performance]}
+                colors={muscleColors}
                 border={T.border}
                 defaultFill={T.surface2}
               />
+              <MuscleIntensityLegend colors={muscleColors} T={T} />
+            </View>
+          ) : loggedUnmappedOnly ? (
+            // Distinct from "you didn't train": conditioning and full-body work
+            // is real training that maps to no muscle on the figure.
+            <View style={styles.muscleEmpty}>
+              <Text style={styles.muscleEmptyText}>
+                Nothing in this range maps to a muscle group — cardio and full-body
+                work don&apos;t shade the figure. Tag an exercise to see it here.
+              </Text>
             </View>
           ) : (
             <View style={styles.muscleEmpty}>
@@ -381,29 +511,40 @@ export default function StatsTab() {
               </View>
             </View>
             {!isPro && !proLoading && (
-              <TouchableOpacity onPress={showPaywall} activeOpacity={0.7}>
+              <TouchableOpacity
+                onPress={showPaywall}
+                activeOpacity={0.7}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="This chart is a Pro feature — upgrade to unlock"
+              >
                 <Ionicons name="lock-closed" size={16} color={T.muted} />
               </TouchableOpacity>
             )}
           </View>
 
           {isPro || proLoading ? (
-            weeklyLoading || proLoading ? (
+            // The error branch was missing here and on the volume chart below:
+            // on a failed fetch `weeks` is empty, so `!hasSessions` was true and
+            // the card told a user with years of history to go log a workout —
+            // right under a Highlights card already showing the real error.
+            weeklyState === 'error' ? (
+              <InlineError
+                message="Couldn't load your weekly sessions."
+                onRetry={() => void refetchWeekly()}
+              />
+            ) : weeklyState === 'loading' || proLoading ? (
               <Skeleton width="100%" height={100} radius={8} />
             ) : !hasSessions ? (
               <Text style={styles.emptyText}>
                 Log a few workouts to see how your weeks compare.
               </Text>
             ) : (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={{ marginTop: 8 }}
-              >
+              <View style={{ marginTop: 8 }}>
                 <BarChart
                   data={sessionBarData}
-                  barWidth={28}
-                  spacing={8}
+                  barWidth={bars.barWidth}
+                  spacing={bars.spacing}
                   roundedTop
                   frontColor={T.conditioning}
                   gradientColor={withAlpha(T.conditioning, 0.5)}
@@ -418,7 +559,7 @@ export default function StatsTab() {
                   barBorderRadius={4}
                   showGradient
                 />
-              </ScrollView>
+              </View>
             )
           ) : (
             <TouchableOpacity onPress={showPaywall} activeOpacity={0.85}>
@@ -445,14 +586,25 @@ export default function StatsTab() {
               </View>
             </View>
             {!isPro && !proLoading && (
-              <TouchableOpacity onPress={showPaywall} activeOpacity={0.7}>
+              <TouchableOpacity
+                onPress={showPaywall}
+                activeOpacity={0.7}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="This chart is a Pro feature — upgrade to unlock"
+              >
                 <Ionicons name="lock-closed" size={16} color={T.muted} />
               </TouchableOpacity>
             )}
           </View>
 
           {isPro || proLoading ? (
-            weeklyLoading || proLoading ? (
+            weeklyState === 'error' ? (
+              <InlineError
+                message="Couldn't load your weekly volume."
+                onRetry={() => void refetchWeekly()}
+              />
+            ) : weeklyState === 'loading' || proLoading ? (
               <Skeleton width="100%" height={100} radius={8} />
             ) : !hasVolume ? (
               // Distinct from the sessions chart's empty copy: a month of
@@ -462,15 +614,11 @@ export default function StatsTab() {
                 Log sets with weight and reps to see your weekly tonnage.
               </Text>
             ) : (
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                style={{ marginTop: 8 }}
-              >
+              <View style={{ marginTop: 8 }}>
                 <BarChart
                   data={volumeBarData}
-                  barWidth={28}
-                  spacing={8}
+                  barWidth={bars.barWidth}
+                  spacing={bars.spacing}
                   roundedTop
                   frontColor={T.performance}
                   gradientColor={withAlpha(T.performance, 0.5)}
@@ -485,7 +633,7 @@ export default function StatsTab() {
                   barBorderRadius={4}
                   showGradient
                 />
-              </ScrollView>
+              </View>
             )
           ) : (
             <TouchableOpacity onPress={showPaywall} activeOpacity={0.85}>
@@ -503,22 +651,35 @@ export default function StatsTab() {
               <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.gold, 0.15) }]}>
                 <Ionicons name="trophy-outline" size={16} color={T.gold} />
               </View>
-              <Text style={styles.cardTitle} numberOfLines={1}>Top Lifts</Text>
+              {/* The range sub-label is not decoration: this board is scoped to
+                  the selected window like every other card, so a user's all-time
+                  bench drops off it at 4W. It was the only card that didn't say
+                  which window it was showing. */}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.cardTitle} numberOfLines={1}>Top Lifts</Text>
+                <Text style={styles.cardSub} numberOfLines={1}>{range.longLabel}</Text>
+              </View>
             </View>
             {!isPro && !proLoading && (
-              <TouchableOpacity onPress={showPaywall} activeOpacity={0.7}>
+              <TouchableOpacity
+                onPress={showPaywall}
+                activeOpacity={0.7}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Top lifts is a Pro feature — upgrade to unlock"
+              >
                 <Ionicons name="lock-closed" size={16} color={T.muted} />
               </TouchableOpacity>
             )}
           </View>
 
           {isPro || proLoading ? (
-            topLiftsError ? (
+            topLiftsState === 'error' ? (
               <InlineError
                 message="Couldn't load your top lifts."
                 onRetry={() => void refetchTopLifts()}
               />
-            ) : topLiftsLoading || proLoading || !topLiftsData ? (
+            ) : topLiftsState === 'loading' || proLoading || !topLiftsData ? (
               <View style={{ gap: 8, marginTop: 4 }}>
                 {Array.from({ length: 3 }).map((_, i) => (
                   <Skeleton key={i} width="100%" height={40} radius={8} />
@@ -566,7 +727,7 @@ export default function StatsTab() {
         {/* ── New PRs (PRO) ──
             Under Top Lifts by design: that board is your best ever, this is what
             actually moved inside the selected range. */}
-        <PRFeedCard since={rangeStart} rangeLabel={range.longLabel} />
+        <PRFeedCard since={rangeStart} until={nextWeekMonday} rangeLabel={range.longLabel} />
           </>
         )}
 

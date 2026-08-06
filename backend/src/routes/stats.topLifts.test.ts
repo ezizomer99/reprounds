@@ -46,8 +46,8 @@ async function bearer() {
   return { Authorization: `Bearer ${token}` };
 }
 
-async function callTopLifts() {
-  return makeApp().request('/stats/top-lifts', { headers: await bearer() }, env);
+async function callTopLifts(query = '') {
+  return makeApp().request(`/stats/top-lifts${query}`, { headers: await bearer() }, env);
 }
 
 beforeEach(() => {
@@ -69,6 +69,27 @@ describe('GET /stats/top-lifts', () => {
   it('excludes warm-up sets', async () => {
     await callTopLifts();
     expect(issuedQuery().sql).toContain("ss.set_type <> 'warmup'");
+  });
+
+  // Session dates are accepted arbitrarily far into the future, so an open-ended
+  // top bound let a workout logged with a mistyped year onto the board. The
+  // board is range-scoped, so the client sends both ends.
+  it('bounds the window at the top when until is given', async () => {
+    await callTopLifts('?since=2026-06-01&until=2026-06-29');
+    const { sql, params } = issuedQuery();
+    expect(sql).toContain('s.date >= $');
+    expect(sql).toContain('s.date < $');
+    expect(params).toContain('2026-06-01');
+    expect(params).toContain('2026-06-29');
+  });
+
+  it('stays open-ended when until is absent or malformed', async () => {
+    for (const q of ['?since=2026-06-01', '?since=2026-06-01&until=2026-02-30']) {
+      await callTopLifts(q);
+      const { sql } = issuedQuery();
+      expect(sql).toContain('s.date >= $');
+      expect(sql).not.toContain('s.date < $');
+    }
   });
 
   // Postgres sorts NULLS FIRST on a DESC order. Without this the unestimable

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { F, R, D, ThemeColors } from '../theme/colors';
@@ -14,7 +15,9 @@ export function InlineError({
   onRetry?: () => void;
 }) {
   const { T } = useTheme();
-  const styles = makeStyles(T);
+  // Memoized on the theme like every other component in this tree — this one
+  // rebuilt its StyleSheet on every render, once per failing card.
+  const styles = useMemo(() => makeStyles(T), [T]);
   return (
     <View style={styles.container} accessibilityRole="alert">
       <Ionicons name="cloud-offline-outline" size={22} color={T.textDim} />

@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useRecentNotes } from '../../hooks/useNotes';
+import { cardState } from '../../lib/statsHelpers';
 import { Skeleton } from '../Skeleton';
 import { InlineError } from '../InlineError';
 import { F, R, ThemeColors } from '../../theme/colors';
@@ -22,7 +23,10 @@ export function RecentNotesCard() {
   const router = useRouter();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const { data, isLoading, isError, refetch } = useRecentNotes(3);
+  const { data, isError, refetch } = useRecentNotes(3);
+  // Data beats an error: the cache is persisted, so a failed background refetch
+  // used to replace notes the user could still read with "Couldn't load".
+  const state = cardState(!!data, isError);
 
   const groups = data?.groups ?? [];
 
@@ -33,24 +37,27 @@ export function RecentNotesCard() {
           <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.gold, 0.15) }]}>
             <Ionicons name="document-text-outline" size={16} color={T.gold} />
           </View>
-          <Text style={styles.cardTitle}>Recent Notes</Text>
+          <Text style={styles.cardTitle} numberOfLines={1}>Recent Notes</Text>
         </View>
         <TouchableOpacity
           style={styles.seeAllBtn}
           onPress={() => router.push('/notes' as never)}
           activeOpacity={0.7}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="See all notes"
         >
           <Text style={styles.seeAllText}>See all</Text>
           <Ionicons name="chevron-forward" size={14} color={T.muted} />
         </TouchableOpacity>
       </View>
 
-      {isLoading ? (
+      {state === 'loading' ? (
         <View style={{ gap: 8 }}>
           <Skeleton width="100%" height={48} radius={8} />
           <Skeleton width="100%" height={48} radius={8} />
         </View>
-      ) : isError ? (
+      ) : state === 'error' ? (
         <InlineError message="Couldn't load your recent notes." onRetry={() => void refetch()} />
       ) : groups.length === 0 ? (
         <Text style={styles.emptyText}>

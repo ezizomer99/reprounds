@@ -34,7 +34,16 @@ Package manager: **pnpm workspaces**. Always `pnpm install` from root. Each pack
 ## Known gaps
 
 - **Writes are not idempotent.** Mutations run `networkMode: 'offlineFirst'` with a retry predicate, and `resumePausedMutations()` replays whatever was queued offline. A POST that reached Postgres but whose response was lost will be retried and insert a second row. The window is narrow and the blast radius is one duplicate row the user can delete, so the fix (a client-generated idempotency key plus a unique index and upsert on every write endpoint) is deliberately deferred. Revisit if it's ever reported.
-- **`GET /sessions` has no cursor pagination**, only `limit` (default 50, max 200). Aggregate call sites pass `MAX_SESSIONS_PAGE`, so streaks and lifetime counts are correct to 200 sessions and silently truncate past that. `GET /notes` has the cursor implementation to copy when this needs fixing properly.
+- **`GET /sessions` has no cursor pagination**, only `limit` (default 50, max 200). Aggregate call sites pass `MAX_SESSIONS_PAGE`, so any lifetime count derived from that list is correct to 200 sessions and silently truncates past that. `GET /notes` has the cursor implementation to copy when this needs fixing properly. The Stats tab no longer reads it — every number there comes from a `/stats/*` aggregate, so it stays correct at any history length.
+
+---
+
+## Stats endpoints
+
+- **Every `/stats/*` window is `[since, until)` — bounded at both ends.** `sessions.date` accepts dates arbitrarily far into the future, so an open-ended top bound lets a workout logged with a mistyped year count as current: a top lift, or a "new PR" sorted first because the feed orders by date descending. `/weekly` and `/mat` derive `until` from `weeks`; the rest take it as a query param and fall back to open-ended when it's absent.
+- **Warm-ups are not working sets.** `set_type <> 'warmup'` belongs in every lifting aggregate — `/muscles`, `/top-lifts`, `/prs` and `/exercises/:id/prs` all apply it. The muscle heat map normalises against the max, so counting warm-ups there turned "I ramp up on bench and not on rows" into a colour difference.
+- **Never do date arithmetic on a bound parameter.** postgres-js binds a JS number with type OID 0, so `${date}::date + ${days}` reaches Postgres as `date + unknown` — four candidate operators across three type categories, which fails to resolve with `operator is not unique` on *every* call. Compute the other end in TypeScript (`addDaysISO`) and compare date to date. Prefer an explicit cast anywhere else a type could be ambiguous, e.g. `date_trunc('week', s.date::timestamp)`.
+- **The mocked route tests cannot catch any of the above.** `stats.*.test.ts` mock `db.execute` and assert on the rendered SQL string, so no query is ever parsed or planned. `pnpm --filter backend test:pg` boots a throwaway Postgres, applies every migration and runs the real handlers against it (`stats.integration.test.ts`, skipped when `STATS_IT_DATABASE_URL` is unset). Add a case there for anything that depends on Postgres actually executing the query.
 
 ---
 

@@ -130,6 +130,62 @@ export function weeklyBarLabel(weekStart: string, index: number, total: number):
   });
 }
 
+/** Gap between bars as a share of bar width — keeps the series visually even at any range. */
+const BAR_GAP_RATIO = 0.3;
+/** Widest a single bar gets, at the shortest range. */
+const BAR_MAX_WIDTH = 28;
+/**
+ * Floor on bar width. Deliberately thin: a year is 52 bars in ~310 dp, so about
+ * 6 dp each including the gap. A 3 dp bar still reads as a histogram, and it
+ * beats the alternative this replaced — a 1870 dp horizontal scroll that opened
+ * on the oldest week and left its own y-axis behind.
+ */
+const BAR_MIN_WIDTH = 3;
+
+/**
+ * Bar width and spacing that fit `count` bars inside `available` dp.
+ *
+ * The charts used fixed `barWidth={28} spacing={8}` — 36 dp a bar — inside a
+ * horizontal ScrollView, which meant 1872 dp of content at a 52-week range on a
+ * ~390 dp phone. Two things went wrong with that. The view opened on the
+ * *oldest* week, so reaching the current one — the only bucket labelled "This
+ * week" — took a ~1500 dp swipe. And gifted-charts draws the y-axis inside the
+ * chart, so scrolling the chart scrolled the scale off screen and every bar past
+ * the first handful had nothing to be read against.
+ *
+ * Sizing to fit removes both, and the outer ScrollView with them.
+ */
+export function barSizing(count: number, available: number): { barWidth: number; spacing: number } {
+  if (count <= 0) return { barWidth: BAR_MAX_WIDTH, spacing: Math.round(BAR_MAX_WIDTH * BAR_GAP_RATIO) };
+  // n bars and n gaps (gifted-charts puts `spacing` after every bar, including
+  // the last), so the slot each bar occupies is width * (1 + gap ratio).
+  const slot = available / count;
+  const barWidth = Math.max(BAR_MIN_WIDTH, Math.min(BAR_MAX_WIDTH, Math.floor(slot / (1 + BAR_GAP_RATIO))));
+  return { barWidth, spacing: Math.max(1, Math.round(barWidth * BAR_GAP_RATIO)) };
+}
+
+/** What a card should render for one query: its data, a spinner, or a retry. */
+export type CardState = 'ready' | 'loading' | 'error';
+
+/**
+ * Resolve a query into a display state, with data winning over an error.
+ *
+ * Every card on the Stats tab used to branch on `isError` alone. The query cache
+ * is persisted for 24 hours and every stats query holds a 5-minute staleTime, so
+ * the ordinary flaky-network path is: cached data renders → the background
+ * refetch fails → `isError` flips → the card throws away data the user could
+ * still read and shows "Couldn't load…" instead. A failure is only worth showing
+ * when there is nothing behind it.
+ *
+ * Note this deliberately does not consult `isLoading`: a query paused offline is
+ * pending without fetching, so `isLoading` is false while `data` is undefined —
+ * which is how "you haven't trained yet" got shown to people on a plane.
+ */
+export function cardState(hasData: boolean, isError: boolean): CardState {
+  if (hasData) return 'ready';
+  return isError ? 'error' : 'loading';
+}
+
 /**
  * Intrinsic size of the react-native-body-highlighter figure at scale 1. The
  * library exposes no width/height prop — SvgMaleWrapper hardcodes

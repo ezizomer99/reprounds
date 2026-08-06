@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "node ../node_modules/wrangler/bin/wrangler.js dev",
     "test": "vitest run",
+    "test:integration": "vitest run src/routes/stats.integration.test.ts",
+    "test:pg": "./scripts/with-test-postgres.sh pnpm run test:integration",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "deploy": "pnpm run db:migrate && node ../node_modules/wrangler/bin/wrangler.js deploy",
     "deploy:no-migrate": "node ../node_modules/wrangler/bin/wrangler.js deploy",
