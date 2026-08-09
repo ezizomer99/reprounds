@@ -30,6 +30,7 @@ import { Skeleton } from '../../../src/components/Skeleton';
 import {
   Button,
   EmptyState,
+  ScreenHeader,
   Section,
   SectionHeader,
   Touchable,
@@ -257,10 +258,10 @@ export default function WorkoutTab() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <Text style={styles.greeting}>{headerGreeting}</Text>
-        <Text style={styles.todayLabel}>{todayLabel(todayISO)}</Text>
-      </View>
+      {/* The date used to live here too, and again 100px below as the
+          highlighted day in the week strip. It has one home now: the Today
+          section's subtitle. */}
+      <ScreenHeader title={headerGreeting} />
 
       <ScrollView
         style={styles.scroll}
@@ -285,48 +286,41 @@ export default function WorkoutTab() {
           />
         )}
 
-        {/* Today's plan — a session scheduled from the calendar showed up here
-            only as a ring dot in the week strip, so starting it meant navigating to the
-            calendar and finding the day. */}
-        {todaysPlanned.length > 0 && (
-          <Section>
-            <SectionHeader
-              title="Today's plan"
-              icon="calendar"
-              iconTone="primary"
-              subtitle={
-                todaysPlanned.length === 1
-                  ? 'You scheduled this for today.'
-                  : `You scheduled ${todaysPlanned.length} sessions for today.`
+        {/* Today: what is already scheduled, then the two ways to start
+            something new.
+
+            These were two adjacent sections with near-identical eyebrow rows
+            and a rule between them, and the planned block was conditional — so
+            on an empty account the CTA sat directly under the header rule, and
+            on a scheduled day it was pushed down by a block that duplicated its
+            own framing. One section, one rule, and the date has one home.
+
+            No rule above it: the header's own 2px rule already closes that
+            edge, and two rules 14px apart read as a mistake. */}
+        <Section rule={false}>
+          <SectionHeader title="Today" icon="calendar" subtitle={todayLabel(todayISO)} />
+
+          {/* A session scheduled from the calendar showed up here only as a ring
+              dot in the week strip, so starting it meant navigating to the
+              calendar and finding the day. */}
+          {todaysPlanned.map((s) => (
+            <PlannedRow
+              key={s.id}
+              session={s}
+              routineName={routineNameOf(s)}
+              starting={startSession.isPending}
+              onStart={() => handleStartPlanned(s.id)}
+              onOpen={() =>
+                router.push({ pathname: '/sessions/[id]', params: { id: s.id } } as never)
               }
             />
-            {todaysPlanned.map((s) => (
-              <PlannedRow
-                key={s.id}
-                session={s}
-                routineName={routineNameOf(s)}
-                starting={startSession.isPending}
-                onStart={() => handleStartPlanned(s.id)}
-                onOpen={() =>
-                  router.push({ pathname: '/sessions/[id]', params: { id: s.id } } as never)
-                }
-              />
-            ))}
-          </Section>
-        )}
+          ))}
 
-        {/* Quick Start */}
-        <Section>
-          <SectionHeader
-            title="Quick start"
-            icon="flash"
-            iconTone="primary"
-            subtitle="Start right away and add exercises as you go."
-          />
           <Button
             label="Start New Workout"
             icon="add"
             variant="hero"
+            style={todaysPlanned.length > 0 ? styles.ctaAfterPlan : undefined}
             onPress={() => router.push('/sessions/new' as never)}
           />
           {/* Reps and rounds are the same product, but this tab only ever
@@ -344,7 +338,7 @@ export default function WorkoutTab() {
           />
         </Section>
 
-        {/* My Week */}
+        {/* Context: what the week looks like so far. */}
         <WeekSection />
 
         {/* Routines — this was the one section without a rule above it, so it
@@ -405,19 +399,12 @@ function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: T.bg },
 
-    header: {
-      paddingHorizontal: D.pad,
-      paddingTop: 14,
-      paddingBottom: 14,
-      borderBottomWidth: 2,
-      borderBottomColor: T.text,
-    },
-    greeting: { ...TYPE.screenTitle, color: T.text },
-    todayLabel: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim, marginTop: 3 },
-
     scroll: { flex: 1 },
     body: { padding: D.pad, gap: D.stack },
 
+    // Only when planned rows precede it — otherwise the section header's own
+    // bottom margin already sets the CTA off.
+    ctaAfterPlan: { marginTop: 6 },
     matBtn: { marginTop: 8 },
 
     // One style for the real list and the skeleton row, so the two cannot drift
