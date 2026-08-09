@@ -6,10 +6,12 @@ import {
   FlatList,
   Modal,
   ScrollView,
+  type StyleProp,
   StyleSheet,
   Switch,
   Text,
   TextInput,
+  type TextStyle,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -37,6 +39,7 @@ import {
   NOTES_MAX_LENGTH,
   REPS_RANGE,
   REST_SECONDS_RANGE,
+  RIR_RANGE,
   RPE_RANGE,
   totalVolume,
 } from '@app/shared';
@@ -73,6 +76,7 @@ import { PlateCalculator } from '../../../src/components/PlateCalculator';
 import { CalendarPicker } from '../../../src/components/CalendarPicker';
 import { formatDayTitle, localTodayISO } from '../../../src/lib/calendar';
 import { useUnit } from '../../../src/units/UnitContext';
+import { useEffortMetric } from '../../../src/units/EffortContext';
 import {
   fmtWeight,
   kgToUnit,
@@ -150,8 +154,61 @@ const MA_NUMBER_RANGE = { min: 0, max: 100_000 };
 /** Fallback rest duration, and what `restTotal` resets to between rests. */
 const DEFAULT_REST_SECONDS = 120;
 
+/**
+ * What the workout came to, captured at the moment it's finished. Snapshotted
+ * rather than read live, because completing invalidates the session query and
+ * the numbers would shift out from under the card that's showing them.
+ */
+interface FinishSummary {
+  sets: number;
+  volumeKg: number;
+  durationMinutes: number;
+  entries: number;
+  /** Exercise names that set a record this session, in the order they happened. */
+  prs: string[];
+}
+
 function nextSetNumber(sets: readonly StrengthSet[]): number {
   return sets.reduce((max, s) => Math.max(max, s.setNumber), 0) + 1;
+}
+
+/**
+ * The running session clock.
+ *
+ * A leaf on purpose. This used to be `elapsed` state on SessionScreen, so every
+ * tick re-rendered the whole screen — every entry card, every set row, every
+ * RoundLogger — once a second for the length of the workout, to change four
+ * characters of text. Now only this component re-renders; `sharedRef` carries
+ * the value to the one other consumer, the round logger's "stamp from timer",
+ * which reads it when tapped rather than rendering from it.
+ */
+function ElapsedClock({ startedAt, paused, sharedRef, style }: {
+  /** ISO timestamp the session went live; null holds the clock at zero. */
+  startedAt: string | null;
+  /** Held still for the length of a drag — see the DraggableFlatList note in CLAUDE.md. */
+  paused: React.RefObject<boolean>;
+  sharedRef: React.MutableRefObject<number>;
+  style?: StyleProp<TextStyle>;
+}) {
+  const [secs, setSecs] = useState(0);
+
+  useEffect(() => {
+    if (!startedAt) return;
+    const startedMs = new Date(startedAt).getTime();
+    const tick = () => {
+      if (paused.current) return;
+      // Derived from the start timestamp, not decremented, so it snaps back to
+      // the truth after a background rather than resuming where JS froze.
+      const next = Math.max(0, Math.floor((Date.now() - startedMs) / 1000));
+      sharedRef.current = next;
+      setSecs(next);
+    };
+    tick();
+    const intervalId = setInterval(tick, 1000);
+    return () => clearInterval(intervalId);
+  }, [startedAt, paused, sharedRef]);
+
+  return <Text style={style}>{formatElapsed(secs)}</Text>;
 }
 
 function formatElapsed(secs: number): string {
@@ -416,7 +473,15 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   const [reps, setReps] = useState(set.reps !== null ? String(set.reps) : '');
   const [weight, setWeight] = useState(set.weight !== null ? fmtWeight(set.weight, unit) : '');
   const [duration, setDuration] = useState(set.reps !== null ? fmtDuration(set.reps) : '');
-  const [rpe, setRpe] = useState(set.rpe !== null ? String(set.rpe) : '');
+  // One intensity cell, showing whichever of RPE / RIR the user records in.
+  // Both columns have existed in the schema since the first migration and both
+  // are validated by the API; only RPE ever had an input, so `rir` was dead
+  // storage.
+  const { metric: effortMetric } = useEffortMetric();
+  const isRir = effortMetric === 'rir';
+  const effortRange = isRir ? RIR_RANGE : RPE_RANGE;
+  const storedEffort = isRir ? set.rir : set.rpe;
+  const [effort, setEffort] = useState(storedEffort !== null ? String(storedEffort) : '');
   const [notes, setNotes] = useState(set.notes ?? '');
   const [showNote, setShowNote] = useState(false);
   // Which cells currently hold something unusable, so they can be flagged
@@ -441,8 +506,8 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
     }
   }, [set.weight, unit]);
   useEffect(() => {
-    if (focusedField.current !== 'rpe') setRpe(set.rpe !== null ? String(set.rpe) : '');
-  }, [set.rpe]);
+    if (focusedField.current !== 'effort') setEffort(storedEffort !== null ? String(storedEffort) : '');
+  }, [storedEffort]);
   // Notes were the one field left out of this, so a note the server rejected
   // stayed on screen looking saved while the cache had already rolled back.
   useEffect(() => {
@@ -492,12 +557,19 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
     updateSet.mutate({ sessionId, entryId, setId: set.id, reps: secs });
   }
 
-  function handleBlurRpe() {
+  function handleBlurEffort() {
     if (isOptimistic) return;
-    const { value, invalid } = parseNumberInRangeResult(rpe, RPE_RANGE);
-    markField('rpe', invalid);
+    // RIR is a whole number of reps left; RPE is a half-point scale.
+    const { value, invalid } = isRir
+      ? parseIntInRangeResult(effort, effortRange)
+      : parseNumberInRangeResult(effort, effortRange);
+    markField('effort', invalid);
     if (invalid) return;
-    updateSet.mutate({ sessionId, entryId, setId: set.id, rpe: value });
+    updateSet.mutate(
+      isRir
+        ? { sessionId, entryId, setId: set.id, rir: value }
+        : { sessionId, entryId, setId: set.id, rpe: value },
+    );
   }
 
   const isDone = set.completed;
@@ -619,22 +691,24 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
           </View>
 
           {!isWarm && (
-            <View style={[styles.cellRpe, isDone && styles.cellDone, badFields.rpe && styles.cellInvalid]}>
+            <View style={[styles.cellRpe, isDone && styles.cellDone, badFields.effort && styles.cellInvalid]}>
               <TextInput
                 style={[styles.cellValue, { fontSize: 15 }]}
-                value={rpe}
-                onChangeText={setRpe}
-                onFocus={onFieldFocus('rpe')}
-                onBlur={onFieldBlur('rpe', handleBlurRpe)}
+                value={effort}
+                onChangeText={setEffort}
+                onFocus={onFieldFocus('effort')}
+                onBlur={onFieldBlur('effort', handleBlurEffort)}
                 placeholder="—"
                 placeholderTextColor={T.muted}
-                keyboardType="decimal-pad"
+                keyboardType={isRir ? 'number-pad' : 'decimal-pad'}
                 returnKeyType="done"
                 editable={!isDone && !isOptimistic}
                 textAlign="center"
                 maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}
               />
-              <Text style={styles.cellUnit} maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}>RPE</Text>
+              <Text style={styles.cellUnit} maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}>
+                {isRir ? 'RIR' : 'RPE'}
+              </Text>
             </View>
           )}
         </>
@@ -888,6 +962,7 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { unit } = useUnit();
+  const { metric: effortMetric } = useEffortMetric();
   const isTime = exerciseType === 'conditioning';
   const addSet = useAddStrengthSet();
   const updateSet = useUpdateStrengthSet();
@@ -1181,7 +1256,9 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
           <>
             <Text style={styles.colHeader}>Weight</Text>
             <Text style={styles.colHeader}>Reps</Text>
-            <Text style={[styles.colHeader, { width: 56 }]}>RPE</Text>
+            <Text style={[styles.colHeader, { width: 56 }]}>
+              {effortMetric === 'rir' ? 'RIR' : 'RPE'}
+            </Text>
           </>
         )}
         <View style={{ width: 32 }} />
@@ -1247,15 +1324,22 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
         />
       )}
 
-      <PickExerciseModal
-        visible={showSwapPicker}
-        title="Swap Exercise"
-        onClose={() => setShowSwapPicker(false)}
-        onPick={(e) => {
-          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          updateEntry.mutate({ sessionId, entryId: entry.id, exerciseId: e.id });
-        }}
-      />
+      {/* Mounted only while open, like every other overlay in this file. It
+          used to be mounted always with visible={false}, so a ten-exercise
+          session carried ten hidden exercise pickers — each with its own
+          queries, its own filter chips and its own filtering memo, all
+          re-rendering with their card. */}
+      {showSwapPicker && (
+        <PickExerciseModal
+          visible
+          title="Swap Exercise"
+          onClose={() => setShowSwapPicker(false)}
+          onPick={(e) => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            updateEntry.mutate({ sessionId, entryId: entry.id, exerciseId: e.id });
+          }}
+        />
+      )}
     </Animated.View>
   );
 }
@@ -1277,14 +1361,15 @@ function Chevron({ collapsed }: { collapsed: boolean }) {
 
 // ─── Martial arts entry card ──────────────────────────────────────────────────
 
-function MartialArtsEntryCard({ entry, sessionId, disciplines, disciplinesError, onRetryDisciplines, elapsedSeconds, sessionActive, collapsed = false, onToggleCollapse, onDrag, onRegisterFlush }: {
+function MartialArtsEntryCard({ entry, sessionId, disciplines, disciplinesError, onRetryDisciplines, elapsedRef, sessionActive, collapsed = false, onToggleCollapse, onDrag, onRegisterFlush }: {
   entry: SessionEntryWithSets;
   sessionId: string;
   disciplines: Discipline[];
   /** The discipline list failed to load, so the form can't be built at all. */
   disciplinesError?: boolean;
   onRetryDisciplines?: () => void;
-  elapsedSeconds?: number;
+  /** Live session stopwatch, read on tap rather than rendered from. */
+  elapsedRef?: React.MutableRefObject<number>;
   sessionActive?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -1455,7 +1540,7 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, disciplinesError,
             setDirty(true);
           }}
           strikeWeapons={strikeWeapons}
-          elapsedSeconds={elapsedSeconds}
+          elapsedRef={elapsedRef}
           sessionActive={sessionActive}
         />
       ) : discipline.fieldConfig.map((field) => {
@@ -1970,11 +2055,12 @@ export default function SessionScreen() {
   // aligned with the scheduled "Rest complete" notification even when the app
   // is backgrounded (JS timers freeze while the notification fires on time).
   const [restEndsAt, setRestEndsAt] = useState<number | null>(restoredRest?.endsAt ?? null);
-  const [elapsed, setElapsed] = useState(0);
+  // Written by ElapsedClock, read on tap by the round logger's stamp button.
+  const elapsedRef = useRef(0);
   const [prBanner, setPrBanner] = useState<{ name: string; kind: PRKind } | null>(null);
   const prTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const finishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [showCelebration, setShowCelebration] = useState(false);
+  const prsHitRef = useRef(new Map<string, PRKind>());
+  const [summary, setSummary] = useState<FinishSummary | null>(null);
   // True from the moment a card is picked up until the drop is handled. The
   // rest and elapsed ticks below re-render the whole screen twice a second
   // between them, which rebuilds every cell while DraggableFlatList is midway
@@ -2056,18 +2142,9 @@ export default function SessionScreen() {
     return () => sub.remove();
   }, [restEndsAt]);
 
-  useEffect(() => {
-    if (!session?.startedAt || session.status !== 'in_progress') return;
-    // Backdated log: the wall-clock elapsed time is meaningless, so don't run.
-    if (session.date < localTodayISO()) return;
-    const tick = () => {
-      if (draggingRef.current) return;
-      setElapsed(Math.floor((Date.now() - new Date(session.startedAt!).getTime()) / 1000));
-    };
-    tick();
-    const intervalId = setInterval(tick, 1000);
-    return () => clearInterval(intervalId);
-  }, [session?.startedAt, session?.status, session?.date]);
+  // The interval that used to live here now lives in ElapsedClock, which is
+  // mounted only when the session is live and not backdated — the same two
+  // conditions this effect used to check before starting.
 
   // Held stable across the rest countdown's twice-a-second ticks: only whether
   // a timer is up matters for the entry list's bottom inset, not the number on
@@ -2089,13 +2166,11 @@ export default function SessionScreen() {
   }, [session?.status]);
 
   // Timers that outlive the screen otherwise: the rest pill's auto-dismiss and
-  // the PR banner both setState after unmount, and the celebration's deferred
-  // router.back() (below) could pop a screen the user had already navigated to.
+  // the PR banner both setState after unmount.
   useEffect(
     () => () => {
       if (restDismissRef.current) clearTimeout(restDismissRef.current);
       if (prTimerRef.current) clearTimeout(prTimerRef.current);
-      if (finishTimerRef.current) clearTimeout(finishTimerRef.current);
     },
     [],
   );
@@ -2199,6 +2274,10 @@ export default function SessionScreen() {
     if (prTimerRef.current) clearTimeout(prTimerRef.current);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setPrBanner({ name: exerciseName, kind });
+    // Kept for the finish summary. A ref because nothing renders from it until
+    // the workout ends, and a Map so a lift that sets two records in one
+    // session is listed once — insertion order is the order they happened.
+    prsHitRef.current.set(exerciseName, kind);
     prTimerRef.current = setTimeout(() => setPrBanner(null), 3000);
   }
 
@@ -2331,11 +2410,16 @@ export default function SessionScreen() {
       handleStopRest();
       setShowSettings(false);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setShowCelebration(true);
-      // Held in a ref and cleared on unmount: if the user taps back during the
-      // celebration this would otherwise fire a second router.back() and pop
-      // them off whatever screen they'd already reached.
-      finishTimerRef.current = setTimeout(() => router.back(), 1800);
+      // The celebration used to be 1.8s of confetti and an automatic back —
+      // the one moment the user is most interested in what they just did, and
+      // every number was already computed and then thrown away.
+      setSummary({
+        sets: doneCount,
+        volumeKg: sessionVolume,
+        durationMinutes,
+        entries: session?.entries.length ?? 0,
+        prs: [...prsHitRef.current.keys()],
+      });
     } catch (err) {
       Alert.alert('Error', (err as Error).message ?? 'Failed to complete session.');
     }
@@ -2513,7 +2597,12 @@ export default function SessionScreen() {
               </Text>
             </>
           ) : isActive ? (
-            <Text style={styles.headerTimer}>{formatElapsed(elapsed)}</Text>
+            <ElapsedClock
+              startedAt={session.startedAt}
+              paused={draggingRef}
+              sharedRef={elapsedRef}
+              style={styles.headerTimer}
+            />
           ) : (
             <Text style={styles.headerDoneLabel} numberOfLines={1}>
               {session.name ?? routineName ?? 'Session'}
@@ -2721,7 +2810,7 @@ export default function SessionScreen() {
                       disciplines={disciplines ?? []}
                       disciplinesError={disciplinesError}
                       onRetryDisciplines={() => { void refetchDisciplines(); }}
-                      elapsedSeconds={elapsed}
+                      elapsedRef={elapsedRef}
                       sessionActive={isActive}
                       collapsed={isCollapsed}
                       onToggleCollapse={() => toggleCollapsed(entry.id)}
@@ -2824,14 +2913,81 @@ export default function SessionScreen() {
         />
       )}
 
-      {showCelebration && (
-        <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-          <LottieView
-            source={require('../../../assets/celebration.json')}
-            autoPlay
-            loop={false}
-            style={{ flex: 1 }}
-          />
+      {summary && (
+        <View style={StyleSheet.absoluteFillObject}>
+          <View style={styles.summaryScrim} />
+          <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+            <LottieView
+              source={require('../../../assets/celebration.json')}
+              autoPlay
+              loop={false}
+              style={{ flex: 1 }}
+            />
+          </View>
+          <View style={styles.summaryWrap} pointerEvents="box-none">
+            <CutCornerView fill={T.surface} stroke={T.borderStrong} style={styles.summaryCard}>
+              <Text style={styles.summaryTitle}>Workout complete</Text>
+              <Text style={styles.summaryName} numberOfLines={1}>
+                {session.name ?? routineName ?? formatDayTitle(session.date, { weekday: 'short' })}
+              </Text>
+
+              <View style={styles.summaryGrid}>
+                <View style={styles.summaryCell}>
+                  <Text style={styles.summaryCellNum}>{fmtMinutes(summary.durationMinutes)}</Text>
+                  <Text style={styles.summaryCellKey}>duration</Text>
+                </View>
+                <View style={styles.summaryCell}>
+                  <Text style={styles.summaryCellNum}>{summary.entries}</Text>
+                  <Text style={styles.summaryCellKey}>
+                    {hasMartialArts ? 'disciplines' : 'exercises'}
+                  </Text>
+                </View>
+                {/* Mat sessions have neither sets nor volume, so those cells
+                    would just read 0 — drop them instead. */}
+                {!hasMartialArts && (
+                  <>
+                    <View style={styles.summaryCell}>
+                      <Text style={styles.summaryCellNum}>{summary.sets}</Text>
+                      <Text style={styles.summaryCellKey}>sets done</Text>
+                    </View>
+                    <View style={styles.summaryCell}>
+                      <Text style={styles.summaryCellNum}>
+                        {Math.round(kgToUnit(summary.volumeKg, unit)).toLocaleString()}
+                      </Text>
+                      <Text style={styles.summaryCellKey}>{unit} volume</Text>
+                    </View>
+                  </>
+                )}
+              </View>
+
+              {summary.prs.length > 0 && (
+                <View style={styles.summaryPrs}>
+                  <View style={styles.summaryPrHead}>
+                    <Ionicons name="trophy" size={14} color={T.gold} />
+                    <Text style={styles.summaryPrTitle}>
+                      {summary.prs.length} personal record{summary.prs.length !== 1 ? 's' : ''}
+                    </Text>
+                  </View>
+                  {summary.prs.map((name) => (
+                    <Text key={name} style={styles.summaryPrName} numberOfLines={1}>
+                      {name}
+                    </Text>
+                  ))}
+                </View>
+              )}
+
+              <TouchableOpacity
+                onPress={() => { setSummary(null); router.back(); }}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="Close workout summary"
+              >
+                <CutCornerView fill={T.primary} style={styles.summaryDoneBtn}>
+                  <Text style={styles.summaryDoneText}>Done</Text>
+                </CutCornerView>
+              </TouchableOpacity>
+            </CutCornerView>
+          </View>
         </View>
       )}
 
@@ -3213,6 +3369,64 @@ function makeStyles(T: ThemeColors) {
     zIndex: 50,
     marginHorizontal: 0,
   },
+    summaryScrim: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: withAlpha(T.bg, 0.92),
+    },
+    summaryWrap: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: D.pad,
+    },
+    summaryCard: { width: '100%', maxWidth: 380, padding: 22, gap: 4 },
+    summaryTitle: {
+      fontFamily: F.uiBold,
+      fontSize: 11,
+      color: T.textDim,
+      textTransform: 'uppercase',
+      letterSpacing: 1.2,
+    },
+    summaryName: { fontFamily: F.uiBold, fontSize: 21, color: T.text, letterSpacing: -0.3 },
+    summaryGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      marginTop: 16,
+      rowGap: 16,
+    },
+    summaryCell: { width: '50%', gap: 2 },
+    summaryCellNum: { fontFamily: F.monoBold, fontSize: 20, color: T.text },
+    summaryCellKey: {
+      fontFamily: F.uiMed,
+      fontSize: 11,
+      color: T.textDim,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    },
+    summaryPrs: {
+      marginTop: 18,
+      paddingTop: 14,
+      borderTopWidth: 1,
+      borderTopColor: T.border,
+      gap: 4,
+    },
+    summaryPrHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+    summaryPrTitle: {
+      fontFamily: F.uiBold,
+      fontSize: 11,
+      color: T.gold,
+      textTransform: 'uppercase',
+      letterSpacing: 1,
+    },
+    summaryPrName: { fontFamily: F.uiMed, fontSize: 14, color: T.text },
+    summaryDoneBtn: {
+      marginTop: 22,
+      paddingVertical: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    summaryDoneText: { fontFamily: F.uiBold, fontSize: 16, color: T.onPrimary },
+
   prBanner: {
     position: 'absolute',
     left: 18,

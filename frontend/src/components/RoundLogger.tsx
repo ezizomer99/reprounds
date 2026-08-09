@@ -128,7 +128,7 @@ export function emptyRoundsSession(category: DisciplineCat): RoundsSessionDetail
  * the whole RoundsSessionDetails back through onChange (the parent persists it
  * into session_entries.details).
  *
- * When `sessionActive` and `elapsedSeconds` are supplied, each round's Minutes
+ * When `sessionActive` and `elapsedRef` are supplied, each round's Minutes
  * field grows a "stamp from timer" button that fills the round's duration from
  * the session clock (minus the rounds already logged).
  */
@@ -137,7 +137,7 @@ export function RoundLogger({
   value,
   onChange,
   strikeWeapons = BOXING_WEAPONS,
-  elapsedSeconds,
+  elapsedRef,
   sessionActive = false,
 }: {
   category: DisciplineCat;
@@ -145,8 +145,14 @@ export function RoundLogger({
   onChange: (next: RoundsSessionDetails) => void;
   /** Which striking weapons to show as counters (boxing vs Muay Thai). */
   strikeWeapons?: StrikeWeapon[];
-  /** Live session stopwatch (seconds); enables the Minutes stamp button. */
-  elapsedSeconds?: number;
+  /**
+   * Live session stopwatch (seconds); enables the Minutes stamp button.
+   *
+   * A ref rather than a number: the stamp reads it once, on tap, and passing
+   * the ticking value as a prop re-rendered this whole tree — every round,
+   * every counter — once a second for the length of the session.
+   */
+  elapsedRef?: React.MutableRefObject<number>;
   /** Whether the session is still in progress (gates the stamp button). */
   sessionActive?: boolean;
 }) {
@@ -225,15 +231,15 @@ export function RoundLogger({
   // already accounted for by the other rounds, so back-to-back stamps record
   // each round's own slice rather than the whole session.
   const stampDuration = (round: EditableRound) => {
-    if (elapsedSeconds == null) return;
+    if (elapsedRef == null) return;
     const otherSum = rounds.reduce(
       (sum, r) => (r.id === round.id ? sum : sum + (r.durationSeconds ?? 0)),
       0,
     );
-    updateRound(round.id, { durationSeconds: Math.max(0, elapsedSeconds - otherSum) });
+    updateRound(round.id, { durationSeconds: Math.max(0, elapsedRef.current - otherSum) });
   };
 
-  const canStamp = sessionActive && elapsedSeconds != null;
+  const canStamp = sessionActive && elapsedRef != null;
 
   return (
     <View style={{ gap: 14 }}>

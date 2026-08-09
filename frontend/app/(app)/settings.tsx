@@ -21,6 +21,7 @@ import { useCurrentUser, useSignOut, useDeleteAccount, useChangePassword } from 
 import { F, R, D, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useUnit } from '../../src/units/UnitContext';
+import { useEffortMetric, type EffortMetric } from '../../src/units/EffortContext';
 import { useNotificationsEnabled } from '../../src/notifications/NotificationsContext';
 import { withAlpha } from '../../src/lib/color';
 import type { WeightUnit } from '../../src/units/units';
@@ -38,9 +39,17 @@ const UNITS: { value: WeightUnit; label: string }[] = [
   { value: 'lbs', label: 'Pounds' },
 ];
 
+// Two ways of recording the same thing (RIR ≈ 10 − RPE), so the set row shows
+// one intensity cell and this picks which.
+const EFFORT_METRICS: { value: EffortMetric; label: string }[] = [
+  { value: 'rpe', label: 'RPE' },
+  { value: 'rir', label: 'RIR' },
+];
+
 export default function SettingsScreen() {
   const { T, mode, setMode } = useTheme();
   const { unit, setUnit } = useUnit();
+  const { metric, setMetric } = useEffortMetric();
   const { notificationsEnabled, setNotificationsEnabled } = useNotificationsEnabled();
   const styles = useMemo(() => makeStyles(T), [T]);
   const router = useRouter();
@@ -218,6 +227,34 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        {/* Logging */}
+        <Text style={styles.sectionLabel}>Logging</Text>
+        <View style={styles.card}>
+          <Text style={styles.rowLabel}>Set intensity</Text>
+          <View style={styles.segmentRow}>
+            {EFFORT_METRICS.map(({ value, label }) => {
+              const active = metric === value;
+              return (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.segment, active && styles.segmentActive]}
+                  onPress={() => setMetric(value)}
+                  activeOpacity={0.75}
+                >
+                  <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <Text style={styles.rowHint}>
+            {metric === 'rir'
+              ? 'Reps in reserve — how many you had left in the tank.'
+              : 'Rate of perceived exertion, 1–10.'}
+          </Text>
+        </View>
+
         {/* Notifications */}
         <Text style={styles.sectionLabel}>Notifications</Text>
         <View style={styles.card}>
@@ -376,6 +413,7 @@ function makeStyles(T: ThemeColors) {
       paddingTop: 14, gap: 14,
     },
     rowLabel: { fontFamily: F.uiSemi, fontSize: 15, color: T.text },
+    rowHint: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 8 },
     segmentRow: {
       flexDirection: 'row',
       backgroundColor: T.surface2,
