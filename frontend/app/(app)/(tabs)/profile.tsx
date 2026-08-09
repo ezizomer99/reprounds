@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -21,6 +20,7 @@ import { InlineError } from '../../../src/components/InlineError';
 import { useUnit } from '../../../src/units/UnitContext';
 import { kgToUnit } from '../../../src/units/units';
 import { parseLocalDate } from '../../../src/lib/calendar';
+import { ScreenHeader, StatTile, Touchable } from '../../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -39,11 +39,10 @@ function NavRow({ icon, label, onPress, last, iconColor, iconBg }: NavRowProps) 
   const styles = useMemo(() => makeStyles(T), [T]);
   return (
     <>
-      <TouchableOpacity
+      <Touchable
         style={styles.navRow}
         onPress={onPress}
-        activeOpacity={0.7}
-        accessibilityRole="button"
+        feedback="row"
         accessibilityLabel={label}
       >
         {/* Decorative — the row already announces its label, and without this
@@ -56,23 +55,30 @@ function NavRow({ icon, label, onPress, last, iconColor, iconBg }: NavRowProps) 
         </View>
         <Text style={styles.navRowLabel}>{label}</Text>
         <Ionicons name="chevron-forward" size={16} color={T.muted} />
-      </TouchableOpacity>
+      </Touchable>
       {!last && <View style={styles.rowDivider} />}
     </>
   );
 }
 
 /** One figure in the profile summary grid. */
+/**
+ * One cell of the lifetime-totals grid. A bare StatTile — no fill, half width —
+ * rather than a fourth hand-rolled copy of "number over label".
+ */
 function SummaryCell({ value, label }: { value: string; label: string }) {
-  const { T } = useTheme();
-  const styles = useMemo(() => makeStyles(T), [T]);
   return (
-    <View style={styles.summaryCell} accessible accessibilityLabel={`${value} ${label}`}>
-      <Text style={styles.summaryValue} numberOfLines={1}>{value}</Text>
-      <Text style={styles.summaryLabel}>{label}</Text>
-    </View>
+    <StatTile
+      value={value}
+      label={label}
+      emphasis="md"
+      filled={false}
+      style={summaryCellStyle}
+    />
   );
 }
+
+const summaryCellStyle = { flexBasis: '50%', flexGrow: 0, paddingVertical: 0, alignItems: 'flex-start' } as const;
 
 export default function ProfileTab() {
   const { T } = useTheme();
@@ -129,19 +135,20 @@ export default function ProfileTab() {
 
   return (
     <View style={styles.screen}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Profile</Text>
-        <TouchableOpacity
-          style={styles.gearBtn}
-          onPress={() => router.push('/settings' as never)}
-          activeOpacity={0.7}
-          accessibilityRole="button"
-          accessibilityLabel="Settings"
-        >
-          <Ionicons name="settings-outline" size={20} color={T.textDim} />
-        </TouchableOpacity>
-      </View>
+      <ScreenHeader
+        title="Profile"
+        right={
+          <Touchable
+            style={styles.gearBtn}
+            onPress={() => router.push('/settings' as never)}
+            feedback="row"
+            haptic={false}
+            accessibilityLabel="Settings"
+          >
+            <Ionicons name="settings-outline" size={20} color={T.textDim} />
+          </Touchable>
+        }
+      />
 
       <ScrollView
         style={styles.scroll}
@@ -177,12 +184,11 @@ export default function ProfileTab() {
             <Text style={styles.guestBannerBody}>
               Sign in with Google to protect your workout history and access it from any device.
             </Text>
-            <TouchableOpacity
+            <Touchable
               style={[styles.guestBannerBtn, googleLinking && { opacity: 0.6 }]}
               onPress={handleLinkGoogle}
               disabled={googleLinking}
-              activeOpacity={0.8}
-              accessibilityRole="button"
+              feedback="card"
               accessibilityLabel="Sign in with Google to save your data"
               accessibilityState={{ busy: googleLinking, disabled: googleLinking }}
             >
@@ -191,20 +197,19 @@ export default function ProfileTab() {
               ) : (
                 <Text style={styles.guestBannerBtnText}>Sign in with Google</Text>
               )}
-            </TouchableOpacity>
+            </Touchable>
             {/* Registering and signing in with email both migrate guest data
                 too (they send the same guestToken), but this banner offered
                 Google alone — so a guest who didn't want a Google account had
                 no way from here to save their history. */}
-            <TouchableOpacity
+            <Touchable
               onPress={() => router.push('/(auth)/sign-in' as never)}
               disabled={googleLinking}
-              activeOpacity={0.7}
-              accessibilityRole="button"
+              feedback="row"
               accessibilityLabel="Use email instead to save your data"
             >
               <Text style={styles.guestBannerAlt}>Use email instead</Text>
-            </TouchableOpacity>
+            </Touchable>
           </View>
         )}
 
@@ -215,14 +220,13 @@ export default function ProfileTab() {
               <Ionicons name="pulse-outline" size={16} color={T.primary} />
               <Text style={styles.cardTitle}>Workouts</Text>
             </View>
-            <TouchableOpacity
+            <Touchable
               onPress={() => router.push('/history' as never)}
-              activeOpacity={0.7}
-              accessibilityRole="button"
+              feedback="row"
               accessibilityLabel="Workout history"
             >
               <Ionicons name="time-outline" size={18} color={T.textDim} />
-            </TouchableOpacity>
+            </Touchable>
           </View>
           {totalsError && !totals ? (
             <InlineError
@@ -341,17 +345,6 @@ function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: T.bg },
 
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: D.pad,
-      paddingTop: 14,
-      paddingBottom: 14,
-      borderBottomWidth: 2,
-      borderBottomColor: T.text,
-    },
-    headerTitle: { fontFamily: F.uiBold, fontSize: 22, color: T.text, letterSpacing: -0.3 },
     gearBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
 
     scroll: { flex: 1 },

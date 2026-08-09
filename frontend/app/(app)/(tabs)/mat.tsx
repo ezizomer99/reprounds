@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useCallback, useState, useMemo } from 'react';
@@ -26,6 +25,7 @@ import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { CutCornerView } from '../../../src/components/CutCornerView';
 import { WeekSection } from '../../../src/components/WeekSection';
+import { EmptyState, ScreenHeader, Touchable } from '../../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -93,10 +93,11 @@ function DisciplineRow({ discipline, isOwned, isPro, record, onDelete, onPress }
   }
 
   return (
-    <TouchableOpacity
+    <Touchable
       style={styles.row}
       onPress={() => onPress(discipline.id, discipline.name)}
-      activeOpacity={0.7}
+      feedback="row"
+      hasTextChild
     >
       <View style={[styles.iconAvatar, { backgroundColor: withAlpha(catColor, 0.14) }]}>
         <Ionicons name={catIcon} size={20} color={catColor} />
@@ -111,17 +112,18 @@ function DisciplineRow({ discipline, isOwned, isPro, record, onDelete, onPress }
         </View>
       </View>
       {isOwned && (
-        <TouchableOpacity
+        <Touchable
           onPress={handleDelete}
           style={styles.deleteButton}
-          activeOpacity={0.7}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          feedback="row"
+          hitSlop={8}
+          accessibilityLabel={`Delete ${discipline.name}`}
         >
           <Ionicons name="trash-outline" size={15} color={T.danger} />
-        </TouchableOpacity>
+        </Touchable>
       )}
       <Ionicons name="chevron-forward" size={16} color={T.muted} />
-    </TouchableOpacity>
+    </Touchable>
   );
 }
 
@@ -171,9 +173,9 @@ function AddDisciplineModal({ visible, onClose }: AddDisciplineModalProps) {
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Add Discipline</Text>
-          <TouchableOpacity onPress={handleClose}>
+          <Touchable onPress={handleClose} haptic={false} hasTextChild>
             <Text style={styles.modalCancel}>Cancel</Text>
-          </TouchableOpacity>
+          </Touchable>
         </View>
 
         <View style={styles.field}>
@@ -197,34 +199,37 @@ function AddDisciplineModal({ visible, onClose }: AddDisciplineModalProps) {
               const active = category === value;
               const color = categoryColor(value, T);
               return (
-                <TouchableOpacity
+                <Touchable
                   key={value}
                   style={[
                     styles.categoryButton,
                     active && { backgroundColor: withAlpha(color, 0.18), borderColor: color },
                   ]}
                   onPress={() => setCategory(value)}
-                  activeOpacity={0.7}
+                  feedback="row"
+                  hasTextChild
+                  accessibilityState={{ selected: active }}
                 >
                   <Text style={[styles.categoryButtonText, active && { color }]}>{label}</Text>
-                </TouchableOpacity>
+                </Touchable>
               );
             })}
           </View>
         </View>
 
-        <TouchableOpacity
+        <Touchable
           style={[styles.submitButton, createDiscipline.isPending && styles.submitButtonDisabled]}
           onPress={handleSubmit}
           disabled={createDiscipline.isPending}
-          activeOpacity={0.8}
+          feedback="card"
+          accessibilityLabel="Add discipline"
         >
           {createDiscipline.isPending ? (
             <ActivityIndicator color={T.onPrimary} />
           ) : (
             <Text style={styles.submitText}>Add Discipline</Text>
           )}
-        </TouchableOpacity>
+        </Touchable>
       </View>
     </Modal>
   );
@@ -279,19 +284,24 @@ export default function MatTab() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Martial Arts</Text>
-          {list.length > 0 && (
-            <Text style={styles.headerSub}>
-              {list.length} discipline{list.length !== 1 ? 's' : ''}
-            </Text>
-          )}
-        </View>
-        <TouchableOpacity style={styles.addBtn} onPress={handleAddPress} activeOpacity={0.8}>
-          <Ionicons name="add" size={20} color={T.onPrimary} />
-        </TouchableOpacity>
-      </View>
+      <ScreenHeader
+        title="Martial Arts"
+        subtitle={
+          list.length > 0
+            ? `${list.length} discipline${list.length !== 1 ? 's' : ''}`
+            : undefined
+        }
+        right={
+          <Touchable
+            style={styles.addBtn}
+            onPress={handleAddPress}
+            feedback="card"
+            accessibilityLabel="Add a discipline"
+          >
+            <Ionicons name="add" size={20} color={T.onPrimary} />
+          </Touchable>
+        }
+      />
 
       {isLoading && (
         <View style={styles.centered}>
@@ -323,26 +333,28 @@ export default function MatTab() {
                       <Text style={styles.heroSub}>Log rounds and techniques right away</Text>
                     </View>
                   </View>
-                  <TouchableOpacity
+                  <Touchable
                     onPress={() =>
                       router.push('/sessions/new?kind=martial_arts' as never)
                     }
-                    activeOpacity={0.85}
+                    feedback="cta"
+                    hasTextChild
                   >
                     <CutCornerView fill={T.primary} style={styles.startBtn}>
                       <Ionicons name="add" size={20} color={T.onPrimary} />
                       <Text style={styles.startBtnText}>Start New Mat Session</Text>
                     </CutCornerView>
-                  </TouchableOpacity>
+                  </Touchable>
                 </View>
 
                 {/* My Week */}
                 <WeekSection />
               </View>
-              <TouchableOpacity
+              <Touchable
                 style={[styles.quickCard, styles.quickCardFirst]}
                 onPress={() => router.push('/focuses' as never)}
-                activeOpacity={0.8}
+                feedback="card"
+                hasTextChild
               >
                 <View style={[styles.quickIconBox, { backgroundColor: withAlpha(T.grappling, 0.14) }]}>
                   <Ionicons name="flag" size={18} color={T.grappling} />
@@ -352,11 +364,12 @@ export default function MatTab() {
                   <Text style={styles.quickSub}>Plan what to work on before you train</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={T.muted} />
-              </TouchableOpacity>
-              <TouchableOpacity
+              </Touchable>
+              <Touchable
                 style={styles.quickCard}
                 onPress={() => router.push('/library/techniques' as never)}
-                activeOpacity={0.8}
+                feedback="card"
+                hasTextChild
               >
                 <View style={[styles.quickIconBox, { backgroundColor: withAlpha(T.grappling, 0.14) }]}>
                   <Ionicons name="body-outline" size={18} color={T.grappling} />
@@ -366,7 +379,7 @@ export default function MatTab() {
                   <Text style={styles.quickSub}>Manage the chips you tap while logging</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={16} color={T.muted} />
-              </TouchableOpacity>
+              </Touchable>
             </>
           }
           renderItem={({ item }) => (
@@ -381,13 +394,12 @@ export default function MatTab() {
           )}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
-            <View style={styles.centered}>
-              <Ionicons name="body-outline" size={40} color={T.muted} />
-              <Text style={styles.emptyText}>No disciplines yet.</Text>
-              <TouchableOpacity onPress={handleAddPress} activeOpacity={0.7}>
-                <Text style={styles.emptyLink}>Add your first discipline →</Text>
-              </TouchableOpacity>
-            </View>
+            <EmptyState
+              size="screen"
+              icon="body-outline"
+              title="No disciplines yet."
+              action={{ label: 'Add your first discipline', onPress: handleAddPress }}
+            />
           }
           contentContainerStyle={[
             list.length === 0 && { flex: 1 },
@@ -414,17 +426,6 @@ function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: T.bg },
 
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: D.pad,
-      paddingTop: 14,
-      paddingBottom: 14,
-      borderBottomWidth: 2,
-      borderBottomColor: T.text,
-    },
-    headerTitle: { fontFamily: F.uiBold, fontSize: 22, color: T.text, letterSpacing: -0.3 },
-    headerSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 2 },
     addBtn: {
       width: 38,
       height: 38,
@@ -536,8 +537,6 @@ function makeStyles(T: ThemeColors) {
       paddingVertical: 48,
       gap: 10,
     },
-    emptyText: { fontFamily: F.uiMed, fontSize: 15, color: T.muted },
-    emptyLink: { fontFamily: F.uiMed, fontSize: 13, color: T.primary },
     errorText: {
       fontFamily: F.uiMed,
       fontSize: 15,

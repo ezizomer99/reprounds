@@ -1,20 +1,13 @@
-import {
-  Easing,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { Easing, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import type { BottomTabNavigationOptions } from '@react-navigation/bottom-tabs';
 import { useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { F, ThemeColors } from '../../../src/theme/colors';
+import { F } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { useActiveSession } from '../../../src/hooks/useSession';
 import { BrandedHeader } from '../../../src/components/BrandedHeader';
-import { CutCornerView } from '../../../src/components/CutCornerView';
+import { Button } from '../../../src/components/ui';
 
 // Direction-aware slide between tabs: a scene's progress is -1 when it sits
 // left of the focused tab, 0 when focused, +1 when right, so the outgoing and
@@ -52,7 +45,7 @@ function makeSlideTransition(width: number) {
 export default function TabLayout() {
   const router = useRouter();
   const { T } = useTheme();
-  const styles = useMemo(() => makeStyles(T), [T]);
+  const styles = resumeStyles;
   const { activeSession } = useActiveSession();
   const { width } = useWindowDimensions();
   const slideTransition = useMemo(() => makeSlideTransition(width), [width]);
@@ -127,41 +120,26 @@ export default function TabLayout() {
       </Tabs>
 
       {activeSession && (
-        <TouchableOpacity
+        <Button
+          label="Resume Session"
+          icon="chevron-up"
+          variant="hero"
+          fullWidth={false}
           style={styles.resumeBtnWrap}
           onPress={() => router.push({ pathname: '/sessions/[id]', params: { id: activeSession.id } } as never)}
-          activeOpacity={0.85}
-          accessibilityRole="button"
           accessibilityLabel="Resume active session"
-        >
-          <CutCornerView fill={T.primary} style={styles.resumeBtn}>
-            <Ionicons name="chevron-up" size={18} color={T.onPrimary} />
-            <Text style={styles.resumeBtnText}>Resume Session</Text>
-          </CutCornerView>
-        </TouchableOpacity>
+        />
       )}
     </View>
   );
 }
 
-function makeStyles(T: ThemeColors) {
-  return StyleSheet.create({
-    resumeBtnWrap: {
-      position: 'absolute',
-      bottom: 76,
-      alignSelf: 'center',
-    },
-    resumeBtn: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      paddingVertical: 14,
-      paddingHorizontal: 32,
-    },
-    resumeBtnText: {
-      fontFamily: F.uiBold,
-      color: T.onPrimary,
-      fontSize: 16,
-    },
-  });
-}
+// Position only — Button owns every colour here, so there is nothing
+// theme-dependent left to rebuild per theme.
+const resumeStyles = StyleSheet.create({
+  resumeBtnWrap: {
+    position: 'absolute',
+    bottom: 76,
+    alignSelf: 'center',
+  },
+});

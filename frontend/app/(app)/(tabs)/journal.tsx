@@ -1,4 +1,4 @@
-import { Alert, FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { MAX_SESSIONS_PAGE, useDeleteSession, useSessions } from '../../../src/hooks/useSession';
 import { useRoutines } from '../../../src/hooks/useRoutines';
 import { useProGate } from '../../../src/hooks/useProGate';
+import { EmptyState, ScreenHeader, Touchable } from '../../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -73,27 +74,27 @@ export default function JournalTab() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Journal</Text>
-        {list.length > 0 && (
-          <Text style={styles.headerSub}>
-            {list.length} session{list.length !== 1 ? 's' : ''}
-          </Text>
-        )}
-      </View>
+      <ScreenHeader
+        title="Journal"
+        subtitle={
+          list.length > 0 ? `${list.length} session${list.length !== 1 ? 's' : ''}` : undefined
+        }
+      />
 
       <View style={styles.filterRow}>
         {FILTERS.map(({ key, label }) => {
           const active = filter === key;
           return (
-            <TouchableOpacity
+            <Touchable
               key={key}
               style={[styles.filterChip, active && styles.filterChipActive]}
               onPress={() => setFilter(key)}
-              activeOpacity={0.7}
+              feedback="row"
+              hasTextChild
+              accessibilityState={{ selected: filter === key }}
             >
               <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{label}</Text>
-            </TouchableOpacity>
+            </Touchable>
           );
         })}
       </View>
@@ -145,24 +146,25 @@ export default function JournalTab() {
           }}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           ListEmptyComponent={
-            <View style={styles.centered}>
-              <Text style={styles.emptyText}>No sessions yet.</Text>
-              <Text style={styles.emptySub}>
-                {filter === 'all'
+            <EmptyState
+              size="screen"
+              title="No sessions yet."
+              subtitle={
+                filter === 'all'
                   ? 'Log a workout or martial arts session to see it here.'
-                  : 'Nothing logged for this filter yet.'}
-              </Text>
-            </View>
+                  : 'Nothing logged for this filter yet.'
+              }
+            />
           }
           ListFooterComponent={
             hiddenCount > 0 ? (
-              <TouchableOpacity style={styles.upgradeFooter} onPress={showPaywall} activeOpacity={0.8}>
+              <Touchable style={styles.upgradeFooter} onPress={showPaywall} feedback="card" hasTextChild>
                 <Ionicons name="lock-closed" size={14} color={T.gold} />
                 <Text style={styles.upgradeFooterText}>
                   {hiddenCount} older session{hiddenCount !== 1 ? 's' : ''} hidden — upgrade to see full history
                 </Text>
                 <Ionicons name="chevron-forward" size={14} color={T.gold} />
-              </TouchableOpacity>
+              </Touchable>
             ) : null
           }
           contentContainerStyle={[
@@ -179,15 +181,6 @@ export default function JournalTab() {
 function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
     screen: { flex: 1, backgroundColor: T.bg },
-    header: {
-      paddingHorizontal: D.pad,
-      paddingTop: 14,
-      paddingBottom: 14,
-      borderBottomWidth: 2,
-      borderBottomColor: T.text,
-    },
-    headerTitle: { fontFamily: F.uiBold, fontSize: 22, color: T.text, letterSpacing: -0.3 },
-    headerSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 2 },
 
     filterRow: {
       flexDirection: 'row',
@@ -211,8 +204,6 @@ function makeStyles(T: ThemeColors) {
     skeletonRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: D.pad, paddingVertical: 14, gap: 12 },
     separator: { height: 1, backgroundColor: T.border, marginLeft: rowSeparatorMargin() },
     centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
-    emptyText: { fontFamily: F.uiSemi, fontSize: 15, color: T.textDim, marginBottom: 4 },
-    emptySub: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, textAlign: 'center', paddingHorizontal: 24 },
     errorText: { fontFamily: F.uiMed, fontSize: 15, color: T.danger, textAlign: 'center' },
     upgradeFooter: {
       flexDirection: 'row',
