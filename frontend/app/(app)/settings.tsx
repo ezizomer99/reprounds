@@ -74,7 +74,18 @@ export default function SettingsScreen() {
         text: 'Sign out',
         style: 'destructive',
         onPress: async () => {
-          await signOut();
+          try {
+            await signOut();
+          } catch {
+            // Unguarded, a SecureStore failure here became an unhandled
+            // rejection and the redirect below still ran — leaving the user on
+            // the sign-in screen with a live token still on disk.
+            Alert.alert(
+              'Sign out failed',
+              "Couldn't clear your session on this device. Please try again.",
+            );
+            return;
+          }
           router.replace('/(auth)/sign-in' as never);
         },
       },
@@ -111,8 +122,15 @@ export default function SettingsScreen() {
                       await deleteAccount();
                       queryClient.clear();
                       router.replace('/(auth)/sign-in' as never);
-                    } catch {
-                      Alert.alert('Delete failed', 'Could not delete your account. Please try again.');
+                    } catch (err) {
+                      // Was a fixed string, so a 401, a 500 and a dropped
+                      // connection all read the same and none of them said
+                      // whether anything had been deleted.
+                      Alert.alert(
+                        'Delete failed',
+                        (err as Error).message ||
+                          'Could not delete your account. Please try again.',
+                      );
                     } finally {
                       setDeleting(false);
                     }
@@ -316,7 +334,23 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
 
+  // Typed passwords used to survive a dismiss, so reopening the sheet showed
+  // them still sitting in the fields.
+  function handleClose() {
+    setCurrent('');
+    setNext('');
+    setConfirm('');
+    onClose();
+  }
+
   async function handleSave() {
+    // The current field wasn't checked at all, so an empty one was posted and
+    // came back a 401 reading "Current password is incorrect" — which is true
+    // but unhelpful when the field was simply blank.
+    if (!current) {
+      Alert.alert('Current password required', 'Enter your current password to change it.');
+      return;
+    }
     if (next.length < 8) {
       Alert.alert('Password too short', 'Your new password must be at least 8 characters.');
       return;
@@ -325,10 +359,14 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
       Alert.alert('Passwords do not match', 'The new password and confirmation must match.');
       return;
     }
+    if (next === current) {
+      Alert.alert('Choose a different password', 'Your new password must differ from the current one.');
+      return;
+    }
     try {
       await changePassword.mutateAsync({ currentPassword: current, newPassword: next });
       Alert.alert('Password changed', 'Your password has been updated.');
-      onClose();
+      handleClose();
     } catch (err) {
       const msg = (err as Error & { body?: { error?: string } })?.body?.error
         ?? (err as Error).message
@@ -338,8 +376,8 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable style={styles.pwBackdrop} onPress={onClose} />
+    <Modal visible animationType="slide" transparent onRequestClose={handleClose}>
+      <Pressable style={styles.pwBackdrop} onPress={handleClose} />
       <View style={styles.pwSheet}>
         <View style={styles.pwHandle} />
         <Text style={styles.pwTitle}>Change password</Text>

@@ -23,7 +23,8 @@ import {
   useWeightLogs,
 } from '../../../src/hooks/useWeightLogs';
 import { useUnit } from '../../../src/units/UnitContext';
-import { fmtWeight, kgToUnit, unitToKg } from '../../../src/units/units';
+import { fmtWeight, kgToUnit, unitToKg, weightInputRange } from '../../../src/units/units';
+import { parseNumberInRange } from '../../../src/lib/parseNumber';
 import { Sparkline } from '../../../src/components/Sparkline';
 import { InlineError } from '../../../src/components/InlineError';
 import { CalendarPicker } from '../../../src/components/CalendarPicker';
@@ -141,7 +142,17 @@ export default function WeightScreen() {
               onPress={() =>
                 Alert.alert('Delete entry?', 'This cannot be undone.', [
                   { text: 'Cancel', style: 'cancel' },
-                  { text: 'Delete', style: 'destructive', onPress: () => deleteWeight.mutate(item.id) },
+                  {
+                    text: 'Delete',
+                    style: 'destructive',
+                    // Without onError the optimistic row simply reappeared and
+                    // nothing was said, so a failed delete looked like a bug.
+                    onPress: () =>
+                      deleteWeight.mutate(item.id, {
+                        onError: (err) =>
+                          Alert.alert('Error', err.message || 'Failed to delete the entry.'),
+                      }),
+                  },
                 ])
               }
             >
@@ -189,9 +200,17 @@ function AddWeightModal({ onClose }: { onClose: () => void }) {
   const [notes, setNotes] = useState('');
 
   async function handleSave() {
-    const entered = Number(weight);
-    if (!weight.trim() || !Number.isFinite(entered) || entered <= 0) {
-      Alert.alert('Weight required', `Enter a valid weight in ${unit}.`);
+    // Behind the shared parser and the shared range, like every other weight
+    // input. `Number()` alone accepted a comma decimal as NaN and had no upper
+    // bound, so an out-of-range value round-tripped to a 400 the user had to
+    // decode from an alert.
+    const range = weightInputRange(unit);
+    const entered = parseNumberInRange(weight, range);
+    if (entered === null || entered <= 0) {
+      Alert.alert(
+        'Weight required',
+        `Enter a weight in ${unit} between 0 and ${Math.round(range.max).toLocaleString()}.`,
+      );
       return;
     }
     try {

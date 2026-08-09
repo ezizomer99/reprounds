@@ -27,6 +27,7 @@ import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { CutCornerView } from '../../../src/components/CutCornerView';
+import { InlineError } from '../../../src/components/InlineError';
 import { withAlpha } from '../../../src/lib/color';
 
 const FREE_FOCUS_LIMIT = 3;
@@ -282,7 +283,7 @@ export default function FocusesScreen() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<FocusWithStats | null>(null);
 
-  const { data: focuses, isLoading, isError, error } = useFocuses(statusFilter);
+  const { data: focuses, isLoading, isError, refetch } = useFocuses(statusFilter);
   const { data: disciplines } = useDisciplines();
   const updateFocus = useUpdateFocus();
   const deleteFocus = useDeleteFocus();
@@ -381,9 +382,10 @@ export default function FocusesScreen() {
       )}
 
       {isError && (
-        <View style={styles.centered}>
-          <Text style={styles.errorText}>{error?.message ?? 'Failed to load focuses.'}</Text>
-        </View>
+        <InlineError
+          message="Couldn't load your focuses."
+          onRetry={() => { void refetch(); }}
+        />
       )}
 
       {!isLoading && !isError && (

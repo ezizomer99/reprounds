@@ -19,6 +19,7 @@ import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
 import { Skeleton } from '../../../src/components/Skeleton';
+import { InlineError } from '../../../src/components/InlineError';
 
 const FREE_ROUTINE_LIMIT = 2;
 
@@ -88,7 +89,7 @@ export default function RoutinesScreen() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { isPro, isLoading: gateLoading, showPaywall } = useProGate();
-  const { data: routines, isLoading, isError, error } = useRoutines();
+  const { data: routines, isLoading, isError, refetch } = useRoutines();
   const deleteRoutine = useDeleteRoutine();
   const reorderRoutines = useReorderRoutines();
 
@@ -169,9 +170,10 @@ export default function RoutinesScreen() {
       )}
 
       {isError && (
-        <View style={styles.centered}>
-          <Text style={styles.errorText}>{error?.message ?? 'Failed to load routines.'}</Text>
-        </View>
+        <InlineError
+          message="Couldn't load your routines."
+          onRetry={() => { void refetch(); }}
+        />
       )}
 
       {!isLoading && !isError && (

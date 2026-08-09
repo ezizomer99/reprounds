@@ -16,6 +16,7 @@ import type { NotesSessionGroup } from '@app/shared';
 import { useNotesTimeline, useTechniqueTags } from '../../../src/hooks/useNotes';
 import { useDebouncedValue } from '../../../src/hooks/useDebouncedValue';
 import { Skeleton } from '../../../src/components/Skeleton';
+import { InlineError } from '../../../src/components/InlineError';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -43,10 +44,11 @@ export default function NotesScreen() {
   const { data: tagData } = useTechniqueTags();
   const tags = tagData?.tags ?? [];
 
-  const { data, isLoading, hasNextPage, isFetchingNextPage, fetchNextPage } = useNotesTimeline({
-    tag: activeTag,
-    q: debouncedSearch || null,
-  });
+  const { data, isLoading, isError, refetch, hasNextPage, isFetchingNextPage, fetchNextPage } =
+    useNotesTimeline({
+      tag: activeTag,
+      q: debouncedSearch || null,
+    });
   const groups = useMemo(() => data?.pages.flatMap((p) => p.groups) ?? [], [data]);
   const filtering = !!activeTag || debouncedSearch.length > 0;
 
@@ -157,6 +159,12 @@ export default function NotesScreen() {
           <Skeleton width="100%" height={110} radius={R.card} />
           <Skeleton width="100%" height={110} radius={R.card} />
         </View>
+      ) : isError && groups.length === 0 ? (
+        // Was indistinguishable from having written no notes.
+        <InlineError
+          message="Couldn't load your notes."
+          onRetry={() => { void refetch(); }}
+        />
       ) : groups.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name={filtering ? 'search-outline' : 'document-text-outline'} size={36} color={T.muted} />

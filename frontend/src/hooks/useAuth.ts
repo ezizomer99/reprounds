@@ -64,6 +64,24 @@ async function getGuestToken(): Promise<string | null> {
 export function useSignIn() {
   const queryClient = useQueryClient();
 
+  /**
+   * Adopt a new session's data.
+   *
+   * Every sign-in path set the token and overwrote `['auth', 'me']` but left
+   * every other cached query untouched. Query keys carry no user id, so after a
+   * guest merged into an account that already had history, the cache still held
+   * only the guest's rows — the merged sessions, routines and stats didn't
+   * appear until each query happened to go stale.
+   *
+   * `invalidateQueries` rather than `clear()`: clearing drops the mutation
+   * cache too, and mutations queued offline are replayed by
+   * `resumePausedMutations()` on reconnect.
+   */
+  function adoptSession(user: User) {
+    queryClient.setQueryData<User>(['auth', 'me'], user);
+    void queryClient.invalidateQueries();
+  }
+
   async function signInWithGoogle(): Promise<void> {
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
     await GoogleSignin.signIn();
@@ -75,7 +93,7 @@ export function useSignIn() {
     await setSessionToken(data.sessionToken);
     await clearGuestData();
     markSessionActive();
-    queryClient.setQueryData<User>(['auth', 'me'], data.user);
+    adoptSession(data.user);
   }
 
   async function signInAsGuest(): Promise<void> {
@@ -84,7 +102,7 @@ export function useSignIn() {
     await setSessionToken(data.sessionToken);
     await setGuestUserId(data.user.id);
     markSessionActive();
-    queryClient.setQueryData<User>(['auth', 'me'], data.user);
+    adoptSession(data.user);
   }
 
   async function registerWithEmail(email: string, password: string, name?: string): Promise<void> {
@@ -98,7 +116,7 @@ export function useSignIn() {
     await setSessionToken(data.sessionToken);
     await clearGuestData();
     markSessionActive();
-    queryClient.setQueryData<User>(['auth', 'me'], data.user);
+    adoptSession(data.user);
   }
 
   async function signInWithEmail(email: string, password: string): Promise<void> {
@@ -107,7 +125,7 @@ export function useSignIn() {
     await setSessionToken(data.sessionToken);
     await clearGuestData();
     markSessionActive();
-    queryClient.setQueryData<User>(['auth', 'me'], data.user);
+    adoptSession(data.user);
   }
 
   return { signInWithGoogle, signInAsGuest, registerWithEmail, signInWithEmail };

@@ -28,6 +28,7 @@ import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { Skeleton } from '../../../src/components/Skeleton';
+import { InlineError } from '../../../src/components/InlineError';
 
 const OTHER_KEY = '__other__';
 
@@ -176,7 +177,7 @@ export default function ExercisesScreen() {
   const [showAdd, setShowAdd] = useState(false);
   const [muscleTarget, setMuscleTarget] = useState<Exercise | null>(null);
 
-  const { data: exercises, isLoading, isError, error, refetch, isRefetching } = useExercises({
+  const { data: exercises, isLoading, isError, refetch, isRefetching } = useExercises({
     search: search.trim() || undefined,
   });
 
@@ -319,9 +320,10 @@ export default function ExercisesScreen() {
       )}
 
       {isError && (
-        <View style={styles.centered}>
-          <Text style={styles.errorText}>{error?.message ?? 'Failed to load exercises.'}</Text>
-        </View>
+        <InlineError
+          message="Couldn't load your exercises."
+          onRetry={() => { void refetch(); }}
+        />
       )}
 
       {!isLoading && !isError && (
