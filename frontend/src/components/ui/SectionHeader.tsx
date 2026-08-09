@@ -73,9 +73,13 @@ export function SectionHeader({
             {title}
           </Text>
           {subtitle ? (
+            // Two lines, unlike the title: this carries a window label on some
+            // screens ("Last 8 weeks") and a whole sentence on others, and
+            // clipping a sentence mid-word to keep the header one line high is
+            // the worse trade — especially at the 1.4× ceiling.
             <Text
               style={styles.subtitle}
-              numberOfLines={1}
+              numberOfLines={2}
               maxFontSizeMultiplier={FONT_SCALE.chip}
             >
               {subtitle}
