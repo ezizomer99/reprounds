@@ -14,7 +14,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { statusCodes } from '@react-native-google-signin/google-signin';
 import { useCurrentUser, useSignIn } from '../../../src/hooks/useAuth';
-import { MAX_SESSIONS_PAGE, useSessions } from '../../../src/hooks/useSession';
+import { useTrainingTotals } from '../../../src/hooks/useStats';
+import { useTodayISO } from '../../../src/hooks/useTodayISO';
+import { InlineError } from '../../../src/components/InlineError';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -52,14 +54,25 @@ export default function ProfileTab() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { data: user } = useCurrentUser();
-  const { data: sessions, isLoading: sessionsLoading } = useSessions('completed', MAX_SESSIONS_PAGE);
+  const todayISO = useTodayISO();
+  // Was `sessions.length` over GET /sessions, which caps at 200 — so the count
+  // stopped at 200 for anyone with a longer history, and read a flat 0 whenever
+  // the request failed, since only the *loading* case was handled. Both numbers
+  // now come from an aggregate that counts in SQL.
+  const {
+    data: totals,
+    isLoading: totalsLoading,
+    isError: totalsError,
+    refetch: refetchTotals,
+  } = useTrainingTotals(todayISO);
   const { signInWithGoogle } = useSignIn();
   const [googleLinking, setGoogleLinking] = useState(false);
 
   const isGuest = user?.isGuest ?? false;
-  // '—' rather than a hard 0 while loading: the old placeholder read as "you
-  // have never trained".
-  const completedCount = sessionsLoading && !sessions ? '—' : String(sessions?.length ?? 0);
+  // '—' rather than a hard 0 for both unknown states: the old placeholder read
+  // as "you have never trained".
+  const completedCount =
+    totals !== undefined ? String(totals.sessions) : totalsLoading || totalsError ? '—' : '0';
   const displayName = user?.name ?? user?.email ?? 'Athlete';
   const firstName = isGuest ? 'Guest' : displayName.split(' ')[0];
 
@@ -146,13 +159,20 @@ export default function ProfileTab() {
               <Ionicons name="time-outline" size={18} color={T.textDim} />
             </TouchableOpacity>
           </View>
-          <View style={styles.workoutStatRow}>
-            <View style={styles.workoutStatIcon}>
-              <Ionicons name="ribbon-outline" size={18} color={T.textDim} />
+          {totalsError && !totals ? (
+            <InlineError
+              message="Couldn't load your training totals."
+              onRetry={() => { void refetchTotals(); }}
+            />
+          ) : (
+            <View style={styles.workoutStatRow}>
+              <View style={styles.workoutStatIcon}>
+                <Ionicons name="ribbon-outline" size={18} color={T.textDim} />
+              </View>
+              <Text style={styles.workoutStatNum}>{completedCount}</Text>
+              <Text style={styles.workoutStatLabel}>Workouts Completed</Text>
             </View>
-            <Text style={styles.workoutStatNum}>{completedCount}</Text>
-            <Text style={styles.workoutStatLabel}>Workouts Completed</Text>
-          </View>
+          )}
         </View>
 
         {/* Training links */}

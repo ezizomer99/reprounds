@@ -4,9 +4,11 @@ import type {
   MuscleSummaryResponse,
   PersonalRecordsResponse,
   TopLiftsResponse,
+  TrainingTotalsResponse,
   WeeklyStatsResponse,
   WeekStreakResponse,
 } from '@app/shared';
+import { addDaysISO } from '@app/shared';
 import { apiGet } from '../lib/api';
 
 /**
@@ -93,6 +95,22 @@ export function useWeekStreak(today: string, enabled = true) {
     queryKey: ['stats', 'streak', today],
     queryFn: () => apiGet<WeekStreakResponse>(`/stats/streak?today=${today}`),
     enabled,
+    ...statsQueryOptions,
+  });
+}
+
+/**
+ * Lifetime training counts.
+ *
+ * `todayISO` is the device's local date; it's sent as an exclusive `until` of
+ * tomorrow so today's sessions count and a session dated years ahead doesn't.
+ * Pass the value from `useTodayISO` so the bound moves at local midnight.
+ */
+export function useTrainingTotals(todayISO: string) {
+  return useQuery<TrainingTotalsResponse, Error>({
+    queryKey: ['stats', 'totals', todayISO],
+    queryFn: () =>
+      apiGet<TrainingTotalsResponse>(`/stats/totals?until=${addDaysISO(todayISO, 1)}`),
     ...statsQueryOptions,
   });
 }

@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { addDaysISO } from '@app/shared';
 import { MAX_SESSIONS_PAGE, useSessions, useSessionsInRange } from '../hooks/useSession';
 import { mondayISO, weekKey, weekRangeOf, computeWeekStreak } from '../lib/statsHelpers';
+import { useWeekStreak } from '../hooks/useStats';
 import { DAY_LABELS_LONG } from '../lib/calendar';
 import { useTodayISO } from '../hooks/useTodayISO';
 import { F, R, ThemeColors } from '../theme/colors';
@@ -81,12 +82,27 @@ export function MyWeek() {
     return {
       gymDays: new Set(gymDates),
       matDays: new Set(matDates),
-      streak: computeWeekStreak(allDates),
+      // Per-activity streaks are still derived from the 200-row list, so they
+      // can only reach as far back as it does. That's the same cap the combined
+      // streak had until it moved server-side, and it is why the headline
+      // number below no longer comes from here: the two disagreed, and this was
+      // the wrong one.
       gymStreak: computeWeekStreak(gymDates),
       matStreak: computeWeekStreak(matDates),
       weekCount: allDates.filter((d) => weekKey(d) === thisWeek).length,
     };
   }, [sessions]);
+
+  // The authoritative streak — the same GET /stats/streak the Stats tab reads,
+  // so the two screens can't show different numbers for the same run. Falls
+  // back to the local computation only while the request is in flight or has
+  // failed, which is better than a flash of zero.
+  const { data: streakData } = useWeekStreak(todayISO);
+  const localStreak = useMemo(
+    () => computeWeekStreak((sessions ?? []).map((s) => s.date)),
+    [sessions],
+  );
+  const streak = streakData?.weeks ?? localStreak;
 
   return (
     // The whole card taps through to the full calendar (history + scheduling).
@@ -147,7 +163,7 @@ export function MyWeek() {
           </View>
           <View>
             <Text style={styles.streakNum}>
-              {week.streak} week{week.streak !== 1 ? 's' : ''}
+              {streak} week{streak !== 1 ? 's' : ''}
             </Text>
             <Text style={styles.streakLabel}>current streak</Text>
           </View>

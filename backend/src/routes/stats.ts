@@ -16,6 +16,7 @@ import type {
   PartnerStatsResponse,
   PersonalRecordsResponse,
   TopLiftsResponse,
+  TrainingTotalsResponse,
   WeeklyStatsResponse,
   WeekStreakResponse,
 } from '@app/shared';
@@ -405,6 +406,80 @@ statsRoutes.get('/weekly', async (c) => {
   }));
 
   const result: WeeklyStatsResponse = { weeks: buildWeeklyBuckets(parsed, since, weeks) };
+  return c.json(result);
+});
+
+// GET /stats/totals?until=YYYY-MM-DD
+//
+// Lifetime training counts. Server-side for the same reason the streak is: the
+// client's version read `GET /sessions`, which caps at 200 rows, so the Profile
+// tab's "Workouts Completed" simply stopped counting past 200 — and downloaded
+// 200 full session rows on every visit to render one integer.
+//
+// `until` is the exclusive top bound, and it matters even on an all-time total:
+// `sessions.date` accepts dates arbitrarily far ahead, so a workout logged with
+// a mistyped year would otherwise inflate the count forever. Absent, the window
+// is open-ended, matching the other `until`-taking endpoints.
+statsRoutes.get('/totals', async (c) => {
+  const userId = c.get('userId');
+  const db = getDb(c.env);
+
+  const untilParam = c.req.query('until');
+  const until = isIsoDate(untilParam) ? untilParam : null;
+  const dateBound = until ? sql`AND s.date < ${until}::date` : sql``;
+
+  // One pass over the user's completed sessions. The two EXISTS filters give the
+  // gym/mat split without a join that would multiply rows per entry.
+  const [totalsRow] = (await db.execute(sql`
+    SELECT
+      COUNT(*)::int AS sessions,
+      COUNT(*) FILTER (
+        WHERE EXISTS (
+          SELECT 1 FROM session_entries e
+          WHERE e.session_id = s.id AND e.kind = 'exercise'
+        )
+      )::int AS gym_sessions,
+      COUNT(*) FILTER (
+        WHERE EXISTS (
+          SELECT 1 FROM session_entries e
+          WHERE e.session_id = s.id AND e.kind = 'martial_arts'
+        )
+      )::int AS mat_sessions,
+      MIN(s.date)::text AS first_session_date
+    FROM sessions s
+    WHERE s.user_id = ${userId}
+      AND s.status  = 'completed'
+      ${dateBound}
+  `)) as unknown as Array<{
+    sessions: number;
+    gym_sessions: number;
+    mat_sessions: number;
+    first_session_date: string | null;
+  }>;
+
+  // Counts every completed set, warm-ups included, to match
+  // shared/src/calculators/volume.ts and the per-session figure on the session
+  // list. The `set_type <> 'warmup'` rule in CLAUDE.md governs the aggregates
+  // that *compare* lifts — muscles, top lifts, PRs — where a ramp-up would
+  // distort the comparison. Total workload is not one of those.
+  const [volumeRow] = (await db.execute(sql`
+    SELECT COALESCE(SUM(ss.weight * ss.reps), 0)::float8 AS volume_kg
+    FROM strength_sets ss
+    JOIN session_entries se ON se.id = ss.session_entry_id
+    JOIN sessions       s  ON s.id  = se.session_id
+    WHERE s.user_id  = ${userId}
+      AND s.status   = 'completed'
+      AND ss.completed = true
+      ${dateBound}
+  `)) as unknown as Array<{ volume_kg: number }>;
+
+  const result: TrainingTotalsResponse = {
+    sessions: totalsRow?.sessions ?? 0,
+    gymSessions: totalsRow?.gym_sessions ?? 0,
+    matSessions: totalsRow?.mat_sessions ?? 0,
+    volumeKg: Number(volumeRow?.volume_kg ?? 0),
+    firstSessionDate: totalsRow?.first_session_date ?? null,
+  };
   return c.json(result);
 });
 
