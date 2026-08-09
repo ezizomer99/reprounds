@@ -1,7 +1,7 @@
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import * as Haptics from 'expo-haptics';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -50,9 +50,25 @@ export default function CalendarScreen() {
   // straight into render goes stale overnight, and every past/future decision
   // below compares against it.
   const todayISO = useTodayISO();
+
+  // Opens straight onto a day when the caller named one — the week strip pushes
+  // /calendar?date=YYYY-MM-DD so tapping Friday lands on Friday.
+  const { date: dateParam } = useLocalSearchParams<{ date?: string }>();
+
   // Only the date is held here — DaySheet reads the sessions live from the
   // month's cached query so it can't strand on a stale snapshot.
-  const [sheetISO, setSheetISO] = useState<string | null>(null);
+  //
+  // A one-shot initializer, deliberately not an effect: the param stays in the
+  // route for the life of the screen, so an effect would reopen the sheet on the
+  // next render every time the user closed it.
+  //
+  // Also deliberately not gated on `cutoffISO` — that is null while the
+  // entitlement resolves (see the comment on it below), and every day a caller
+  // can link to from this week is inside the free window anyway. `handleDayPress`
+  // keeps its own check for taps on the grid, which can reach any month.
+  const [sheetISO, setSheetISO] = useState<string | null>(() =>
+    typeof dateParam === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateParam) ? dateParam : null,
+  );
 
   // The back edge is anchored to the month captured once at mount, never to a
   // rolling offset from "now": when the day rolls over past a month boundary the
