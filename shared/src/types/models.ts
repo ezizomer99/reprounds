@@ -713,6 +713,16 @@ export interface WeekStreakResponse {
   weeks: number;
   /** Monday the run was measured back from — the caller's `today`, echoed. */
   anchorWeek: string;
+  /**
+   * The same run counted over lifting weeks only, and over mat weeks only.
+   *
+   * Optional so an app build can reach a Worker that predates them: the client
+   * renders a dash when they're absent, which is honest, where a required field
+   * would render `undefined`. A session counts for both when it somehow holds
+   * entries of both kinds, matching how `TrainingTotalsResponse` splits.
+   */
+  gymWeeks?: number;
+  matWeeks?: number;
 }
 
 /**

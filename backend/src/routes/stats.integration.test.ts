@@ -40,6 +40,7 @@ suite('/stats against a real database', () => {
   const env = { JWT_SECRET: SECRET, DATABASE_URL };
   let userId = '';
   let benchId = '';
+  let disciplineId = '';
 
   async function get<T>(path: string): Promise<{ status: number; body: T }> {
     const app = new Hono();
@@ -70,6 +71,17 @@ suite('/stats against a real database', () => {
     return s.id;
   }
 
+  /** One completed martial-arts session on `date`. */
+  async function logMatSession(date: string) {
+    const [s] = (await db.execute(sql`
+      INSERT INTO sessions (user_id, date, status) VALUES (${userId}, ${date}, 'completed')
+      RETURNING id`)) as unknown as Array<{ id: string }>;
+    await db.execute(sql`
+      INSERT INTO session_entries (session_id, kind, discipline_id, order_index)
+      VALUES (${s.id}, 'martial_arts', ${disciplineId}, 0)`);
+    return s.id;
+  }
+
   beforeAll(async () => {
     // client_min_messages: TRUNCATE ... CASCADE emits a NOTICE per cascaded
     // table, and postgres-js logs each one — a dozen lines of noise per run.
@@ -83,6 +95,10 @@ suite('/stats against a real database', () => {
       VALUES ('Bench Press', 'strength', 'Chest', ARRAY['Triceps'])
       RETURNING id`)) as unknown as Array<{ id: string }>;
     benchId = ex.id;
+    const [d] = (await db.execute(sql`
+      INSERT INTO disciplines (name, category) VALUES ('BJJ', 'grappling')
+      RETURNING id`)) as unknown as Array<{ id: string }>;
+    disciplineId = d.id;
 
     // Window is 2026-06-01 (a Monday) for four weeks → ends 2026-06-29.
     await logSession('2026-06-02', [
@@ -240,6 +256,27 @@ suite('/stats against a real database', () => {
     const { body } = await get<WeekStreakResponse>('/stats/streak?today=2026-06-24');
     // Weeks of 06-22, 06-15, 06-08, 06-01 are now all trained.
     expect(body.weeks).toBe(4);
+  });
+
+  // bool_or over a GROUP BY with two correlated EXISTS subqueries — none of
+  // which the mocked stats tests can exercise, since they only assert on the
+  // rendered SQL string.
+  it('GET /streak splits the run into gym and mat weeks', async () => {
+    // Mat work in the weeks of 06-15 and 06-22 only; gym work in all four.
+    for (const d of ['2026-06-16', '2026-06-23']) await logMatSession(d);
+
+    const { body } = await get<WeekStreakResponse>('/stats/streak?today=2026-06-24');
+    expect(body.weeks).toBe(4);
+    expect(body.gymWeeks).toBe(4);
+    expect(body.matWeeks).toBe(2);
+  });
+
+  it('GET /streak reports zero rather than omitting a kind never trained', async () => {
+    // Anchored on a week with no mat work behind it, matWeeks must be a real 0 —
+    // the client renders a dash for `undefined`, which would be a lie here.
+    const { body } = await get<WeekStreakResponse>('/stats/streak?today=2026-06-10');
+    expect(body.gymWeeks).toBe(2);
+    expect(body.matWeeks).toBe(0);
   });
 
   it('every endpoint requires auth', async () => {

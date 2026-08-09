@@ -1,7 +1,9 @@
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Modal, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import type { Exercise } from '@app/shared';
+import { Touchable } from './ui';
+import { TYPE } from '../theme/type';
 import { F, R, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../lib/color';
@@ -98,10 +100,11 @@ export function ExerciseFilters({ exercises, filter, onChange, dimensions = ALL_
 
   return (
     <View style={styles.bar}>
-      <TouchableOpacity
+      <Touchable
         style={[styles.filterBtn, activeCount > 0 && styles.filterBtnActive]}
         onPress={() => setOpen(true)}
-        activeOpacity={0.8}
+        feedback="card"
+        hasTextChild
       >
         <Ionicons name="options-outline" size={16} color={activeCount > 0 ? T.primary : T.textDim} />
         <Text style={[styles.filterBtnText, activeCount > 0 && styles.filterBtnTextActive]}>Filters</Text>
@@ -110,30 +113,31 @@ export function ExerciseFilters({ exercises, filter, onChange, dimensions = ALL_
             <Text style={styles.badgeText}>{activeCount}</Text>
           </View>
         )}
-      </TouchableOpacity>
+      </Touchable>
 
       {activeDimensions.map((dim) => (
-        <TouchableOpacity
+        <Touchable
           key={dim}
           style={styles.activeChip}
           onPress={() => clearDimension(dim)}
-          activeOpacity={0.8}
+          feedback="card"
+          hasTextChild
         >
           <Text style={styles.activeChipText} numberOfLines={1}>{valueOf(filter, dim)}</Text>
           <Ionicons name="close" size={13} color={T.primary} />
-        </TouchableOpacity>
+        </Touchable>
       ))}
 
       <Modal visible={open} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setOpen(false)}>
         <View style={styles.modalScreen}>
           <View style={styles.modalHeader}>
-            <TouchableOpacity onPress={clearAll} disabled={activeCount === 0} hitSlop={8}>
+            <Touchable onPress={clearAll} disabled={activeCount === 0} hitSlop={8} hasTextChild>
               <Text style={[styles.modalClear, activeCount === 0 && styles.modalClearDisabled]}>Clear all</Text>
-            </TouchableOpacity>
+            </Touchable>
             <Text style={styles.modalTitle}>Filters</Text>
-            <TouchableOpacity onPress={() => setOpen(false)} hitSlop={8}>
+            <Touchable onPress={() => setOpen(false)} hitSlop={8} hasTextChild>
               <Text style={styles.modalDone}>Done</Text>
-            </TouchableOpacity>
+            </Touchable>
           </View>
 
           <ScrollView contentContainerStyle={styles.modalBody} showsVerticalScrollIndicator={false}>
@@ -146,14 +150,15 @@ export function ExerciseFilters({ exercises, filter, onChange, dimensions = ALL_
                     {optionsByDim[dim].map((opt) => {
                       const active = selected === opt;
                       return (
-                        <TouchableOpacity
+                        <Touchable
                           key={opt}
                           style={[styles.chip, active && styles.chipActive]}
                           onPress={() => onChange(withValue(filter, dim, active ? null : opt))}
-                          activeOpacity={0.8}
+                          feedback="card"
+                          hasTextChild
                         >
                           <Text style={[styles.chipText, active && styles.chipTextActive]}>{opt}</Text>
-                        </TouchableOpacity>
+                        </Touchable>
                       );
                     })}
                   </View>
@@ -235,13 +240,7 @@ function makeStyles(T: ThemeColors) {
 
     modalBody: { padding: 20, gap: 24 },
     group: { gap: 12 },
-    groupLabel: {
-      fontFamily: F.uiBold,
-      fontSize: 12,
-      color: T.textDim,
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-    },
+    groupLabel: { ...TYPE.fieldLabel, fontFamily: F.uiBold, color: T.textDim },
     chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     chip: {
       paddingHorizontal: 14,

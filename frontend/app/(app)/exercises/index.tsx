@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useState, useMemo, useRef } from 'react';
@@ -25,6 +24,7 @@ import { ExerciseMusclesSheet } from '../../../src/components/ExerciseMusclesShe
 import { ExerciseFilters, filterByChips, EMPTY_FILTER, type ExerciseChipFilter } from '../../../src/components/ExerciseFilters';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useProGate } from '../../../src/hooks/useProGate';
+import { Touchable } from '../../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { Skeleton } from '../../../src/components/Skeleton';
@@ -98,10 +98,11 @@ function ExerciseRow({ exercise, isOwned, onPress, onEditMuscles, onDelete, styl
       overshootRight={false}
     >
       <View style={styles.rowOuter}>
-        <TouchableOpacity
+        <Touchable
           style={styles.row}
           onPress={() => onPress(exercise)}
-          activeOpacity={0.7}
+          feedback="row"
+          hasTextChild
         >
           <View style={styles.rowContent}>
             <Text style={styles.rowName} numberOfLines={1}>{exercise.name}</Text>
@@ -109,17 +110,16 @@ function ExerciseRow({ exercise, isOwned, onPress, onEditMuscles, onDelete, styl
               <Text style={styles.rowMeta} numberOfLines={1}>{meta}</Text>
             ) : null}
           </View>
-        </TouchableOpacity>
+        </Touchable>
         {/* The exercise detail screen is entirely Pro-gated, so the muscle
             editor can't live behind a row tap — it gets its own control. */}
-        <TouchableOpacity
+        <Touchable
           style={styles.rowMuscleBtn}
           onPress={() => onEditMuscles(exercise)}
-          accessibilityRole="button"
           accessibilityLabel={`Edit muscles for ${exercise.name}`}
         >
           <Ionicons name="body-outline" size={18} color={T.muted} />
-        </TouchableOpacity>
+        </Touchable>
       </View>
     </Swipeable>
   );
@@ -150,9 +150,9 @@ function AddExerciseModal({ visible, onClose }: AddExerciseModalProps) {
       >
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Add Exercise</Text>
-          <TouchableOpacity onPress={handleClose}>
+          <Touchable onPress={handleClose} hasTextChild>
             <Text style={styles.modalCancel}>Cancel</Text>
-          </TouchableOpacity>
+          </Touchable>
         </View>
         <ExerciseForm
           key={formKey}
@@ -266,14 +266,13 @@ export default function ExercisesScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <Touchable
           style={styles.backBtn}
           onPress={() => router.back()}
-          accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <Ionicons name="chevron-back" size={22} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
         <Text style={styles.headerTitle}>Exercises</Text>
       </View>
 
@@ -288,9 +287,9 @@ export default function ExercisesScreen() {
           returnKeyType="search"
           selectionColor={T.primary}
         />
-        <TouchableOpacity style={styles.addBtn} onPress={handleAddPress} activeOpacity={0.8}>
+        <Touchable style={styles.addBtn} onPress={handleAddPress} feedback="card" accessibilityLabel="Add an exercise">
           <Ionicons name="add" size={22} color={T.onPrimary} />
-        </TouchableOpacity>
+        </Touchable>
       </View>
 
       {!isLoading && !isError && exercises && exercises.length > 0 && (
@@ -335,11 +334,12 @@ export default function ExercisesScreen() {
             const s = section as ExerciseSection;
             const open = expanded.has(s.key) || isSearching;
             return (
-              <TouchableOpacity
+              <Touchable
                 style={styles.sectionHeader}
                 onPress={() => toggleSection(s.key)}
-                activeOpacity={0.7}
                 disabled={isSearching}
+                feedback="row"
+                hasTextChild
               >
                 <Text style={styles.sectionTitle}>{s.title}</Text>
                 <Text style={styles.sectionCount}>({s.count})</Text>
@@ -349,7 +349,7 @@ export default function ExercisesScreen() {
                   size={18}
                   color={T.textDim}
                 />
-              </TouchableOpacity>
+              </Touchable>
             );
           }}
           renderItem={({ item }) => (

@@ -1,7 +1,8 @@
 import { Component, type ReactNode } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Touchable } from './ui';
 import { F, R, D, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -20,9 +21,9 @@ function ErrorFallback({ onReset }: { onReset: () => void }) {
       <Text style={styles.body}>
         The app hit an unexpected error. Your logged data is safe — try again.
       </Text>
-      <TouchableOpacity style={styles.button} onPress={onReset} activeOpacity={0.85}>
+      <Touchable style={styles.button} onPress={onReset} feedback="cta" hasTextChild>
         <Text style={styles.buttonText}>Try again</Text>
-      </TouchableOpacity>
+      </Touchable>
     </View>
   );
 }

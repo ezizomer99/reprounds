@@ -6,13 +6,13 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import type { Exercise } from '@app/shared';
 import { useResetExerciseMuscles, useSetExerciseMuscles } from '../hooks/useExercises';
 import { toMuscleOption, toMuscleOptions } from '../lib/muscleOptions';
 import { MusclePicker, type MuscleSelection } from './MusclePicker';
+import { Touchable } from './ui';
 import { F, R, type ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -108,36 +108,36 @@ export function ExerciseMusclesSheet({
             <Text style={styles.title}>Muscles</Text>
             <Text style={styles.subtitle} numberOfLines={1}>{exercise?.name}</Text>
           </View>
-          <TouchableOpacity onPress={onClose} accessibilityRole="button">
+          <Touchable onPress={onClose} hasTextChild>
             <Text style={styles.cancel}>Cancel</Text>
-          </TouchableOpacity>
+          </Touchable>
         </View>
 
         <MusclePicker value={value} onChange={setValue} />
 
-        <TouchableOpacity
+        <Touchable
           style={[styles.saveBtn, busy && styles.saveBtnDisabled]}
           onPress={handleSave}
           disabled={busy}
-          activeOpacity={0.8}
-          accessibilityRole="button"
+          feedback="card"
+          hasTextChild
         >
           {setMuscles.isPending ? (
             <ActivityIndicator color={T.onPrimary} />
           ) : (
             <Text style={styles.saveText}>Save</Text>
           )}
-        </TouchableOpacity>
+        </Touchable>
 
         {isSeeded && (
-          <TouchableOpacity
+          <Touchable
             style={styles.resetBtn}
             onPress={handleReset}
             disabled={busy}
-            accessibilityRole="button"
+            hasTextChild
           >
             <Text style={styles.resetText}>Reset to default</Text>
-          </TouchableOpacity>
+          </Touchable>
         )}
       </ScrollView>
     </Modal>

@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { F, R, D, ThemeColors } from '../theme/colors';
+import { Button } from './ui';
+import { D, ThemeColors } from '../theme/colors';
+import { TYPE } from '../theme/type';
 import { useTheme } from '../theme/ThemeContext';
-import { withAlpha } from '../lib/color';
 
 // Small, consistent error state for a screen or section whose data failed to
 // load. Optional onRetry wires a React Query refetch to a "Try again" button.
@@ -23,15 +24,14 @@ export function InlineError({
       <Ionicons name="cloud-offline-outline" size={22} color={T.textDim} />
       <Text style={styles.message}>{message}</Text>
       {onRetry && (
-        <TouchableOpacity
-          style={styles.button}
+        <Button
+          label="Try again"
           onPress={onRetry}
-          activeOpacity={0.8}
-          accessibilityRole="button"
+          variant="soft"
+          size="sm"
+          style={styles.button}
           accessibilityLabel="Retry loading"
-        >
-          <Text style={styles.buttonText}>Try again</Text>
-        </TouchableOpacity>
+        />
       )}
     </View>
   );
@@ -47,21 +47,13 @@ function makeStyles(T: ThemeColors) {
       paddingHorizontal: D.pad,
     },
     message: {
-      fontFamily: F.uiMed,
-      fontSize: 14,
+      ...TYPE.body,
       color: T.textDim,
       textAlign: 'center',
       maxWidth: 280,
     },
-    button: {
-      marginTop: 4,
-      borderRadius: R.chip,
-      paddingVertical: 9,
-      paddingHorizontal: 18,
-      backgroundColor: withAlpha(T.primary, 0.12),
-      borderWidth: 1,
-      borderColor: withAlpha(T.primary, 0.35),
-    },
-    buttonText: { fontFamily: F.uiBold, fontSize: 13, color: T.primary },
+    // The fill and border come from Button's `soft` variant now. It used 0.12
+    // here and 0.14 elsewhere; that 0.02 was drift, not intent.
+    button: { marginTop: 4 },
   });
 }

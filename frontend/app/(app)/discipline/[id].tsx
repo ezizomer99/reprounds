@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -23,6 +22,8 @@ import { useCreatePromotion, useDeletePromotion, usePromotions } from '../../../
 import { useProGate } from '../../../src/hooks/useProGate';
 import { CalendarPicker } from '../../../src/components/CalendarPicker';
 import { localTodayISO, parseLocalDate } from '../../../src/lib/calendar';
+import { Section, Touchable } from '../../../src/components/ui';
+import { TYPE } from '../../../src/theme/type';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -87,14 +88,13 @@ export default function DisciplineDetailScreen() {
     return (
       <View style={[styles.screen, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <TouchableOpacity
+          <Touchable
           style={styles.backBtn}
           onPress={() => router.back()}
-          accessibilityRole="button"
           accessibilityLabel="Go back"
         >
             <Ionicons name="chevron-back" size={22} color={T.text} />
-          </TouchableOpacity>
+          </Touchable>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle} numberOfLines={1}>{name ?? 'Discipline'}</Text>
           </View>
@@ -107,9 +107,9 @@ export default function DisciplineDetailScreen() {
           <Text style={styles.proGateSub}>
             Discipline history and session logs are available with RepRounds Pro.
           </Text>
-          <TouchableOpacity style={styles.proGateBtn} onPress={showPaywall} activeOpacity={0.8}>
+          <Touchable style={styles.proGateBtn} onPress={showPaywall} feedback="card" hasTextChild>
             <Text style={styles.proGateBtnText}>Upgrade to Pro</Text>
-          </TouchableOpacity>
+          </Touchable>
         </View>
       </View>
     );
@@ -119,14 +119,13 @@ export default function DisciplineDetailScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <Touchable
           style={styles.backBtn}
           onPress={() => router.back()}
-          accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <Ionicons name="chevron-back" size={22} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {name ?? 'Discipline'}
@@ -156,13 +155,13 @@ export default function DisciplineDetailScreen() {
               <>
                 <View style={styles.compHead}>
                   <Text style={styles.sectionLabel}>Rank</Text>
-                  <TouchableOpacity style={styles.logBtn} onPress={() => setShowAddPromo(true)}>
+                  <Touchable style={styles.logBtn} onPress={() => setShowAddPromo(true)} hasTextChild>
                     <Ionicons name="add" size={15} color={T.primary} />
                     <Text style={styles.logBtnText}>Add promotion</Text>
-                  </TouchableOpacity>
+                  </Touchable>
                 </View>
                 {currentRank ? (
-                  <View style={styles.rankCard}>
+                  <Section style={styles.rankCard}>
                     <View style={styles.rankCurrent}>
                       <Text style={styles.rankName}>{currentRank.rank}</Text>
                       {currentRank.stripes ? (
@@ -178,7 +177,7 @@ export default function DisciplineDetailScreen() {
                         {promoList.length} promotion{promoList.length !== 1 ? 's' : ''} logged
                       </Text>
                     )}
-                  </View>
+                  </Section>
                 ) : (
                   <Text style={styles.compEmpty}>No promotions logged yet.</Text>
                 )}
@@ -199,10 +198,10 @@ export default function DisciplineDetailScreen() {
 
             <View style={styles.compHead}>
               <Text style={styles.sectionLabel}>Competition</Text>
-              <TouchableOpacity style={styles.logBtn} onPress={() => setShowAddFight(true)}>
+              <Touchable style={styles.logBtn} onPress={() => setShowAddFight(true)} hasTextChild>
                 <Ionicons name="add" size={15} color={T.primary} />
                 <Text style={styles.logBtnText}>Log result</Text>
-              </TouchableOpacity>
+              </Touchable>
             </View>
             {fightList.length === 0 ? (
               <Text style={styles.compEmpty}>No results logged yet.</Text>
@@ -230,7 +229,7 @@ export default function DisciplineDetailScreen() {
           const { day, month, year } = formatDate(item.date);
           const { title, notes } = getMaDetails(item.entry);
           return (
-            <TouchableOpacity
+            <Touchable
               style={styles.historyCard}
               onPress={() =>
                 router.push({
@@ -238,7 +237,8 @@ export default function DisciplineDetailScreen() {
                   params: { id: item.sessionId },
                 } as never)
               }
-              activeOpacity={0.7}
+              feedback="row"
+              hasTextChild
             >
               <View style={styles.historyCardTop}>
                 <View style={styles.dateBlock}>
@@ -256,7 +256,7 @@ export default function DisciplineDetailScreen() {
               ) : !title ? (
                 <Text style={styles.historyEmpty}>No notes recorded.</Text>
               ) : null}
-            </TouchableOpacity>
+            </Touchable>
           );
         }}
         ItemSeparatorComponent={() => <View style={{ height: D.gap }} />}
@@ -344,9 +344,9 @@ function FightRow({ fight, onDelete }: { fight: Fight; onDelete: () => void }) {
           {`${month} ${day}, ${year}`}{meta ? ` · ${meta}` : ''}
         </Text>
       </View>
-      <TouchableOpacity hitSlop={8} onPress={onDelete}>
+      <Touchable hitSlop={8} onPress={onDelete} accessibilityLabel="Delete this fight">
         <Ionicons name="trash-outline" size={16} color={T.muted} />
-      </TouchableOpacity>
+      </Touchable>
     </View>
   );
 }
@@ -392,13 +392,14 @@ function AddFightModal({ disciplineId, onClose }: { disciplineId: string; onClos
             {RESULTS.map((r) => {
               const active = result === r.value;
               return (
-                <TouchableOpacity
+                <Touchable
                   key={r.value}
                   style={[styles.chip, active && styles.chipActive]}
                   onPress={() => setResult(r.value)}
+                  hasTextChild
                 >
                   <Text style={[styles.chipText, active && styles.chipTextActive]}>{r.label}</Text>
-                </TouchableOpacity>
+                </Touchable>
               );
             })}
           </View>
@@ -423,13 +424,14 @@ function AddFightModal({ disciplineId, onClose }: { disciplineId: string; onClos
             {METHODS.map((m) => {
               const active = method === m.value;
               return (
-                <TouchableOpacity
+                <Touchable
                   key={m.value}
                   style={[styles.chip, active && styles.chipActive]}
                   onPress={() => setMethod(active ? null : m.value)}
+                  hasTextChild
                 >
                   <Text style={[styles.chipText, active && styles.chipTextActive]}>{m.label}</Text>
-                </TouchableOpacity>
+                </Touchable>
               );
             })}
           </View>
@@ -457,17 +459,18 @@ function AddFightModal({ disciplineId, onClose }: { disciplineId: string; onClos
             maxLength={NOTES_MAX_LENGTH}
           />
 
-          <TouchableOpacity
+          <Touchable
             style={[styles.saveBtn, createFight.isPending && { opacity: 0.6 }]}
             onPress={handleSave}
             disabled={createFight.isPending}
+            hasTextChild
           >
             {createFight.isPending ? (
               <ActivityIndicator size="small" color={T.onPrimary} />
             ) : (
               <Text style={styles.saveBtnText}>Save result</Text>
             )}
-          </TouchableOpacity>
+          </Touchable>
         </ScrollView>
       </View>
     </Modal>
@@ -493,9 +496,9 @@ function PromotionRow({ promotion, onDelete }: { promotion: RankPromotion; onDel
         <Text style={styles.fightOpp} numberOfLines={1}>{promotion.rank}{stripeText}</Text>
         <Text style={styles.fightMeta}>{`${month} ${day}, ${year}`}</Text>
       </View>
-      <TouchableOpacity hitSlop={8} onPress={onDelete}>
+      <Touchable hitSlop={8} onPress={onDelete} accessibilityLabel="Delete this promotion">
         <Ionicons name="trash-outline" size={16} color={T.muted} />
-      </TouchableOpacity>
+      </Touchable>
     </View>
   );
 }
@@ -541,13 +544,14 @@ function AddPromotionModal({ disciplineId, onClose }: { disciplineId: string; on
             {BELTS.map((b) => {
               const active = rank === b;
               return (
-                <TouchableOpacity
+                <Touchable
                   key={b}
                   style={[styles.chip, active && styles.chipActive]}
                   onPress={() => setRank(b)}
+                  hasTextChild
                 >
                   <Text style={[styles.chipText, active && styles.chipTextActive]}>{b}</Text>
-                </TouchableOpacity>
+                </Touchable>
               );
             })}
           </View>
@@ -568,13 +572,14 @@ function AddPromotionModal({ disciplineId, onClose }: { disciplineId: string; on
             {STRIPE_OPTS.map((s) => {
               const active = stripes === s;
               return (
-                <TouchableOpacity
+                <Touchable
                   key={s}
                   style={[styles.chip, active && styles.chipActive]}
                   onPress={() => setStripes(s)}
+                  hasTextChild
                 >
                   <Text style={[styles.chipText, active && styles.chipTextActive]}>{s}</Text>
-                </TouchableOpacity>
+                </Touchable>
               );
             })}
           </View>
@@ -595,17 +600,18 @@ function AddPromotionModal({ disciplineId, onClose }: { disciplineId: string; on
             maxLength={NOTES_MAX_LENGTH}
           />
 
-          <TouchableOpacity
+          <Touchable
             style={[styles.saveBtn, createPromotion.isPending && { opacity: 0.6 }]}
             onPress={handleSave}
             disabled={createPromotion.isPending}
+            hasTextChild
           >
             {createPromotion.isPending ? (
               <ActivityIndicator size="small" color={T.onPrimary} />
             ) : (
               <Text style={styles.saveBtnText}>Save promotion</Text>
             )}
-          </TouchableOpacity>
+          </Touchable>
         </ScrollView>
       </View>
     </Modal>
@@ -638,6 +644,7 @@ function makeStyles(T: ThemeColors) {
     statCard: {
       flex: 1,
       borderTopWidth: 1,
+      // eslint-disable-next-line no-restricted-syntax -- A stat cell in a row, not a page section.
       borderTopColor: T.borderStrong,
       paddingVertical: 14,
       alignItems: 'center',
@@ -712,7 +719,6 @@ function makeStyles(T: ThemeColors) {
     logBtnText: { fontFamily: F.uiSemi, fontSize: 13, color: T.primary },
     compEmpty: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, paddingHorizontal: D.pad, paddingBottom: 4 },
     rankCard: {
-      borderTopWidth: 1, borderTopColor: T.borderStrong,
       paddingVertical: 12, gap: 6,
     },
     rankCurrent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -741,7 +747,7 @@ function makeStyles(T: ThemeColors) {
     },
     handle: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: T.borderStrong, marginBottom: 12 },
     sheetTitle: { fontFamily: F.uiBold, fontSize: 19, color: T.text, marginBottom: 14 },
-    sheetLabel: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 14, marginBottom: 6 },
+    sheetLabel: { ...TYPE.fieldLabel, color: T.textDim, marginTop: 14, marginBottom: 6 },
     sheetInput: {
       fontFamily: F.uiMed, fontSize: 15, color: T.text,
       backgroundColor: T.surface2, borderRadius: R.sm, borderWidth: 1, borderColor: T.border,

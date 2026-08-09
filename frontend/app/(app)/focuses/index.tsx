@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useMemo, useState } from 'react';
@@ -24,6 +23,7 @@ import {
   useUpdateFocus,
 } from '../../../src/hooks/useFocuses';
 import { useProGate } from '../../../src/hooks/useProGate';
+import { Touchable } from '../../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { CutCornerView } from '../../../src/components/CutCornerView';
@@ -125,9 +125,9 @@ function FocusFormModal({ visible, onClose, editing }: {
       >
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>{editing ? 'Edit Focus' : 'New Focus'}</Text>
-          <TouchableOpacity onPress={handleClose}>
+          <Touchable onPress={handleClose} hasTextChild>
             <Text style={styles.modalCancel}>Cancel</Text>
-          </TouchableOpacity>
+          </Touchable>
         </View>
 
         <View style={styles.field}>
@@ -163,47 +163,50 @@ function FocusFormModal({ visible, onClose, editing }: {
         <View style={styles.field}>
           <Text style={styles.label}>Discipline (optional)</Text>
           <View style={styles.chipWrap}>
-            <TouchableOpacity
+            <Touchable
               style={[styles.chip, disciplineId === null && styles.chipActive]}
               onPress={() => setDisciplineId(null)}
-              activeOpacity={0.7}
+              feedback="row"
+              hasTextChild
             >
               <Text style={[styles.chipText, disciplineId === null && styles.chipTextActive]}>
                 All disciplines
               </Text>
-            </TouchableOpacity>
+            </Touchable>
             {(disciplines ?? []).map((d) => {
               const active = disciplineId === d.id;
               const color = categoryColor(d.category, T);
               return (
-                <TouchableOpacity
+                <Touchable
                   key={d.id}
                   style={[
                     styles.chip,
                     active && { backgroundColor: withAlpha(color, 0.18), borderColor: color },
                   ]}
                   onPress={() => setDisciplineId(d.id)}
-                  activeOpacity={0.7}
+                  feedback="row"
+                  hasTextChild
                 >
                   <Text style={[styles.chipText, active && { color }]}>{d.name}</Text>
-                </TouchableOpacity>
+                </Touchable>
               );
             })}
           </View>
         </View>
 
-        <TouchableOpacity
+        <Touchable
           style={[styles.submitButton, pending && styles.submitButtonDisabled]}
           onPress={handleSubmit}
           disabled={pending}
-          activeOpacity={0.8}
+          feedback="card"
+          hasTextChild
         >
           {pending ? (
             <ActivityIndicator color={T.onPrimary} />
           ) : (
             <Text style={styles.submitText}>{editing ? 'Save Focus' : 'Add Focus'}</Text>
           )}
-        </TouchableOpacity>
+        </Touchable>
       </ScrollView>
     </Modal>
   );
@@ -246,11 +249,12 @@ function FocusRow({ focus, disciplines, onEdit, onSetStatus, onDelete }: {
   const meta = discipline ? `${discipline.name} · ${worked}` : worked;
 
   return (
-    <TouchableOpacity
+    <Touchable
       style={styles.row}
       onPress={() => onEdit(focus)}
       onLongPress={handleMenu}
-      activeOpacity={0.7}
+      feedback="row"
+      hasTextChild
     >
       <View style={[styles.rowAvatar, { backgroundColor: withAlpha(tagColor, 0.14) }]}>
         <Ionicons name="flag" size={18} color={tagColor} />
@@ -259,14 +263,15 @@ function FocusRow({ focus, disciplines, onEdit, onSetStatus, onDelete }: {
         <Text style={styles.rowTitle} numberOfLines={2}>{focus.title}</Text>
         <Text style={styles.rowMeta} numberOfLines={1}>{meta}</Text>
       </View>
-      <TouchableOpacity
+      <Touchable
         onPress={handleMenu}
         style={styles.menuButton}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        hitSlop={8}
+        accessibilityLabel={`More actions for ${focus.title}`}
       >
         <Ionicons name="ellipsis-vertical" size={16} color={T.muted} />
-      </TouchableOpacity>
-    </TouchableOpacity>
+      </Touchable>
+    </Touchable>
   );
 }
 
@@ -339,38 +344,38 @@ export default function FocusesScreen() {
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <Touchable
           onPress={() => router.back()}
           hitSlop={8}
           style={styles.backBtn}
-          accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <Ionicons name="chevron-back" size={22} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Training Focuses</Text>
           <Text style={styles.headerSub}>What you're working on, session to session</Text>
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={handleAddPress} activeOpacity={0.8}>
+        <Touchable style={styles.addBtn} onPress={handleAddPress} feedback="card" accessibilityLabel="Add a training focus">
           <Ionicons name="add" size={20} color={T.onPrimary} />
-        </TouchableOpacity>
+        </Touchable>
       </View>
 
       <View style={styles.filterRow}>
         {STATUS_FILTERS.map(({ label, value }) => {
           const active = statusFilter === value;
           return (
-            <TouchableOpacity
+            <Touchable
               key={value}
               style={[styles.filterChip, active && styles.filterChipActive]}
               onPress={() => setStatusFilter(value)}
-              activeOpacity={0.7}
+              feedback="row"
+              hasTextChild
             >
               <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>
                 {label}
               </Text>
-            </TouchableOpacity>
+            </Touchable>
           );
         })}
       </View>
@@ -405,7 +410,7 @@ export default function FocusesScreen() {
           ListHeaderComponent={
             statusFilter === 'active' ? (
               <View style={styles.heroWrap}>
-                <TouchableOpacity onPress={handleAddPress} activeOpacity={0.85}>
+                <Touchable onPress={handleAddPress} feedback="cta" hasTextChild>
                   <CutCornerView fill={T.primary} style={styles.heroCta}>
                     <Ionicons name="add" size={20} color={T.onPrimary} />
                     <View>
@@ -413,7 +418,7 @@ export default function FocusesScreen() {
                       <Text style={styles.heroCtaSub}>What you want to work on</Text>
                     </View>
                   </CutCornerView>
-                </TouchableOpacity>
+                </Touchable>
               </View>
             ) : null
           }

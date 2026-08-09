@@ -1,8 +1,9 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Swipeable, RectButton } from 'react-native-gesture-handler';
 import type { RoutineWithItems, Session } from '@app/shared';
+import { Touchable } from './ui';
 import { F, R, D, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../lib/color';
@@ -61,7 +62,7 @@ export function SessionRow({ session, sessionName, routineName, isMat, onPress, 
 
   return (
     <Swipeable renderRightActions={renderRightActions} rightThreshold={40} overshootRight={false}>
-      <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.7}>
+      <Touchable style={styles.row} onPress={onPress} feedback="row" hasTextChild>
         <View style={styles.dateBlock}>
           <Text style={styles.dateDay}>{day}</Text>
           <Text style={styles.dateMonth}>{month}</Text>
@@ -80,7 +81,7 @@ export function SessionRow({ session, sessionName, routineName, isMat, onPress, 
             ? <Ionicons name="flash" size={12} color={T.grappling} />
             : <Ionicons name="barbell" size={12} color={T.textDim} />}
         </View>
-      </TouchableOpacity>
+      </Touchable>
     </Swipeable>
   );
 }

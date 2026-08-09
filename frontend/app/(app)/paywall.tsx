@@ -4,7 +4,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useState, useMemo } from 'react';
@@ -12,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useSubscription } from '../../src/context/SubscriptionContext';
+import { Section, Touchable } from '../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { withAlpha } from '../../src/lib/color';
@@ -22,7 +22,10 @@ const PRO_FEATURES = [
   { icon: 'list-outline' as const, text: 'Unlimited routines' },
   { icon: 'time-outline' as const, text: 'Full session history (all time)' },
   { icon: 'trophy-outline' as const, text: 'PR tracking & estimated 1RM' },
-  { icon: 'trending-up-outline' as const, text: 'Advanced analytics & streaks' },
+  // Not "& streaks" any more — the week streak is free on both the Workout and
+  // Stats tabs, and selling something the user already has is how a paywall
+  // stops being believed.
+  { icon: 'trending-up-outline' as const, text: 'Advanced analytics & top lifts' },
   { icon: 'options-outline' as const, text: 'Custom discipline fields' },
 ];
 
@@ -88,9 +91,9 @@ export default function PaywallScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
+        <Touchable style={styles.closeBtn} onPress={() => router.back()} haptic={false} accessibilityLabel="Close">
           <Ionicons name="close" size={22} color={T.textDim} />
-        </TouchableOpacity>
+        </Touchable>
       </View>
 
       <ScrollView
@@ -111,7 +114,7 @@ export default function PaywallScreen() {
         </View>
 
         {/* Feature list */}
-        <View style={styles.featureCard}>
+        <Section style={styles.featureCard}>
           {PRO_FEATURES.map(({ icon, text }, i) => (
             <View key={i} style={[styles.featureRow, i < PRO_FEATURES.length - 1 && styles.featureRowBorder]}>
               <View style={styles.featureIcon}>
@@ -120,7 +123,7 @@ export default function PaywallScreen() {
               <Text style={styles.featureText}>{text}</Text>
             </View>
           ))}
-        </View>
+        </Section>
 
         {/* Both plan buttons are disabled without prices, so the only way
             forward is a retry. */}
@@ -132,15 +135,16 @@ export default function PaywallScreen() {
         )}
 
         {/* Plans */}
-        <TouchableOpacity
+        <Touchable
           style={[
             styles.planBtn,
             styles.planBtnAnnual,
             (loading || pricesUnavailable) && styles.planBtnDisabled,
           ]}
           onPress={() => handlePurchase('reprounds_pro_annual')}
-          activeOpacity={0.8}
           disabled={!!loading || pricesUnavailable}
+          feedback="card"
+          hasTextChild
         >
           <View style={styles.planBtnBadge}>
             <Text style={styles.planBtnBadgeText}>BEST VALUE</Text>
@@ -158,17 +162,18 @@ export default function PaywallScreen() {
               </Text>
             </>
           )}
-        </TouchableOpacity>
+        </Touchable>
 
-        <TouchableOpacity
+        <Touchable
           style={[
             styles.planBtn,
             styles.planBtnMonthly,
             (loading || pricesUnavailable) && styles.planBtnDisabled,
           ]}
           onPress={() => handlePurchase('reprounds_pro_monthly')}
-          activeOpacity={0.8}
           disabled={!!loading || pricesUnavailable}
+          feedback="card"
+          hasTextChild
         >
           {loading === 'monthly' ? (
             <ActivityIndicator color={T.primary} />
@@ -181,20 +186,21 @@ export default function PaywallScreen() {
               <Text style={styles.planBtnSub}>7-day free trial</Text>
             </>
           )}
-        </TouchableOpacity>
+        </Touchable>
 
-        <TouchableOpacity
+        <Touchable
           style={styles.restoreBtn}
           onPress={handleRestore}
           disabled={!!loading}
-          activeOpacity={0.7}
+          feedback="row"
+          hasTextChild
         >
           {loading === 'restore' ? (
             <ActivityIndicator color={T.muted} size="small" />
           ) : (
             <Text style={styles.restoreText}>Restore Purchases</Text>
           )}
-        </TouchableOpacity>
+        </Touchable>
 
         <Text style={styles.legalText}>
           Payment charged to your Google Play account. Subscription auto-renews unless cancelled
@@ -240,10 +246,7 @@ function makeStyles(T: ThemeColors) {
       lineHeight: 21,
     },
 
-    featureCard: {
-      borderTopWidth: 1,
-      borderTopColor: T.borderStrong,
-    },
+    featureCard: {},
     featureRow: {
       flexDirection: 'row',
       alignItems: 'center',

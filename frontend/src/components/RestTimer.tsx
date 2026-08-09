@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { StyleProp, StyleSheet, Text, TouchableOpacity, View, ViewStyle } from 'react-native';
-import * as Haptics from 'expo-haptics';
+import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { Touchable } from './ui';
 import { F, R, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../lib/color';
@@ -43,24 +43,22 @@ export function RestTimer({ seconds, total, onSkip, onAdd, style }: RestTimerPro
           <Text style={styles.label}>{done ? 'Rest done' : 'Rest'}</Text>
           <Text style={[styles.time, done && { color: T.primary }]}>{mm}:{ss}</Text>
         </View>
-        {!done && <TouchableOpacity
+        {!done && <Touchable
           style={styles.addBtn}
-          onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onAdd(); }}
-          activeOpacity={0.7}
-          accessibilityRole="button"
+          onPress={() => onAdd()}
           accessibilityLabel="Add 15 seconds to rest"
+          feedback="row"
         >
           <Text style={styles.addBtnText}>+15s</Text>
-        </TouchableOpacity>}
-        <TouchableOpacity
+        </Touchable>}
+        <Touchable
           style={styles.skipBtn}
-          onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onSkip(); }}
-          activeOpacity={0.7}
-          accessibilityRole="button"
+          onPress={() => onSkip()}
           accessibilityLabel={done ? 'Dismiss rest timer' : 'Skip rest timer'}
+          feedback="row"
         >
           <Text style={styles.skipBtnText}>{done ? 'Dismiss' : 'Skip'}</Text>
-        </TouchableOpacity>
+        </Touchable>
       </View>
     </CutCornerView>
   );

@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useState, useMemo } from 'react';
@@ -22,6 +21,7 @@ import {
 } from '../../../src/hooks/useTechniques';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useProGate } from '../../../src/hooks/useProGate';
+import { Touchable } from '../../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -69,9 +69,9 @@ function TechniqueRow({
         <Text style={styles.rowMeta}>{isOwned ? 'Custom' : 'Default'}</Text>
       </View>
       {isOwned && (
-        <TouchableOpacity onPress={handleDelete} style={styles.deleteButton} activeOpacity={0.7}>
+        <Touchable onPress={handleDelete} style={styles.deleteButton} feedback="row" accessibilityLabel={`Delete ${technique.label}`}>
           <Ionicons name="trash-outline" size={15} color={T.danger} />
-        </TouchableOpacity>
+        </Touchable>
       )}
     </View>
   );
@@ -132,9 +132,9 @@ function AddTechniqueModal({
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Add Technique</Text>
-          <TouchableOpacity onPress={handleClose}>
+          <Touchable onPress={handleClose} hasTextChild>
             <Text style={styles.modalCancel}>Cancel</Text>
-          </TouchableOpacity>
+          </Touchable>
         </View>
 
         <View style={styles.field}>
@@ -143,19 +143,20 @@ function AddTechniqueModal({
             {KIND_OPTIONS.map(({ label: optLabel, value }) => {
               const active = kind === value;
               return (
-                <TouchableOpacity
+                <Touchable
                   key={value}
                   style={[
                     styles.kindButton,
                     active && { backgroundColor: withAlpha(T.grappling, 0.18), borderColor: T.grappling },
                   ]}
                   onPress={() => setKind(value)}
-                  activeOpacity={0.7}
+                  feedback="row"
+                  hasTextChild
                 >
                   <Text style={[styles.kindButtonText, active && { color: T.grappling }]}>
                     {optLabel}
                   </Text>
-                </TouchableOpacity>
+                </Touchable>
               );
             })}
           </View>
@@ -176,18 +177,19 @@ function AddTechniqueModal({
           />
         </View>
 
-        <TouchableOpacity
+        <Touchable
           style={[styles.submitButton, createTechnique.isPending && styles.submitButtonDisabled]}
           onPress={handleSubmit}
           disabled={createTechnique.isPending}
-          activeOpacity={0.8}
+          feedback="card"
+          hasTextChild
         >
           {createTechnique.isPending ? (
             <ActivityIndicator color={T.onPrimary} />
           ) : (
             <Text style={styles.submitText}>Add Technique</Text>
           )}
-        </TouchableOpacity>
+        </Touchable>
       </View>
     </Modal>
   );
@@ -252,21 +254,20 @@ export default function TechniquesScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <Touchable
           style={styles.backBtn}
           onPress={() => router.back()}
-          accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <Ionicons name="chevron-back" size={22} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Positions & Submissions</Text>
           <Text style={styles.headerSub}>The chips you tap while logging rounds</Text>
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={handleAddPress}>
+        <Touchable style={styles.addBtn} onPress={handleAddPress} accessibilityLabel="Add a technique">
           <Ionicons name="add" size={18} color={T.onPrimary} />
-        </TouchableOpacity>
+        </Touchable>
       </View>
 
       <View style={styles.searchRow}>

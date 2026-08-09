@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Alert, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Modal, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import { useTechniqueTags } from '../hooks/useNotes';
 import { useTechniques, useCreateTechnique } from '../hooks/useTechniques';
 import { useCurrentUser } from '../hooks/useAuth';
@@ -34,6 +33,8 @@ import { PartnerPicker } from './PartnerPicker';
 import { Chip } from './ui/Chip';
 import { Stepper } from './ui/Stepper';
 import { useTheme } from '../theme/ThemeContext';
+import { Touchable } from './ui';
+import { TYPE } from '../theme/type';
 import { F, R, ThemeColors } from '../theme/colors';
 import { withAlpha } from '../lib/color';
 
@@ -262,14 +263,13 @@ export function RoundLogger({
         <View key={round.id} style={styles.roundCard}>
           <View style={styles.roundHead}>
             <Text style={styles.roundTitle}>Round {i + 1}</Text>
-            <TouchableOpacity
+            <Touchable
               hitSlop={8}
               onPress={() => removeRound(round.id)}
-              accessibilityRole="button"
               accessibilityLabel={`Delete round ${i + 1}`}
             >
               <Ionicons name="trash-outline" size={16} color={T.muted} />
-            </TouchableOpacity>
+            </Touchable>
           </View>
 
           <PartnerPicker
@@ -301,14 +301,13 @@ export function RoundLogger({
                   placeholderTextColor={T.muted}
                 />
                 {canStamp && (
-                  <TouchableOpacity
+                  <Touchable
                     style={styles.stampBtn}
                     onPress={() => stampDuration(round)}
-                    accessibilityRole="button"
                     accessibilityLabel="Fill minutes from session timer"
                   >
                     <Ionicons name="stopwatch-outline" size={18} color={T.primary} />
-                  </TouchableOpacity>
+                  </Touchable>
                 )}
               </View>
             </View>
@@ -361,15 +360,14 @@ export function RoundLogger({
         </View>
       ))}
 
-      <TouchableOpacity
+      <Touchable
         style={styles.addRound}
         onPress={addRound}
-        accessibilityRole="button"
         accessibilityLabel="Add round"
       >
         <Ionicons name="add" size={16} color={T.primary} />
         <Text style={styles.addRoundText}>Add round</Text>
-      </TouchableOpacity>
+      </Touchable>
 
       {/* Technique journal */}
       <View>
@@ -427,16 +425,15 @@ function TagEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string
       <Text style={styles.miniLabel}>Technique tags</Text>
       <View style={styles.tagWrap}>
         {tags.map((tag) => (
-          <TouchableOpacity
+          <Touchable
             key={tag}
             style={styles.tagChip}
             onPress={() => removeTag(tag)}
-            accessibilityRole="button"
             accessibilityLabel={`Remove tag ${tag}`}
           >
             <Text style={styles.tagChipText}>{tag}</Text>
             <Ionicons name="close" size={13} color={T.primary} />
-          </TouchableOpacity>
+          </Touchable>
         ))}
       </View>
       <TextInput
@@ -453,16 +450,15 @@ function TagEditor({ tags, onChange }: { tags: string[]; onChange: (tags: string
       {suggestions.length > 0 && (
         <View style={styles.tagSuggestRow}>
           {suggestions.map((s) => (
-            <TouchableOpacity
+            <Touchable
               key={s}
               style={styles.tagSuggest}
               onPress={() => addTag(s)}
-              accessibilityRole="button"
               accessibilityLabel={`Add tag ${s}`}
             >
               <Ionicons name="add" size={12} color={T.textDim} />
               <Text style={styles.tagSuggestText}>{s}</Text>
-            </TouchableOpacity>
+            </Touchable>
           ))}
         </View>
       )}
@@ -706,26 +702,23 @@ function CountChip({
   const styles = useMemo(() => makeStyles(T), [T]);
   return (
     <View style={styles.countChip}>
-      <TouchableOpacity
+      <Touchable
         onPress={() => {
-          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           onIncrement();
         }}
-        accessibilityRole="button"
         accessibilityLabel={`${label}, ${count}. Tap to add one`}
       >
         <Text style={styles.countChipText}>
           {label} · {count}
         </Text>
-      </TouchableOpacity>
-      <TouchableOpacity
+      </Touchable>
+      <Touchable
         hitSlop={8}
         onPress={onRemove}
-        accessibilityRole="button"
         accessibilityLabel={`Remove ${label}`}
       >
         <Ionicons name="close" size={13} color={T.onPrimary} style={styles.countChipClose} />
-      </TouchableOpacity>
+      </Touchable>
     </View>
   );
 }
@@ -785,9 +778,9 @@ function SubmissionPicker({
       <View style={styles.modalSheet}>
         <View style={styles.pickerHead}>
           <Text style={styles.modalTitle}>Add submission</Text>
-          <TouchableOpacity onPress={close}>
+          <Touchable onPress={close} hasTextChild>
             <Text style={styles.pickerCancel}>Done</Text>
-          </TouchableOpacity>
+          </Touchable>
         </View>
         <TextInput
           style={styles.modalInput}
@@ -806,19 +799,19 @@ function SubmissionPicker({
           {matches.map((s) => {
             const n = counts[s.value] ?? 0;
             return (
-              <TouchableOpacity key={s.value} style={styles.pickerRow} onPress={() => select(s.value)}>
+              <Touchable key={s.value} style={styles.pickerRow} onPress={() => select(s.value)} hasTextChild>
                 <Text style={styles.pickerRowText}>{s.label}</Text>
                 {n > 0 && <Text style={styles.pickerRowCount}>· {n}</Text>}
-              </TouchableOpacity>
+              </Touchable>
             );
           })}
           {q !== '' && !exact && (
-            <TouchableOpacity style={styles.pickerRow} onPress={create} disabled={busy}>
+            <Touchable style={styles.pickerRow} onPress={create} disabled={busy} hasTextChild>
               <Ionicons name="add" size={15} color={T.primary} />
               <Text style={[styles.pickerRowText, styles.pickerCreateText]}>
                 Create “{query.trim()}”
               </Text>
-            </TouchableOpacity>
+            </Touchable>
           )}
         </ScrollView>
       </View>
@@ -866,9 +859,9 @@ function CreateTechniqueModal({
       <View style={styles.modalSheet}>
         <View style={styles.pickerHead}>
           <Text style={styles.modalTitle}>{title}</Text>
-          <TouchableOpacity onPress={close}>
+          <Touchable onPress={close} hasTextChild>
             <Text style={styles.pickerCancel}>Cancel</Text>
-          </TouchableOpacity>
+          </Touchable>
         </View>
         <TextInput
           style={styles.modalInput}
@@ -881,13 +874,14 @@ function CreateTechniqueModal({
           onSubmitEditing={submit}
           selectionColor={T.primary}
         />
-        <TouchableOpacity
+        <Touchable
           style={[styles.modalPrimaryBtn, busy && styles.modalBtnDisabled]}
           onPress={submit}
           disabled={busy}
+          hasTextChild
         >
           <Text style={styles.modalPrimaryText}>Add</Text>
-        </TouchableOpacity>
+        </Touchable>
       </View>
     </Modal>
   );
@@ -997,10 +991,11 @@ function makeStyles(T: ThemeColors) {
     addChip: { borderStyle: 'dashed', borderColor: T.borderStrong, backgroundColor: T.surface },
     roundCard: {
       gap: 10, paddingVertical: 12,
+      // eslint-disable-next-line no-restricted-syntax -- A round row inside a scrolling logger, not a page section.
       borderTopWidth: 1, borderTopColor: T.borderStrong,
     },
     roundHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    roundTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
+    roundTitle: { ...TYPE.sectionLabel, color: T.textDim },
     inlineRow: { flexDirection: 'row', gap: 12 },
     minuteRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     stampBtn: {

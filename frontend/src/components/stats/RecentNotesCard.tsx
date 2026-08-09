@@ -1,14 +1,14 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { useRecentNotes } from '../../hooks/useNotes';
 import { cardState } from '../../lib/statsHelpers';
 import { Skeleton } from '../Skeleton';
 import { InlineError } from '../InlineError';
+import { EmptyState, Section, SectionHeader, Touchable } from '../ui';
 import { F, R, ThemeColors } from '../../theme/colors';
+import { TYPE } from '../../theme/type';
 import { useTheme } from '../../theme/ThemeContext';
-import { withAlpha } from '../../lib/color';
 import { parseLocalDate } from '../../lib/calendar';
 
 function fmtDate(iso: string): string {
@@ -31,50 +31,41 @@ export function RecentNotesCard() {
   const groups = data?.groups ?? [];
 
   return (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <View style={styles.cardHeaderLeft}>
-          <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.gold, 0.15) }]}>
-            <Ionicons name="document-text-outline" size={16} color={T.gold} />
-          </View>
-          <Text style={styles.cardTitle} numberOfLines={1}>Recent Notes</Text>
-        </View>
-        <TouchableOpacity
-          style={styles.seeAllBtn}
-          onPress={() => router.push('/notes' as never)}
-          activeOpacity={0.7}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel="See all notes"
-        >
-          <Text style={styles.seeAllText}>See all</Text>
-          <Ionicons name="chevron-forward" size={14} color={T.muted} />
-        </TouchableOpacity>
-      </View>
+    <Section>
+      <SectionHeader
+        title="Recent Notes"
+        icon="document-text-outline"
+        iconTone="gold"
+        action={{
+          label: 'View all',
+          onPress: () => router.push('/notes' as never),
+          accessibilityLabel: 'View all notes',
+        }}
+      />
 
       {state === 'loading' ? (
         <View style={{ gap: 8 }}>
-          <Skeleton width="100%" height={48} radius={8} />
-          <Skeleton width="100%" height={48} radius={8} />
+          <Skeleton width="100%" height={48} radius={R.sm} />
+          <Skeleton width="100%" height={48} radius={R.sm} />
         </View>
       ) : state === 'error' ? (
         <InlineError message="Couldn't load your recent notes." onRetry={() => void refetch()} />
       ) : groups.length === 0 ? (
-        <Text style={styles.emptyText}>
-          Notes you add to sessions and rounds will show up here.
-        </Text>
+        <EmptyState title="Notes you add to sessions and rounds will show up here." />
       ) : (
         <View>
           {groups.map((group, gi) => {
             const preview = group.notes.slice(0, 2);
             return (
-              <TouchableOpacity
+              <Touchable
                 key={group.sessionId}
                 style={[styles.noteRow, gi < groups.length - 1 && styles.noteRowBorder]}
                 onPress={() =>
                   router.push({ pathname: '/sessions/[id]', params: { id: group.sessionId } } as never)
                 }
-                activeOpacity={0.7}
+                feedback="row"
+                haptic={false}
+                accessibilityLabel={`Notes from ${fmtDate(group.date)}${group.sessionName ? `, ${group.sessionName}` : ''}`}
               >
                 <View style={styles.noteRowTop}>
                   <Text style={styles.noteDate}>{fmtDate(group.date)}</Text>
@@ -97,50 +88,24 @@ export function RecentNotesCard() {
                     +{group.notes.length - preview.length} more
                   </Text>
                 )}
-              </TouchableOpacity>
+              </Touchable>
             );
           })}
         </View>
       )}
-    </View>
+    </Section>
   );
 }
 
 function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
-    card: {
-      borderTopWidth: 1,
-      borderTopColor: T.borderStrong,
-      paddingTop: 14,
-      paddingBottom: 4,
-    },
-    cardHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 8,
-    },
-    cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    cardIconBox: {
-      width: 28,
-      height: 28,
-      borderRadius: R.sm,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    cardTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
-    seeAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-    seeAllText: { fontFamily: F.uiMed, fontSize: 13, color: T.muted },
-
     noteRow: { paddingVertical: 10 },
     noteRowBorder: { borderBottomWidth: 1, borderBottomColor: T.border },
     noteRowTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     noteDate: { fontFamily: F.monoBold, fontSize: 11, color: T.muted },
     noteSession: { fontFamily: F.uiSemi, fontSize: 13, color: T.text, flexShrink: 1 },
-    noteLabel: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim },
+    noteLabel: { ...TYPE.micro, color: T.textDim },
     noteText: { fontFamily: F.uiMed, fontSize: 13, color: T.text, marginTop: 1, lineHeight: 18 },
-    noteMore: { fontFamily: F.uiMed, fontSize: 11, color: T.muted, marginTop: 6 },
-
-    emptyText: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, paddingVertical: 12 },
+    noteMore: { ...TYPE.micro, color: T.muted, marginTop: 6 },
   });
 }

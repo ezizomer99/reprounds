@@ -509,18 +509,52 @@ statsRoutes.get('/streak', async (c) => {
   // Bounded above at the anchor week so a session dated years into the future —
   // which the schema allows — can't manufacture a streak, and below at the 520
   // weeks the walk can actually use.
+  // Grouped rather than DISTINCT so each week can also say whether it held any
+  // lifting and whether it held any mat work — the two EXISTS subqueries give
+  // that split without a join that would multiply rows per entry, same shape as
+  // /stats/totals above. A week that had both counts toward both streaks.
+  //
+  // These were computed on the client until now, over the 200 most recent
+  // sessions, while the combined streak came from here — so one row of three
+  // numbers was being served by two sources that could disagree, and did.
   const rows = await db.execute(sql`
-    SELECT DISTINCT date_trunc('week', s.date::timestamp)::date AS week_start
+    SELECT
+      date_trunc('week', s.date::timestamp)::date AS week_start,
+      bool_or(EXISTS (
+        SELECT 1 FROM session_entries e
+        WHERE e.session_id = s.id AND e.kind = 'exercise'
+      )) AS has_gym,
+      bool_or(EXISTS (
+        SELECT 1 FROM session_entries e
+        WHERE e.session_id = s.id AND e.kind = 'martial_arts'
+      )) AS has_mat
     FROM sessions s
     WHERE s.user_id = ${userId}
       AND s.status  = 'completed'
       AND s.date   >= ${addDaysISO(anchorWeek, -520 * 7)}::date
       AND s.date    < ${addDaysISO(anchorWeek, 7)}::date
+    GROUP BY week_start
     ORDER BY week_start DESC
   `);
 
-  const weekStarts = (rows as unknown as Array<{ week_start: string }>).map((r) => r.week_start);
-  const result: WeekStreakResponse = { weeks: weekStreak(weekStarts, anchorWeek), anchorWeek };
+  const weekRows = rows as unknown as Array<{
+    week_start: string;
+    has_gym: boolean;
+    has_mat: boolean;
+  }>;
+
+  const result: WeekStreakResponse = {
+    weeks: weekStreak(weekRows.map((r) => r.week_start), anchorWeek),
+    anchorWeek,
+    gymWeeks: weekStreak(
+      weekRows.filter((r) => r.has_gym).map((r) => r.week_start),
+      anchorWeek,
+    ),
+    matWeeks: weekStreak(
+      weekRows.filter((r) => r.has_mat).map((r) => r.week_start),
+      anchorWeek,
+    ),
+  };
   return c.json(result);
 });
 

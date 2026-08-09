@@ -5,7 +5,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -17,6 +16,7 @@ import { useNotesTimeline, useTechniqueTags } from '../../../src/hooks/useNotes'
 import { useDebouncedValue } from '../../../src/hooks/useDebouncedValue';
 import { Skeleton } from '../../../src/components/Skeleton';
 import { InlineError } from '../../../src/components/InlineError';
+import { Touchable } from '../../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -56,12 +56,13 @@ export default function NotesScreen() {
     const isMat = item.kinds.includes('martial_arts');
     const isGym = item.kinds.includes('exercise');
     return (
-      <TouchableOpacity
+      <Touchable
         style={styles.groupCard}
         onPress={() =>
           router.push({ pathname: '/sessions/[id]', params: { id: item.sessionId } } as never)
         }
-        activeOpacity={0.75}
+        feedback="card"
+        hasTextChild
       >
         <View style={styles.groupHeader}>
           <View style={{ flex: 1 }}>
@@ -92,21 +93,20 @@ export default function NotesScreen() {
             </Text>
           </View>
         ))}
-      </TouchableOpacity>
+      </Touchable>
     );
   };
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <Touchable
           style={styles.backBtn}
           onPress={() => router.back()}
-          accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <Ionicons name="chevron-back" size={22} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
         <Text style={styles.headerTitle}>Notes</Text>
       </View>
 
@@ -123,9 +123,9 @@ export default function NotesScreen() {
           autoCapitalize="none"
         />
         {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')} hitSlop={8}>
+          <Touchable onPress={() => setSearch('')} hitSlop={8} haptic={false} accessibilityLabel="Clear search">
             <Ionicons name="close-circle" size={16} color={T.muted} />
-          </TouchableOpacity>
+          </Touchable>
         )}
       </View>
 
@@ -138,16 +138,17 @@ export default function NotesScreen() {
           {tags.map((t) => {
             const active = activeTag === t.tag;
             return (
-              <TouchableOpacity
+              <Touchable
                 key={t.tag}
                 style={[styles.tagChip, active && styles.tagChipActive]}
                 onPress={() => setActiveTag(active ? null : t.tag)}
-                activeOpacity={0.8}
+                feedback="card"
+                hasTextChild
               >
                 <Text style={[styles.tagChipText, active && styles.tagChipTextActive]}>
                   {t.tag}
                 </Text>
-              </TouchableOpacity>
+              </Touchable>
             );
           })}
         </ScrollView>
@@ -226,6 +227,7 @@ function makeStyles(T: ThemeColors) {
 
     groupCard: {
       borderTopWidth: 1,
+      // eslint-disable-next-line no-restricted-syntax -- A SectionList group header, which is a different role from a page section.
       borderTopColor: T.borderStrong,
       paddingTop: 12,
       paddingBottom: 4,

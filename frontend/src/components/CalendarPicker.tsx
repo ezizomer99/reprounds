@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Touchable } from './ui';
 import { F, R, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 import { DAY_LABELS, MONTH_NAMES, monthCells, monthRange, toISODate } from '../lib/calendar';
@@ -77,29 +78,27 @@ export function CalendarPicker({
   return (
     <View style={styles.calContainer}>
       <View style={styles.calHeader}>
-        <TouchableOpacity
+        <Touchable
           onPress={prevMonth}
           disabled={!canGoPrev}
           style={styles.calNavBtn}
-          accessibilityRole="button"
           accessibilityLabel="Previous month"
           accessibilityState={{ disabled: !canGoPrev }}
         >
           <Ionicons name="chevron-back" size={20} color={canGoPrev ? T.text : T.muted} />
-        </TouchableOpacity>
+        </Touchable>
         <Text style={styles.calMonthLabel}>
           {MONTH_NAMES[viewMonth]} {viewYear}
         </Text>
-        <TouchableOpacity
+        <Touchable
           onPress={nextMonth}
           disabled={!canGoNext}
           style={styles.calNavBtn}
-          accessibilityRole="button"
           accessibilityLabel="Next month"
           accessibilityState={{ disabled: !canGoNext }}
         >
           <Ionicons name="chevron-forward" size={20} color={canGoNext ? T.text : T.muted} />
-        </TouchableOpacity>
+        </Touchable>
       </View>
 
       <View style={styles.calRow}>
@@ -123,12 +122,11 @@ export function CalendarPicker({
             // Lexicographic comparison is exact for zero-padded YYYY-MM-DD.
             const disabled = iso < bounds.min || iso > bounds.max;
             return (
-              <TouchableOpacity
+              <Touchable
                 key={col}
                 style={[styles.calCell, isSelected && styles.calCellSelected]}
                 onPress={() => onChange(iso)}
                 disabled={disabled}
-                accessibilityRole="button"
                 accessibilityState={{ selected: isSelected, disabled }}
                 accessibilityLabel={`${MONTH_NAMES[viewMonth]} ${day}, ${viewYear}`}
               >
@@ -142,7 +140,7 @@ export function CalendarPicker({
                 >
                   {day}
                 </Text>
-              </TouchableOpacity>
+              </Touchable>
             );
           })}
         </View>

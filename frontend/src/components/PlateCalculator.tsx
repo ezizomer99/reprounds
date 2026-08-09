@@ -5,10 +5,10 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import { Touchable } from './ui';
 import { F, R, ThemeColors } from '../theme/colors';
 import { useUnit } from '../units/UnitContext';
 import { kgToUnit, weightInputRange } from '../units/units';
@@ -114,9 +114,9 @@ export function PlateCalculator({ weightKg, onClose }: { weightKg: number; onClo
             </Text>
           )}
 
-          <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
+          <Touchable style={styles.closeBtn} onPress={onClose} hasTextChild>
             <Text style={styles.closeBtnText}>Done</Text>
-          </TouchableOpacity>
+          </Touchable>
         </View>
       </View>
     </Modal>

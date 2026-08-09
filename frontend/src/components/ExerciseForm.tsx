@@ -5,7 +5,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import type { ActivityType, Exercise } from '@app/shared';
@@ -15,6 +14,7 @@ import { useCurrentUser } from '../hooks/useAuth';
 import { useProGate } from '../hooks/useProGate';
 import { MusclePicker, type MuscleSelection } from './MusclePicker';
 import { Chip } from './ui/Chip';
+import { Touchable } from './ui';
 import { F, R, type ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -101,7 +101,7 @@ export function ExerciseForm({ initialName = '', submitLabel, onCreated }: Exerc
         <Text style={styles.label}>Type *</Text>
         <View style={styles.segmented}>
           {(['strength', 'conditioning'] as const).map((t, i) => (
-            <TouchableOpacity
+            <Touchable
               key={t}
               style={[
                 styles.segmentBtn,
@@ -110,11 +110,12 @@ export function ExerciseForm({ initialName = '', submitLabel, onCreated }: Exerc
                 type === t && styles.segmentBtnActive,
               ]}
               onPress={() => setType(t)}
+              hasTextChild
             >
               <Text style={[styles.segmentText, type === t && styles.segmentTextActive]}>
                 {t.charAt(0).toUpperCase() + t.slice(1)}
               </Text>
-            </TouchableOpacity>
+            </Touchable>
           ))}
         </View>
       </View>
@@ -135,18 +136,19 @@ export function ExerciseForm({ initialName = '', submitLabel, onCreated }: Exerc
         </View>
       </View>
 
-      <TouchableOpacity
+      <Touchable
         style={[styles.submitBtn, createExercise.isPending && styles.submitBtnDisabled]}
         onPress={handleSubmit}
         disabled={createExercise.isPending}
-        activeOpacity={0.8}
+        feedback="card"
+        hasTextChild
       >
         {createExercise.isPending ? (
           <ActivityIndicator color={T.onPrimary} />
         ) : (
           <Text style={styles.submitText}>{submitLabel}</Text>
         )}
-      </TouchableOpacity>
+      </Touchable>
     </>
   );
 }

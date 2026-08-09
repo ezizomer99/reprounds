@@ -1,10 +1,11 @@
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoutines } from '../../../src/hooks/useRoutines';
 import { useCreateSession } from '../../../src/hooks/useSession';
+import { Touchable } from '../../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { CutCornerView } from '../../../src/components/CutCornerView';
@@ -29,14 +30,39 @@ export default function NewSessionScreen() {
   // ?date= without mode=log, so a caller that forgot `mode` — or a deep link —
   // silently created a planned session, and on a past date that session was
   // immediately overdue. Defaulting to backfill fails safe instead.
-  const { date: calendarDate, mode } = useLocalSearchParams<{
+  //
+  // ?kind= says which side of the app the user came in from, so the Mat tab's
+  // "Start New Mat Session" leads somewhere that is actually about mat work. It
+  // shapes the flow — the title, which routines are offered, and which half of a
+  // mixed routine is seeded — and is validated rather than trusted, since it
+  // arrives from a route.
+  //
+  // It deliberately does NOT tag an empty session. A session's kind is derived
+  // from its entries (the backend reads `kinds` from session_entries), and
+  // CreateSessionRequest.kind only filters which routine items get seeded. An
+  // empty session genuinely has no kind until its first entry, and the logger
+  // already handles that by offering both "Exercise" and "Discipline" until one
+  // is chosen. Sending `kind` there would be a field the server ignores.
+  const { date: calendarDate, mode, kind } = useLocalSearchParams<{
     date?: string;
     mode?: 'schedule' | 'log';
+    kind?: string;
   }>();
   const todayISO = localTodayISO();
   // A past date can only ever be a backfill, whatever the caller asked for.
   const isScheduling = !!calendarDate && mode === 'schedule' && calendarDate >= todayISO;
   const isBackfill = !!calendarDate && !isScheduling;
+
+  const startKind: EntryKind | undefined =
+    kind === 'exercise' || kind === 'martial_arts' ? kind : undefined;
+  const isMatFlow = startKind === 'martial_arts';
+
+  // Offer only the routines that have something of the requested kind in them —
+  // a mat session picker listing leg-day is just noise.
+  const visibleRoutines = useMemo(() => {
+    if (!startKind) return routines ?? [];
+    return (routines ?? []).filter((r) => r.items.some((i) => i.kind === startKind));
+  }, [routines, startKind]);
 
   function handleActiveSessionConflict(err: unknown) {
     const e = err as { status?: number; body?: { sessionId?: string } };
@@ -93,7 +119,12 @@ export default function NewSessionScreen() {
     const hasGym = routine.items.some((i) => i.kind === 'exercise');
     const hasMat = routine.items.some((i) => i.kind === 'martial_arts');
     // A session is either weightlifting or martial arts — never both. A mixed
-    // routine is run one part at a time, so ask which part to start.
+    // routine is run one part at a time, so ask which part to start — unless the
+    // caller already said, in which case asking again is just a tax.
+    if (hasGym && hasMat && startKind) {
+      startRoutine(routine, startKind);
+      return;
+    }
     if (hasGym && hasMat) {
       Alert.alert(
         isScheduling ? 'Schedule which part?' : isBackfill ? 'Log which part?' : 'Start which part?',
@@ -128,16 +159,21 @@ export default function NewSessionScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <Touchable
           style={styles.backBtn}
           onPress={() => router.back()}
-          accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <Ionicons name="chevron-back" size={22} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
         <Text style={styles.headerTitle}>
-          {isScheduling ? 'Schedule Session' : isBackfill ? 'Log Past Workout' : 'New Session'}
+          {isScheduling
+            ? 'Schedule Session'
+            : isBackfill
+              ? 'Log Past Workout'
+              : isMatFlow
+                ? 'New Mat Session'
+                : 'New Session'}
         </Text>
         <View style={{ width: 40 }} />
       </View>
@@ -151,11 +187,11 @@ export default function NewSessionScreen() {
         </View>
       ) : (
         <FlatList
-          data={routines ?? []}
+          data={visibleRoutines}
           keyExtractor={(item) => item.id}
           ListHeaderComponent={
             <View style={styles.body}>
-              <TouchableOpacity onPress={handleEmptySession} activeOpacity={0.8}>
+              <Touchable onPress={handleEmptySession} feedback="card" hasTextChild>
                 <CutCornerView fill={T.primary} style={styles.heroCta}>
                   <Ionicons name="add" size={20} color={T.onPrimary} />
                   <View>
@@ -164,16 +200,20 @@ export default function NewSessionScreen() {
                         ? 'Schedule empty session'
                         : isBackfill
                           ? 'Log empty session'
-                          : 'Start empty session'}
+                          : isMatFlow
+                            ? 'Start empty mat session'
+                            : 'Start empty session'}
                     </Text>
                     <Text style={styles.heroCtaSub}>
                       {isScheduling ? 'Plan a session without a routine' : 'Log without a routine'}
                     </Text>
                   </View>
                 </CutCornerView>
-              </TouchableOpacity>
+              </Touchable>
 
-              <Text style={styles.eyebrow}>From routine</Text>
+              <Text style={styles.eyebrow}>
+                {isMatFlow ? 'From mat routine' : 'From routine'}
+              </Text>
             </View>
           }
           renderItem={({ item }) => {
@@ -181,10 +221,11 @@ export default function NewSessionScreen() {
             const hasMat = item.items.some((i) => i.kind === 'martial_arts');
             const isMixed = hasGym && hasMat;
             return (
-            <TouchableOpacity
+            <Touchable
               style={styles.routineRow}
               onPress={() => handleStartFromRoutine(item)}
-              activeOpacity={0.7}
+              feedback="row"
+              hasTextChild
             >
               <View style={styles.routineIcon}>
                 {isMixed ? (
@@ -204,7 +245,7 @@ export default function NewSessionScreen() {
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={T.muted} />
-            </TouchableOpacity>
+            </Touchable>
             );
           }}
           ItemSeparatorComponent={() => <View style={styles.rowSep} />}
@@ -219,7 +260,9 @@ export default function NewSessionScreen() {
               </View>
             ) : (
               <View style={styles.centered}>
-                <Text style={styles.emptyText}>No routines yet.</Text>
+                <Text style={styles.emptyText}>
+                  {isMatFlow ? 'No mat routines yet.' : 'No routines yet.'}
+                </Text>
                 <Text style={styles.emptySubText}>Create routines from the Training section.</Text>
               </View>
             )

@@ -9,7 +9,6 @@ import {
   Switch,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -25,6 +24,7 @@ import {
   useUpdateProfile,
 } from '../../src/hooks/useAuth';
 import { NAME_MAX_LENGTH } from '@app/shared';
+import { Touchable } from '../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useUnit } from '../../src/units/UnitContext';
@@ -154,14 +154,13 @@ export default function SettingsScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <Touchable
           style={styles.backBtn}
           onPress={() => router.back()}
-          accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <Ionicons name="chevron-back" size={22} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
         <Text style={styles.headerTitle}>Settings</Text>
         <View style={{ width: 40 }} />
       </View>
@@ -194,35 +193,33 @@ export default function SettingsScreen() {
           </View>
           {/* A guest has no account to edit yet; everyone else can rename. */}
           {!isGuest && (
-            <TouchableOpacity
+            <Touchable
               style={styles.accountActionRow}
               onPress={() => setShowEditName(true)}
-              activeOpacity={0.7}
-              accessibilityRole="button"
               accessibilityLabel="Edit display name"
+              feedback="row"
             >
               <Ionicons name="person-outline" size={17} color={T.textDim} />
               <Text style={styles.rowLabel}>Display name</Text>
               <Ionicons name="chevron-forward" size={16} color={T.muted} style={{ marginLeft: 'auto' }} />
-            </TouchableOpacity>
+            </Touchable>
           )}
           {/* Offered to any non-guest, not just accounts that already have a
               password: a Google user otherwise had no credential fallback if
               they lost access to that Google account. */}
           {!isGuest && (
-            <TouchableOpacity
+            <Touchable
               style={styles.accountActionRow}
               onPress={() => setShowChangePw(true)}
-              activeOpacity={0.7}
-              accessibilityRole="button"
               accessibilityLabel={user?.hasPassword ? 'Change password' : 'Set a password'}
+              feedback="row"
             >
               <Ionicons name="key-outline" size={17} color={T.textDim} />
               <Text style={styles.rowLabel}>
                 {user?.hasPassword ? 'Change password' : 'Set a password'}
               </Text>
               <Ionicons name="chevron-forward" size={16} color={T.muted} style={{ marginLeft: 'auto' }} />
-            </TouchableOpacity>
+            </Touchable>
           )}
         </View>
 
@@ -234,19 +231,19 @@ export default function SettingsScreen() {
             {MODES.map(({ value, label }) => {
               const active = mode === value;
               return (
-                <TouchableOpacity
+                <Touchable
                   key={value}
                   style={[styles.segment, active && styles.segmentActive]}
                   onPress={() => setMode(value)}
-                  activeOpacity={0.75}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: active }}
                   accessibilityLabel={label}
+                  feedback="card"
                 >
                   <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
                     {label}
                   </Text>
-                </TouchableOpacity>
+                </Touchable>
               );
             })}
           </View>
@@ -260,19 +257,19 @@ export default function SettingsScreen() {
             {UNITS.map(({ value, label }) => {
               const active = unit === value;
               return (
-                <TouchableOpacity
+                <Touchable
                   key={value}
                   style={[styles.segment, active && styles.segmentActive]}
                   onPress={() => setUnit(value)}
-                  activeOpacity={0.75}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: active }}
                   accessibilityLabel={label}
+                  feedback="card"
                 >
                   <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
                     {label}
                   </Text>
-                </TouchableOpacity>
+                </Touchable>
               );
             })}
           </View>
@@ -286,19 +283,19 @@ export default function SettingsScreen() {
             {EFFORT_METRICS.map(({ value, label }) => {
               const active = metric === value;
               return (
-                <TouchableOpacity
+                <Touchable
                   key={value}
                   style={[styles.segment, active && styles.segmentActive]}
                   onPress={() => setMetric(value)}
-                  activeOpacity={0.75}
                   accessibilityRole="radio"
                   accessibilityState={{ selected: active }}
                   accessibilityLabel={label}
+                  feedback="card"
                 >
                   <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
                     {label}
                   </Text>
-                </TouchableOpacity>
+                </Touchable>
               );
             })}
           </View>
@@ -326,43 +323,41 @@ export default function SettingsScreen() {
         {/* Help & Feedback */}
         <Text style={styles.sectionLabel}>Help & Feedback</Text>
         <View style={styles.card}>
-          <TouchableOpacity style={styles.feedbackRow} onPress={handleSendFeedback} activeOpacity={0.7}>
+          <Touchable style={styles.feedbackRow} onPress={handleSendFeedback} feedback="row" hasTextChild>
             <Ionicons name="mail-outline" size={18} color={T.textDim} />
             <Text style={styles.feedbackLabel}>Send feedback</Text>
             <Ionicons name="chevron-forward" size={16} color={T.textDim} style={{ marginLeft: 'auto' }} />
-          </TouchableOpacity>
+          </Touchable>
         </View>
 
         {/* Destructive actions */}
         {/* Both destructive and both previously unlabelled — and the delete
             button's busy state swaps its text for a bare spinner, which
             announces nothing at all without an explicit label. */}
-        <TouchableOpacity
+        <Touchable
           style={styles.signOutBtn}
           onPress={handleSignOut}
-          activeOpacity={0.7}
-          accessibilityRole="button"
           accessibilityLabel={isGuest ? 'Exit guest mode' : 'Sign out'}
+          feedback="row"
         >
           <Ionicons name="log-out-outline" size={16} color={T.danger} />
           <Text style={styles.signOutText}>{isGuest ? 'Exit Guest Mode' : 'Sign Out'}</Text>
-        </TouchableOpacity>
+        </Touchable>
 
-        <TouchableOpacity
+        <Touchable
           style={styles.deleteBtn}
           onPress={handleDeleteAccount}
           disabled={deleting}
-          activeOpacity={0.7}
-          accessibilityRole="button"
           accessibilityLabel={deleting ? 'Deleting your account' : 'Delete account'}
           accessibilityState={{ busy: deleting, disabled: deleting }}
+          feedback="row"
         >
           {deleting ? (
             <ActivityIndicator size="small" color={T.danger} />
           ) : (
             <Text style={styles.deleteText}>Delete account</Text>
           )}
-        </TouchableOpacity>
+        </Touchable>
       </ScrollView>
 
       {showChangePw && (
@@ -493,11 +488,10 @@ function ChangePasswordModal({
           accessibilityLabel="Confirm new password"
         />
 
-        <TouchableOpacity
+        <Touchable
           style={[styles.pwSaveBtn, changePassword.isPending && { opacity: 0.6 }]}
           onPress={handleSave}
           disabled={changePassword.isPending}
-          accessibilityRole="button"
           accessibilityLabel={hasPassword ? 'Save new password' : 'Set password'}
         >
           {changePassword.isPending ? (
@@ -507,7 +501,7 @@ function ChangePasswordModal({
               {hasPassword ? 'Update password' : 'Set password'}
             </Text>
           )}
-        </TouchableOpacity>
+        </Touchable>
       </View>
     </Modal>
   );
@@ -562,11 +556,10 @@ function EditNameModal({ initialName, onClose }: { initialName: string; onClose:
           autoFocus
         />
 
-        <TouchableOpacity
+        <Touchable
           style={[styles.pwSaveBtn, (updateProfile.isPending || unchanged) && { opacity: 0.6 }]}
           onPress={handleSave}
           disabled={updateProfile.isPending || unchanged}
-          accessibilityRole="button"
           accessibilityLabel="Save display name"
         >
           {updateProfile.isPending ? (
@@ -574,7 +567,7 @@ function EditNameModal({ initialName, onClose }: { initialName: string; onClose:
           ) : (
             <Text style={styles.pwSaveText}>Save</Text>
           )}
-        </TouchableOpacity>
+        </Touchable>
       </View>
     </Modal>
   );
@@ -599,6 +592,7 @@ function makeStyles(T: ThemeColors) {
       textTransform: 'uppercase', letterSpacing: 1.2,
     },
     card: {
+      // eslint-disable-next-line no-restricted-syntax -- Applied to six blocks here; converting them is its own change.
       borderTopWidth: 1, borderTopColor: T.borderStrong,
       paddingTop: 14, gap: 14,
     },

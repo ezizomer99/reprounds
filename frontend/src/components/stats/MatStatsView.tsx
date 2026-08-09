@@ -1,4 +1,4 @@
-import { StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,7 +11,10 @@ import { useTodayISO } from '../../hooks/useTodayISO';
 import { barSizing, cardState, weeksAgoMonday, weeklyBarLabel } from '../../lib/statsHelpers';
 import { Skeleton } from '../Skeleton';
 import { InlineError } from '../InlineError';
+import { Section, SectionHeader, StatTile, Touchable } from '../ui';
+import { ProLock } from './ProLock';
 import { D, F, R, ThemeColors } from '../../theme/colors';
+import { TYPE } from '../../theme/type';
 import { useTheme } from '../../theme/ThemeContext';
 import { withAlpha } from '../../lib/color';
 import { parseLocalDate } from '../../lib/calendar';
@@ -54,12 +57,10 @@ function topEntries(map: Record<string, number> | undefined, limit: number): [st
 /** Width gifted-charts reserves for its y-axis labels before the plot area starts. */
 const Y_AXIS_ALLOWANCE = 40;
 
-/**
- * Ceiling on OS text scaling in the stat tiles. Three `flex: 1` tiles in a fixed
- * row, one holding fmtMatTime output like "12h 30m" — at the 3.1× iOS allows
- * they overflow the card.
- */
-const TILE_MAX_FONT_SCALE = 1.3;
+// The tile font-scaling ceiling that used to live here is FONT_SCALE.tile now,
+// applied inside StatTile — same 1.3, for the same reason (three flex:1 tiles in
+// a fixed row, one holding "12h 30m", overflow at the 3.1× iOS allows), but no
+// longer restated per screen.
 
 function fmtMatTime(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
@@ -164,20 +165,17 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
   // sits under the broadsheet rule and this one hung above it.
   if (state === 'error') {
     return (
-      <View style={styles.card}>
+      <Section>
         <InlineError message="Couldn't load your mat stats." onRetry={() => void refetch()} />
-      </View>
+      </Section>
     );
   }
 
   return (
     <>
       {/* ── Mat Highlights (FREE) ── */}
-      <View style={styles.card}>
-        <View style={styles.highlightsLabel}>
-          <Ionicons name="star-outline" size={16} color={T.gold} />
-          <Text style={styles.highlightsTitle}>Highlights</Text>
-        </View>
+      <Section>
+        <SectionHeader title="Highlights" icon="star-outline" iconTone="gold" />
 
         {showSkeletons ? (
           <View style={{ flexDirection: 'row', gap: 10, marginTop: 4 }}>
@@ -187,50 +185,37 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
           </View>
         ) : (
           <View style={styles.statCardsRow}>
-            <View style={[styles.statCard, { backgroundColor: withAlpha(T.grappling, 0.12) }]}>
-              <Text style={[styles.statCardNum, { color: T.grappling }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
-                {data?.totals.rounds ?? 0}
-              </Text>
-              <Text style={[styles.statCardLabel, { color: T.grappling }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>Rounds</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: withAlpha(T.conditioning, 0.12) }]}>
-              <Text style={[styles.statCardNum, { color: T.conditioning }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
-                {fmtMatTime(data?.totals.minutes ?? 0)}
-              </Text>
-              <Text style={[styles.statCardLabel, { color: T.conditioning }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>Mat Time</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: withAlpha(T.gold, 0.12) }]}>
-              <Text style={[styles.statCardNum, { color: T.gold }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
-                {data?.totals.sessions ?? 0}
-              </Text>
-              <Text style={[styles.statCardLabel, { color: T.gold }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>Sessions</Text>
-            </View>
+            <StatTile tone="grappling" emphasis="md" value={data?.totals.rounds ?? 0} label="Rounds" />
+            <StatTile
+              tone="conditioning"
+              emphasis="md"
+              value={fmtMatTime(data?.totals.minutes ?? 0)}
+              label="Mat Time"
+            />
+            <StatTile tone="gold" emphasis="md" value={data?.totals.sessions ?? 0} label="Sessions" />
           </View>
         )}
         <Text style={styles.windowNote}>{rangeLabel}</Text>
-      </View>
+      </Section>
 
       {isEmpty ? (
-        <View style={styles.card}>
+        <Section>
           <View style={styles.emptyBox}>
             <Ionicons name="body-outline" size={28} color={T.muted} />
             <Text style={styles.emptyBoxText}>
               Log a martial arts session to see your mat stats.
             </Text>
           </View>
-        </View>
+        </Section>
       ) : (
         <>
           {/* ── Intensity Split (FREE) ── */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={styles.cardHeaderLeft}>
-                <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.primary, 0.15) }]}>
-                  <Ionicons name="flame-outline" size={16} color={T.primary} />
-                </View>
-                <Text style={styles.cardTitle} numberOfLines={1}>Intensity Split</Text>
-              </View>
-            </View>
+          <Section>
+            <SectionHeader
+              title="Intensity Split"
+              icon="flame-outline"
+              iconTone="primary"
+            />
 
             {showSkeletons ? (
               <Skeleton width="100%" height={44} radius={8} />
@@ -258,29 +243,16 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
                 </View>
               </>
             )}
-          </View>
+          </Section>
 
           {/* ── Rounds per Week (PRO) ── */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={styles.cardHeaderLeft}>
-                <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.grappling, 0.15) }]}>
-                  <Ionicons name="bar-chart-outline" size={16} color={T.grappling} />
-                </View>
-                <Text style={styles.cardTitle} numberOfLines={1}>Rounds per Week</Text>
-              </View>
-              {!isPro && !proLoading && (
-                <TouchableOpacity
-                  onPress={showPaywall}
-                  activeOpacity={0.7}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel="This section is a Pro feature — upgrade to unlock"
-                >
-                  <Ionicons name="lock-closed" size={16} color={T.muted} />
-                </TouchableOpacity>
-              )}
-            </View>
+          <Section>
+            <SectionHeader
+              title="Rounds per Week"
+              icon="bar-chart-outline"
+              iconTone="grappling"
+              right={!isPro && !proLoading ? <ProLock onPress={showPaywall} color={T.muted} /> : undefined}
+            />
 
             {isPro || proLoading ? (
               showSkeletons || proLoading ? (
@@ -308,37 +280,24 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
                 </View>
               )
             ) : (
-              <TouchableOpacity onPress={showPaywall} activeOpacity={0.85}>
+              <Touchable onPress={showPaywall} feedback="cta" haptic={false} hasTextChild>
                 <View style={styles.proBlur}>
                   <Text style={styles.proBlurText}>
                     Upgrade to Pro to see your weekly rounds chart
                   </Text>
                 </View>
-              </TouchableOpacity>
+              </Touchable>
             )}
-          </View>
+          </Section>
 
           {/* ── Sparring Numbers (PRO) ── */}
-          <View style={styles.card}>
-            <View style={styles.cardHeader}>
-              <View style={styles.cardHeaderLeft}>
-                <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.performance, 0.15) }]}>
-                  <Ionicons name="fitness-outline" size={16} color={T.performance} />
-                </View>
-                <Text style={styles.cardTitle} numberOfLines={1}>Sparring Numbers</Text>
-              </View>
-              {!isPro && !proLoading && (
-                <TouchableOpacity
-                  onPress={showPaywall}
-                  activeOpacity={0.7}
-                  hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel="This section is a Pro feature — upgrade to unlock"
-                >
-                  <Ionicons name="lock-closed" size={16} color={T.muted} />
-                </TouchableOpacity>
-              )}
-            </View>
+          <Section>
+            <SectionHeader
+              title="Sparring Numbers"
+              icon="fitness-outline"
+              iconTone="performance"
+              right={!isPro && !proLoading ? <ProLock onPress={showPaywall} color={T.muted} /> : undefined}
+            />
 
             {isPro || proLoading ? (
               showSkeletons || proLoading ? (
@@ -475,22 +434,25 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
                 </View>
               )
             ) : (
-              <TouchableOpacity onPress={showPaywall} activeOpacity={0.85}>
+              <Touchable onPress={showPaywall} feedback="cta" haptic={false} hasTextChild>
                 <View style={styles.proBlur}>
                   <Text style={styles.proBlurText}>
                     Upgrade to Pro to track your sparring numbers
                   </Text>
                 </View>
-              </TouchableOpacity>
+              </Touchable>
             )}
-          </View>
+          </Section>
 
           {/* ── Training partners (nav) ── */}
-          <TouchableOpacity
-            style={styles.partnersCard}
-            onPress={() => router.push('/partners' as never)}
-            activeOpacity={0.75}
-          >
+          <Section density="row">
+            <Touchable
+              style={styles.partnersCard}
+              onPress={() => router.push('/partners' as never)}
+              feedback="card"
+              haptic={false}
+              hasTextChild
+            >
             <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.grappling, 0.15) }]}>
               <Ionicons name="people-outline" size={16} color={T.grappling} />
             </View>
@@ -499,7 +461,8 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
               <Text style={styles.partnersSub}>Who you roll with most, subs for & against</Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={T.muted} />
-          </TouchableOpacity>
+            </Touchable>
+          </Section>
         </>
       )}
     </>
@@ -508,47 +471,18 @@ export function MatStatsView({ weeks, rangeLabel }: MatStatsViewProps) {
 
 function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
+    // The rule and vertical padding come from the Section wrapping it.
     partnersCard: {
-      borderTopWidth: 1,
-      borderTopColor: T.borderStrong,
-      paddingVertical: 14,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
     },
     partnersSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 2 },
-    // Broadsheet: flat rule-separated section.
-    card: {
-      borderTopWidth: 1,
-      borderTopColor: T.borderStrong,
-      paddingTop: 14,
-      paddingBottom: 4,
-    },
-
-    highlightsLabel: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
-    highlightsTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
     statCardsRow: { flexDirection: 'row', gap: 8 },
-    statCard: {
-      flex: 1,
-      borderRadius: R.sm,
-      paddingVertical: 14,
-      alignItems: 'center',
-      gap: 4,
-    },
-    statCardNum: { fontFamily: F.monoBold, fontSize: 20 },
-    statCardLabel: { fontFamily: F.uiMed, fontSize: 11, textAlign: 'center' },
     windowNote: { fontFamily: F.uiMed, fontSize: 11, color: T.muted, marginTop: 10, textAlign: 'center' },
 
-    cardHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 12,
-    },
-    // Constrained and shrinkable, matching the Gym tab: an auto-width header row
-    // whose title block carries `flex: 1` swells to the full width and pushes
-    // whatever sits opposite it off the right edge.
-    cardHeaderLeft: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 },
+    // Still used by the partners row below, which is a nav row rather than a
+    // section header.
     cardIconBox: {
       flexShrink: 0,
       width: 28,
@@ -557,7 +491,7 @@ function makeStyles(T: ThemeColors) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    cardTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
+    cardTitle: { ...TYPE.sectionLabel, color: T.textDim },
 
     intensityBar: {
       flexDirection: 'row',
@@ -582,7 +516,9 @@ function makeStyles(T: ThemeColors) {
 
     blockLabel: { fontFamily: F.uiSemi, fontSize: 13, color: T.textDim, marginBottom: 8 },
     subBlock: { marginTop: 12 },
-    subBlockLabel: { fontFamily: F.uiMed, fontSize: 11, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
+    // Not TYPE.sectionLabel: this divides blocks *inside* a card, below the
+    // section header, so it is deliberately lighter and tracked tighter.
+    subBlockLabel: { ...TYPE.micro, color: T.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: 0.4 },
     numberGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     numberCell: {
       flexBasis: '47%',

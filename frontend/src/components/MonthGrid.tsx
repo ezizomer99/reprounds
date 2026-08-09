@@ -1,12 +1,14 @@
 import { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Session } from '@app/shared';
+import { Touchable } from './ui';
 import { F, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 import { useSessionsInRange } from '../hooks/useSession';
 import { MONTH_NAMES, monthCells, monthRange, toISODate } from '../lib/calendar';
 import { dayMarkerOverflow, dayMarkers, type DayMarker } from '../lib/sessionMarkers';
+import { DayDots } from './DayDots';
 
 // Fixed 6-week grid so every month renders at the same height — keeps the
 // calendar's FlashList offsets stable for initialScrollIndex. 6 rows is also
@@ -95,30 +97,28 @@ export function MonthGrid({
           more than a truncation, which matters more than the paywall hint. */}
       <View style={styles.noticeRow}>
         {isError ? (
-          <TouchableOpacity
+          <Touchable
             style={styles.noticeInner}
             onPress={() => void refetch()}
-            accessibilityRole="button"
             accessibilityLabel="Retry loading this month"
           >
             <Ionicons name="alert-circle-outline" size={12} color={T.danger} />
             <Text style={styles.errorText}>Couldn&apos;t load — tap to retry</Text>
-          </TouchableOpacity>
+          </Touchable>
         ) : isTruncated ? (
           <View style={styles.noticeInner}>
             <Ionicons name="information-circle-outline" size={12} color={T.textDim} />
             <Text style={styles.truncatedText}>Too many sessions — some not shown</Text>
           </View>
         ) : monthPartlyLocked ? (
-          <TouchableOpacity
+          <Touchable
             style={styles.noticeInner}
             onPress={onUpgradePress}
-            accessibilityRole="button"
             accessibilityLabel="Upgrade to see older history"
           >
             <Ionicons name="lock-closed" size={12} color={T.gold} />
             <Text style={styles.lockText}>Upgrade to see older history</Text>
-          </TouchableOpacity>
+          </Touchable>
         ) : null}
       </View>
 
@@ -135,11 +135,13 @@ export function MonthGrid({
             const markers = dayData?.markers ?? [];
             const label = `${MONTH_NAMES[month0]} ${day}, ${year}`;
             return (
-              <TouchableOpacity
+              <Touchable
                 key={col}
                 style={styles.cell}
                 onPress={() => onDayPress(iso)}
-                accessibilityRole="button"
+                // The haptic is fired by handleDayPress on the calendar screen,
+                // which also decides whether this opens the day or the paywall.
+                haptic={false}
                 // Tapping a locked day opens the paywall, not the day — say so,
                 // rather than announcing a date that won't open.
                 accessibilityLabel={dayLocked ? `${label}, locked — upgrade to view` : label}
@@ -155,32 +157,14 @@ export function MonthGrid({
                     {day}
                   </Text>
                 </View>
-                <View style={styles.dotRow}>
-                  {markers.map((m) => (
-                    <View
-                      key={`${m.style}-${m.tone}`}
-                      style={[styles.dot, styles[m.style], toneStyle(m, styles)]}
-                    />
-                  ))}
-                  {/* More distinct markers than the cell has room for. Without
-                      this the extra sessions vanish with no trace. */}
-                  {dayData?.overflow && <Text style={styles.overflowGlyph}>+</Text>}
-                </View>
-              </TouchableOpacity>
+                <DayDots markers={markers} overflow={dayData?.overflow} />
+              </Touchable>
             );
           })}
         </View>
       ))}
     </View>
   );
-}
-
-/** Tone is applied after style so a ring gets a border colour, a dot a fill. */
-function toneStyle(m: DayMarker, styles: ReturnType<typeof makeStyles>) {
-  if (m.tone === 'muted') return styles.toneMuted;
-  const filled = m.style === 'filled';
-  if (m.tone === 'mat') return filled ? styles.matFill : styles.matRing;
-  return filled ? styles.gymFill : styles.gymRing;
 }
 
 function makeStyles(T: ThemeColors) {
@@ -214,22 +198,5 @@ function makeStyles(T: ThemeColors) {
     dayNumToday: { color: T.onPrimary },
     dayNumLocked: { color: T.muted },
 
-    dotRow: { flexDirection: 'row', gap: 3, height: 7, alignItems: 'center' },
-    dot: { width: 6, height: 6, borderRadius: 3 },
-    // Completed: solid. In progress: ring with a solid core. Planned: ring.
-    // Skipped: muted ring.
-    filled: { width: 5, height: 5 },
-    core: { width: 7, height: 7, borderRadius: 4, borderWidth: 2 },
-    hollow: { borderWidth: 1.5, backgroundColor: 'transparent' },
-    // Overdue: a heavier muted ring, so a planned day that has passed doesn't
-    // look identical to one still coming up.
-    overdue: { borderWidth: 2, backgroundColor: 'transparent', borderStyle: 'dashed' },
-    faded: { borderWidth: 1.5, backgroundColor: 'transparent' },
-    gymFill: { backgroundColor: T.primary },
-    gymRing: { borderColor: T.primary, backgroundColor: 'transparent' },
-    matFill: { backgroundColor: T.grappling },
-    matRing: { borderColor: T.grappling, backgroundColor: 'transparent' },
-    toneMuted: { borderColor: T.muted, backgroundColor: 'transparent' },
-    overflowGlyph: { fontFamily: F.uiBold, fontSize: 9, color: T.textDim, marginLeft: 1 },
   });
 }

@@ -12,7 +12,6 @@ import {
   Text,
   TextInput,
   type TextStyle,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import LottieView from 'lottie-react-native';
@@ -109,6 +108,8 @@ import {
 import { isOptimisticId, reorderPayload } from '../../../src/lib/reorder';
 import { generateWarmupRamp } from '../../../src/lib/warmup';
 import { cancelScheduled, cancelScheduledByKind, scheduleInSeconds } from '../../../src/lib/notifications';
+import { Touchable } from '../../../src/components/ui';
+import { TYPE } from '../../../src/theme/type';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -285,9 +286,9 @@ function PickExerciseModal({ visible, onClose, onPick, title = 'Add Exercise' }:
         <View style={styles.modal}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{title}</Text>
-            <TouchableOpacity onPress={handleClose}>
+            <Touchable onPress={handleClose} hasTextChild>
               <Text style={styles.modalCancel}>Cancel</Text>
-            </TouchableOpacity>
+            </Touchable>
           </View>
           <TextInput
             style={styles.modalSearch}
@@ -319,20 +320,20 @@ function PickExerciseModal({ visible, onClose, onPick, title = 'Add Exercise' }:
               keyExtractor={(i) => i.id}
               keyboardShouldPersistTaps="handled"
               renderItem={({ item }) => (
-                <TouchableOpacity style={styles.pickRow} onPress={() => { onPick(item); handleClose(); }}>
+                <Touchable style={styles.pickRow} onPress={() => { onPick(item); handleClose(); }} hasTextChild>
                   <View style={styles.pickInfo}>
                     <Text style={styles.pickName}>{item.name}</Text>
                     <Text style={styles.pickMeta}>{item.equipment ?? item.muscleGroup ?? item.type}</Text>
                   </View>
-                </TouchableOpacity>
+                </Touchable>
               )}
               ItemSeparatorComponent={() => <View style={styles.separator} />}
               ListEmptyComponent={
                 trimmed ? (
-                  <TouchableOpacity style={styles.createExRow} onPress={handleCreatePress} activeOpacity={0.7}>
+                  <Touchable style={styles.createExRow} onPress={handleCreatePress} feedback="row" hasTextChild>
                     <Ionicons name="add-circle-outline" size={20} color={T.primary} />
                     <Text style={styles.createExText}>Create exercise "{trimmed}"</Text>
-                  </TouchableOpacity>
+                  </Touchable>
                 ) : (
                   <View style={styles.centered}><Text style={styles.emptyText}>No exercises found.</Text></View>
                 )
@@ -381,9 +382,9 @@ function CreateExerciseInSessionModal({
       >
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>New Exercise</Text>
-          <TouchableOpacity onPress={onClose}>
+          <Touchable onPress={onClose} hasTextChild>
             <Text style={styles.modalCancel}>Cancel</Text>
-          </TouchableOpacity>
+          </Touchable>
         </View>
         <ExerciseForm
           key={visible ? (initialName || '_') : ''}
@@ -412,9 +413,9 @@ function PickDisciplineModal({ visible, onClose, onPick }: {
       <View style={styles.modal}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Add Discipline</Text>
-          <TouchableOpacity onPress={onClose}>
+          <Touchable onPress={onClose} hasTextChild>
             <Text style={styles.modalCancel}>Cancel</Text>
-          </TouchableOpacity>
+          </Touchable>
         </View>
         {isLoading ? (
           <View style={styles.centered}><ActivityIndicator color={T.primary} /></View>
@@ -430,10 +431,10 @@ function PickDisciplineModal({ visible, onClose, onPick }: {
             data={disciplines ?? []}
             keyExtractor={(i) => i.id}
             renderItem={({ item }) => (
-              <TouchableOpacity style={styles.pickRow} onPress={() => { onPick(item); onClose(); }}>
+              <Touchable style={styles.pickRow} onPress={() => { onPick(item); onClose(); }} hasTextChild>
                 <Text style={styles.pickName}>{item.name}</Text>
                 <Text style={styles.pickMeta}>{item.category}</Text>
-              </TouchableOpacity>
+              </Touchable>
             )}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
             ListEmptyComponent={<View style={styles.centered}><Text style={styles.emptyText}>No disciplines found.</Text></View>}
@@ -609,7 +610,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
     <View style={[styles.setRow, isDone && { backgroundColor: withAlpha(typeColor, 0.08) }]}>
       {/* Number circle / warm-up — tap to toggle complete */}
       <View style={styles.setCircleCol}>
-        <TouchableOpacity
+        <Touchable
           style={[
             styles.setCircle,
             { borderColor: typeColor },
@@ -617,7 +618,6 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
           ]}
           onPress={toggleComplete}
           disabled={updateSet.isPending || isOptimistic}
-          accessibilityRole="button"
           accessibilityLabel={`Set ${displayNumber ?? 'warm-up'}, ${SET_TYPE_LABEL[set.setType]} — ${isDone ? 'completed, tap to un-complete' : 'tap to complete'}`}
         >
           {isDone ? (
@@ -627,7 +627,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
           ) : (
             <Text style={styles.setCircleText}>{displayNumber}</Text>
           )}
-        </TouchableOpacity>
+        </Touchable>
         {set.setType !== 'normal' && (
           <Text style={[styles.setTypeLabel, { color: typeColor }]}>
             {SET_TYPE_SHORT[set.setType]}
@@ -715,17 +715,27 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
         </>
       )}
 
-      <TouchableOpacity style={styles.menuBtn} onPress={() => setShowNote((v) => !v)}>
+      <Touchable
+        style={styles.menuBtn}
+        onPress={() => setShowNote((v) => !v)}
+        accessibilityLabel={hasNote ? 'Edit note' : 'Add a note'}
+        accessibilityState={{ expanded: showNote }}
+      >
         <Ionicons
           name={hasNote ? 'document-text' : 'document-text-outline'}
           size={15}
           color={hasNote ? T.primary : T.muted}
         />
-      </TouchableOpacity>
+      </Touchable>
 
-      <TouchableOpacity style={styles.menuBtn} onPress={onOpenMenu} disabled={isOptimistic}>
+      <Touchable
+        style={styles.menuBtn}
+        onPress={onOpenMenu}
+        disabled={isOptimistic}
+        accessibilityLabel="More actions for this exercise"
+      >
         <Ionicons name="ellipsis-vertical" size={16} color={T.muted} />
-      </TouchableOpacity>
+      </Touchable>
     </View>
 
     {(showNote || hasNote) && (
@@ -762,30 +772,30 @@ function SetActionsMenu({ set, onSetType, onDuplicate, onDelete, onPlateMath, on
   const SET_TYPE_COLOR = useMemo(() => setTypeColors(T), [T]);
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={styles.menuBackdrop} activeOpacity={1} onPress={onClose}>
+      <Touchable style={styles.menuBackdrop} onPress={onClose} feedback="row" hasTextChild>
         <View style={styles.menuSheet}>
           <Text style={styles.menuHeader}>Set type</Text>
           {SET_TYPE_CYCLE.map((t) => (
-            <TouchableOpacity key={t} style={styles.menuItem} onPress={() => { onSetType(t); onClose(); }}>
+            <Touchable key={t} style={styles.menuItem} onPress={() => { onSetType(t); onClose(); }} hasTextChild>
               <Text style={[styles.menuItemText, { color: SET_TYPE_COLOR[t] }]}>{SET_TYPE_LABEL[t]}</Text>
               {set.setType === t && <Ionicons name="checkmark" size={16} color={T.primary} />}
-            </TouchableOpacity>
+            </Touchable>
           ))}
           <View style={styles.menuDivider} />
-          <TouchableOpacity style={styles.menuItem} onPress={() => { onPlateMath(); onClose(); }}>
+          <Touchable style={styles.menuItem} onPress={() => { onPlateMath(); onClose(); }} hasTextChild>
             <Ionicons name="barbell-outline" size={16} color={T.textDim} />
             <Text style={styles.menuItemText}>Plate math</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.menuItem} onPress={() => { onDuplicate(); onClose(); }}>
+          </Touchable>
+          <Touchable style={styles.menuItem} onPress={() => { onDuplicate(); onClose(); }} hasTextChild>
             <Ionicons name="copy-outline" size={16} color={T.textDim} />
             <Text style={styles.menuItemText}>Duplicate set</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.menuItem} onPress={() => { onDelete(); onClose(); }}>
+          </Touchable>
+          <Touchable style={styles.menuItem} onPress={() => { onDelete(); onClose(); }} hasTextChild>
             <Ionicons name="trash-outline" size={16} color={T.danger} />
             <Text style={[styles.menuItemText, { color: T.danger }]}>Delete set</Text>
-          </TouchableOpacity>
+          </Touchable>
         </View>
-      </TouchableOpacity>
+      </Touchable>
     </Modal>
   );
 }
@@ -818,18 +828,19 @@ function RestTimerSheet({ current, onSelect, onClose }: {
 
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={styles.menuBackdrop} activeOpacity={1} onPress={onClose}>
+      <Touchable style={styles.menuBackdrop} onPress={onClose} feedback="row" hasTextChild>
         <View style={styles.menuSheet} onStartShouldSetResponder={() => true}>
           <Text style={styles.menuHeader}>Rest Timer</Text>
           {REST_PRESETS.map((p) => (
-            <TouchableOpacity
+            <Touchable
               key={String(p.value)}
               style={styles.menuItem}
               onPress={() => { onSelect(p.value); onClose(); }}
+              hasTextChild
             >
               <Text style={styles.menuItemText}>{p.label}</Text>
               {current === p.value && <Ionicons name="checkmark" size={16} color={T.primary} />}
-            </TouchableOpacity>
+            </Touchable>
           ))}
           <View style={styles.restCustomRow}>
             <TextInput
@@ -842,18 +853,17 @@ function RestTimerSheet({ current, onSelect, onClose }: {
               maxLength={3}
               accessibilityLabel="Custom rest duration in seconds"
             />
-            <TouchableOpacity
+            <Touchable
               style={[styles.restCustomSet, !customValid && { opacity: 0.4 }]}
               disabled={!customValid}
               onPress={() => { if (customParsed !== null) { onSelect(customParsed); onClose(); } }}
-              accessibilityRole="button"
               accessibilityLabel="Set custom rest duration"
             >
               <Text style={styles.restCustomSetText}>Set</Text>
-            </TouchableOpacity>
+            </Touchable>
           </View>
         </View>
-      </TouchableOpacity>
+      </Touchable>
     </Modal>
   );
 }
@@ -871,39 +881,36 @@ function EntryContextMenu({ onSwap, onGenerateWarmups, warmupsDisabled, onRemove
   const styles = useMemo(() => makeStyles(T), [T]);
   return (
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={styles.menuBackdrop} activeOpacity={1} onPress={onClose}>
+      <Touchable style={styles.menuBackdrop} onPress={onClose} feedback="row" hasTextChild>
         <View style={styles.menuSheet}>
           <Text style={styles.menuHeader}>Exercise</Text>
-          <TouchableOpacity
+          <Touchable
             style={styles.menuItem}
             onPress={() => { onSwap(); onClose(); }}
-            accessibilityRole="button"
             accessibilityLabel="Swap exercise"
           >
             <Ionicons name="swap-horizontal-outline" size={16} color={T.textDim} />
             <Text style={styles.menuItemText}>Swap exercise</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
+          </Touchable>
+          <Touchable
             style={[styles.menuItem, warmupsDisabled && { opacity: 0.4 }]}
             onPress={() => { if (!warmupsDisabled) { onGenerateWarmups(); onClose(); } }}
             disabled={warmupsDisabled}
-            accessibilityRole="button"
             accessibilityLabel="Generate warm-up sets"
           >
             <Ionicons name="flame-outline" size={16} color={T.gold} />
             <Text style={styles.menuItemText}>Generate warm-ups</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
+          </Touchable>
+          <Touchable
             style={styles.menuItem}
             onPress={() => { onRemove(); onClose(); }}
-            accessibilityRole="button"
             accessibilityLabel="Remove exercise from session"
           >
             <Ionicons name="trash-outline" size={16} color={T.danger} />
             <Text style={[styles.menuItemText, { color: T.danger }]}>Remove exercise</Text>
-          </TouchableOpacity>
+          </Touchable>
         </View>
-      </TouchableOpacity>
+      </Touchable>
     </Modal>
   );
 }
@@ -1130,12 +1137,11 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
     // No `layout` animation here — see the DraggableFlatList note in CLAUDE.md.
     <Animated.View style={styles.entryCard}>
       <View style={styles.entryHead}>
-        <TouchableOpacity
+        <Touchable
           style={styles.entryNameBtn}
-          onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onToggleCollapse?.(); }}
+          onPress={() => onToggleCollapse?.()}
           onLongPress={onDrag}
           delayLongPress={150}
-          accessibilityRole="button"
           accessibilityState={{ expanded: !collapsed }}
           accessibilityLabel={`${entry.exerciseName ?? 'Exercise'}, ${collapsed ? 'collapsed' : 'expanded'}`}
         >
@@ -1148,28 +1154,25 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
               </Text>
             )}
           </View>
-        </TouchableOpacity>
+        </Touchable>
         <View style={styles.entryHeadRight}>
           {!collapsed && (
             <>
-              <TouchableOpacity
+              <Touchable
                 onPress={() => setShowRestSheet(true)}
                 style={styles.restChip}
-                accessibilityRole="button"
                 accessibilityLabel={`Rest timer, ${restChipLabel}, tap to change`}
               >
                 <Text style={styles.restChipText}>Rest: {restChipLabel}</Text>
-              </TouchableOpacity>
+              </Touchable>
               {sessionActive && restSeconds > 0 && (
-                <TouchableOpacity
+                <Touchable
                   onPress={() => {
-                    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                     if (restingActive) onStopRest();
                     else onStartRest(restSeconds);
                   }}
                   style={[styles.restPlayBtn, restingActive && styles.restPlayBtnActive]}
                   disabled={isOptimisticEntry}
-                  accessibilityRole="button"
                   accessibilityLabel={restingActive ? 'Stop rest timer' : 'Start rest timer'}
                 >
                   <Ionicons
@@ -1177,23 +1180,22 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
                     size={12}
                     color={restingActive ? T.primary : T.textDim}
                   />
-                </TouchableOpacity>
+                </Touchable>
               )}
             </>
           )}
           {collapsed
             ? <View style={styles.gymDotBadge} />
             : <View style={styles.gymBadge}><Text style={styles.gymBadgeText}>Gym</Text></View>}
-          <TouchableOpacity
+          <Touchable
             style={styles.entryMenuBtn}
-            onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowEntryMenu(true); }}
+            onPress={() => setShowEntryMenu(true)}
             disabled={entryMutationPending}
             hitSlop={6}
-            accessibilityRole="button"
             accessibilityLabel="Exercise options"
           >
             <Ionicons name="ellipsis-vertical" size={16} color={T.textDim} />
-          </TouchableOpacity>
+          </Touchable>
         </View>
       </View>
 
@@ -1210,31 +1212,29 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
             </Text>
             <Text style={styles.overloadReason} numberOfLines={1}>{overload.reason}</Text>
           </View>
-          <TouchableOpacity
+          <Touchable
             style={styles.overloadApply}
             onPress={handleApplyOverload}
             disabled={updateSet.isPending || addSet.isPending}
-            accessibilityRole="button"
             accessibilityLabel="Apply suggested weight"
           >
             <Text style={styles.overloadApplyText}>Apply</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
+          </Touchable>
+          <Touchable
             onPress={() => setOverloadDismissed(true)}
             hitSlop={8}
-            accessibilityRole="button"
             accessibilityLabel="Dismiss suggestion"
           >
             <Ionicons name="close" size={16} color={T.muted} />
-          </TouchableOpacity>
+          </Touchable>
         </View>
       )}
 
       {/* Warm-up */}
-      <TouchableOpacity style={styles.addSubRow} onPress={handleAddWarmup} disabled={addSet.isPending || isOptimisticEntry}>
+      <Touchable style={styles.addSubRow} onPress={handleAddWarmup} disabled={addSet.isPending || isOptimisticEntry} hasTextChild>
         <Ionicons name="add" size={15} color={T.gold} />
         <Text style={[styles.addSubText, { color: T.gold }]}>Warm-up</Text>
-      </TouchableOpacity>
+      </Touchable>
       {warmups.map((set) => (
         <SetRow
           key={set.id}
@@ -1278,7 +1278,7 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
         />
       ))}
 
-      <TouchableOpacity style={styles.addSetBtn} onPress={handleAddSet} disabled={addSet.isPending || isOptimisticEntry}>
+      <Touchable style={styles.addSetBtn} onPress={handleAddSet} disabled={addSet.isPending || isOptimisticEntry} hasTextChild>
         {addSet.isPending ? (
           <ActivityIndicator size="small" color={T.textDim} />
         ) : (
@@ -1287,7 +1287,7 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
             <Text style={styles.addSetText}>Set</Text>
           </>
         )}
-      </TouchableOpacity>
+      </Touchable>
       </Animated.View>
       )}
 
@@ -1471,12 +1471,11 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, disciplinesError,
 
   const head = (name: string) => (
     <View style={styles.entryHead}>
-      <TouchableOpacity
+      <Touchable
         style={styles.entryNameBtn}
-        onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onToggleCollapse?.(); }}
+        onPress={() => onToggleCollapse?.()}
         onLongPress={onDrag}
         delayLongPress={150}
-        accessibilityRole="button"
         accessibilityState={{ expanded: !collapsed }}
         accessibilityLabel={`${name}, ${collapsed ? 'collapsed' : 'expanded'}`}
       >
@@ -1485,7 +1484,7 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, disciplinesError,
           <Text style={styles.entryName} numberOfLines={1}>{name}</Text>
           {collapsed && <Text style={styles.entryProgress}>{summary}</Text>}
         </View>
-      </TouchableOpacity>
+      </Touchable>
       {collapsed ? (
         <View style={[styles.gymDotBadge, { backgroundColor: dirty ? T.gold : T.grappling }]} />
       ) : (
@@ -1553,13 +1552,14 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, disciplinesError,
               <Text style={styles.maLabel}>{field.label}</Text>
               <View style={styles.enumRow}>
                 {enumField.options.map((opt) => (
-                  <TouchableOpacity
+                  <Touchable
                     key={opt}
                     style={[styles.enumOpt, current === opt && styles.enumOptActive]}
                     onPress={() => setField(field.key, opt)}
+                    hasTextChild
                   >
                     <Text style={[styles.enumOptText, current === opt && styles.enumOptTextActive]}>{opt}</Text>
-                  </TouchableOpacity>
+                  </Touchable>
                 ))}
               </View>
             </View>
@@ -1648,7 +1648,7 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, disciplinesError,
         return null;
       })}
 
-      <TouchableOpacity
+      <Touchable
         style={[
           styles.maSaveBtn,
           (updateEntry.isPending || justSaved || !dirty) && { opacity: 0.6 },
@@ -1657,13 +1657,12 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, disciplinesError,
         // onPress={handleSave} would surface that as an unhandled rejection.
         onPress={() => { handleSave().catch(() => {}); }}
         disabled={updateEntry.isPending || !dirty || entry.id.startsWith('optimistic-')}
-        accessibilityRole="button"
         accessibilityLabel={dirty ? 'Save logged rounds' : 'Rounds saved'}
       >
         {updateEntry.isPending
           ? <ActivityIndicator size="small" color={T.onPrimary} />
           : <Text style={styles.maSaveBtnText}>{justSaved || !dirty ? 'Saved ✓' : 'Save'}</Text>}
-      </TouchableOpacity>
+      </Touchable>
       </Animated.View>
       )}
     </Animated.View>
@@ -1731,9 +1730,9 @@ function FocusChecklistCard({ session, isActive }: {
         <Text style={styles.focusHintText}>
           Set what you want to work on and tick it off as you train.
         </Text>
-        <TouchableOpacity onPress={() => router.push('/focuses' as never)} activeOpacity={0.7}>
+        <Touchable onPress={() => router.push('/focuses' as never)} feedback="row" hasTextChild>
           <Text style={styles.focusHintLink}>Add a focus →</Text>
-        </TouchableOpacity>
+        </Touchable>
       </View>
     );
   }
@@ -1747,12 +1746,14 @@ function FocusChecklistCard({ session, isActive }: {
       {rows.map((focus) => {
         const on = selected.has(focus.id);
         return (
-          <TouchableOpacity
+          <Touchable
             key={focus.id}
             style={styles.focusRow}
             onPress={() => toggle(focus.id)}
-            activeOpacity={isActive ? 0.7 : 1}
+            feedback="row"
             disabled={!isActive}
+            hasTextChild
+            accessibilityState={{ checked: on }}
           >
             <View style={[styles.focusCheckbox, on && styles.focusCheckboxOn]}>
               {on && <Ionicons name="checkmark" size={14} color={T.onPrimary} />}
@@ -1763,7 +1764,7 @@ function FocusChecklistCard({ session, isActive }: {
                 <Text style={styles.focusRowMeta}>{focus.disciplineName}</Text>
               )}
             </View>
-          </TouchableOpacity>
+          </Touchable>
         );
       })}
     </View>
@@ -1890,9 +1891,14 @@ function SessionSettingsSheet({ session, routineName, onSave, onCancel, onFinish
       <View style={styles.settingsContainer}>
         {/* Sheet header */}
         <View style={styles.settingsHeader}>
-          <TouchableOpacity onPress={handleClose} style={styles.settingsCloseBtn}>
+          <Touchable
+            onPress={handleClose}
+            style={styles.settingsCloseBtn}
+            haptic={false}
+            accessibilityLabel="Close session settings"
+          >
             <Ionicons name="close" size={22} color={T.text} />
-          </TouchableOpacity>
+          </Touchable>
           <Text style={styles.settingsTitle}>Session Settings</Text>
           <View style={{ width: 40 }} />
         </View>
@@ -1963,25 +1969,27 @@ function SessionSettingsSheet({ session, routineName, onSave, onCancel, onFinish
             const busy = isPending || isDiscarding || isSaving;
             return (
               <>
-                <TouchableOpacity
+                <Touchable
                   style={[styles.settingsFinishBtn, busy && { opacity: 0.5 }]}
                   onPress={handleFinish}
                   disabled={busy}
+                  hasTextChild
                 >
                   {isPending
                     ? <ActivityIndicator size="small" color={T.onPrimary} />
                     : <Text style={styles.settingsFinishBtnText}>Finish Workout</Text>}
-                </TouchableOpacity>
+                </Touchable>
 
-                <TouchableOpacity
+                <Touchable
                   style={[styles.settingsDiscardBtn, busy && { opacity: 0.5 }]}
                   onPress={onDiscard}
                   disabled={busy}
+                  hasTextChild
                 >
                   {isDiscarding
                     ? <ActivityIndicator size="small" color={T.danger} />
                     : <Text style={styles.settingsDiscardBtnText}>Discard Workout</Text>}
-                </TouchableOpacity>
+                </Touchable>
               </>
             );
           })()}
@@ -2510,9 +2518,9 @@ export default function SessionScreen() {
         {/* A dropped connection is the likeliest cause and it's recoverable, so
             offer the retry before the exit — this used to be a dead end. */}
         <InlineError message="Couldn't load this session." onRetry={() => { void refetchSession(); }} />
-        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 4 }}>
+        <Touchable onPress={() => router.back()} style={{ marginTop: 4 }} hasTextChild>
           <Text style={{ fontFamily: F.uiMed, color: T.primary }}>Go back</Text>
-        </TouchableOpacity>
+        </Touchable>
       </View>
     );
   }
@@ -2576,9 +2584,14 @@ export default function SessionScreen() {
       {/* StrengthLog-style header */}
       <View style={styles.header}>
         {/* Left: X button */}
-        <TouchableOpacity onPress={handleBack} style={styles.headerIconBtn}>
+        <Touchable
+          onPress={handleBack}
+          style={styles.headerIconBtn}
+          haptic={false}
+          accessibilityLabel="Close this session"
+        >
           <Ionicons name="close" size={20} color={T.danger} />
-        </TouchableOpacity>
+        </Touchable>
 
         {/* Center: scheduled date when planned, timer when live, name when done */}
         <View style={styles.headerCenter}>
@@ -2615,10 +2628,9 @@ export default function SessionScreen() {
         {isActive ? (
           <View style={styles.headerActions}>
             {session.entries.length > 1 && (
-              <TouchableOpacity
+              <Touchable
                 style={styles.headerIconBtn}
                 onPress={toggleCollapseAll}
-                accessibilityRole="button"
                 accessibilityLabel={allCollapsed ? 'Expand all exercises' : 'Collapse all exercises'}
               >
                 <Ionicons
@@ -2626,14 +2638,18 @@ export default function SessionScreen() {
                   size={20}
                   color={T.textDim}
                 />
-              </TouchableOpacity>
+              </Touchable>
             )}
-            <TouchableOpacity style={styles.headerIconBtn} onPress={() => setShowSettings(true)}>
+            <Touchable
+              style={styles.headerIconBtn}
+              onPress={() => setShowSettings(true)}
+              accessibilityLabel="Session settings"
+            >
               <Ionicons name="settings-outline" size={20} color={T.textDim} />
-            </TouchableOpacity>
+            </Touchable>
             {/* A planned or skipped session can't finish — start it first. */}
             {!notYetStarted && (
-              <TouchableOpacity
+              <Touchable
                 style={[
                   styles.headerIconBtn,
                   styles.headerFinishBtn,
@@ -2641,13 +2657,12 @@ export default function SessionScreen() {
                 ]}
                 onPress={() => setShowSettings(true)}
                 disabled={!canFinish || completeSession.isPending}
-                accessibilityRole="button"
                 accessibilityLabel="Finish workout"
               >
                 {completeSession.isPending
                   ? <ActivityIndicator size="small" color={T.onPrimary} />
                   : <Ionicons name="checkmark" size={20} color={T.onPrimary} />}
-              </TouchableOpacity>
+              </Touchable>
             )}
           </View>
         ) : (
@@ -2658,13 +2673,12 @@ export default function SessionScreen() {
       {/* Pinned bar for a session that hasn't started: start, move, or skip it. */}
       {notYetStarted && (
         <View style={styles.plannedBar}>
-          <TouchableOpacity
+          <Touchable
             style={{ flex: 1 }}
             onPress={handleStartPlanned}
             disabled={startSession.isPending}
-            activeOpacity={0.8}
-            accessibilityRole="button"
             accessibilityLabel="Start workout"
+            feedback="card"
           >
             <CutCornerView fill={T.primary} style={styles.startCta}>
               {startSession.isPending ? (
@@ -2674,27 +2688,25 @@ export default function SessionScreen() {
               )}
               <Text style={styles.startCtaText}>Start workout</Text>
             </CutCornerView>
-          </TouchableOpacity>
-          <TouchableOpacity
+          </Touchable>
+          <Touchable
             style={styles.rescheduleBtn}
             onPress={() => setShowReschedule(true)}
-            accessibilityRole="button"
             accessibilityLabel="Reschedule workout"
           >
             <Ionicons name="calendar-outline" size={16} color={T.textDim} />
             <Text style={styles.rescheduleText}>Move</Text>
-          </TouchableOpacity>
+          </Touchable>
           {isPlanned && (
-            <TouchableOpacity
+            <Touchable
               style={styles.rescheduleBtn}
               onPress={handleSkipPlanned}
               disabled={skipSession.isPending}
-              accessibilityRole="button"
               accessibilityLabel="Skip workout"
             >
               <Ionicons name="close-circle-outline" size={16} color={T.textDim} />
               <Text style={styles.rescheduleText}>Skip</Text>
-            </TouchableOpacity>
+            </Touchable>
           )}
         </View>
       )}
@@ -2773,10 +2785,11 @@ export default function SessionScreen() {
               <View style={styles.entryItem}>
                 {/* Superset links describe adjacency, which is meaningless mid-drag. */}
                 {canLink && !isDragging && (
-                  <TouchableOpacity
+                  <Touchable
                     style={styles.supersetLink}
                     onPress={() => toggleSuperset(prev, entry, linkedAbove)}
-                    activeOpacity={0.7}
+                    feedback="row"
+                    hasTextChild
                   >
                     <Ionicons
                       name={linkedAbove ? 'link' : 'link-outline'}
@@ -2786,7 +2799,7 @@ export default function SessionScreen() {
                     <Text style={[styles.supersetLinkText, linkedAbove && { color: T.primary }]}>
                       {linkedAbove ? 'Superset' : 'Superset with above'}
                     </Text>
-                  </TouchableOpacity>
+                  </Touchable>
                 )}
                 <View style={[grouped ? styles.supersetGrouped : undefined, isDragging && styles.entryDragging]}>
                   {entry.kind === 'exercise' ? (
@@ -2831,16 +2844,16 @@ export default function SessionScreen() {
             {/* A session is either weightlifting or martial arts — never both.
                 Once the first entry sets the kind, only that kind can be added. */}
             {!hasMartialArts && (
-              <TouchableOpacity style={styles.addEntryBtn} onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowExercisePicker(true); }}>
+              <Touchable style={styles.addEntryBtn} onPress={() => setShowExercisePicker(true)} hasTextChild>
                 <Ionicons name="add" size={16} color={T.textDim} />
                 <Text style={styles.addEntryText}>Exercise</Text>
-              </TouchableOpacity>
+              </Touchable>
             )}
             {!hasExercise && (
-              <TouchableOpacity style={styles.addEntryBtn} onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setShowDisciplinePicker(true); }}>
+              <Touchable style={styles.addEntryBtn} onPress={() => setShowDisciplinePicker(true)} hasTextChild>
                 <Ionicons name="add" size={16} color={T.textDim} />
                 <Text style={styles.addEntryText}>Discipline</Text>
-              </TouchableOpacity>
+              </Touchable>
             )}
           </View>
         )}
@@ -2977,16 +2990,15 @@ export default function SessionScreen() {
                 </View>
               )}
 
-              <TouchableOpacity
+              <Touchable
                 onPress={() => { setSummary(null); router.back(); }}
-                activeOpacity={0.85}
-                accessibilityRole="button"
                 accessibilityLabel="Close workout summary"
+                feedback="cta"
               >
                 <CutCornerView fill={T.primary} style={styles.summaryDoneBtn}>
                   <Text style={styles.summaryDoneText}>Done</Text>
                 </CutCornerView>
-              </TouchableOpacity>
+              </Touchable>
             </CutCornerView>
           </View>
         </View>
@@ -2998,12 +3010,13 @@ export default function SessionScreen() {
         animationType="fade"
         onRequestClose={() => setShowReschedule(false)}
       >
-        <TouchableOpacity
+        <Touchable
           style={styles.rescheduleOverlay}
-          activeOpacity={1}
           onPress={() => setShowReschedule(false)}
+          feedback="row"
+          hasTextChild
         >
-          <TouchableOpacity activeOpacity={1} style={styles.rescheduleCard}>
+          <Touchable style={styles.rescheduleCard} feedback="row" hasTextChild>
             <Text style={styles.rescheduleTitle}>Reschedule to</Text>
             {/* Moving a planned session into the past makes it instantly overdue,
                 and the API rejects it — so those days must not look tappable. */}
@@ -3012,8 +3025,8 @@ export default function SessionScreen() {
               onChange={handleReschedule}
               minISO={localTodayISO()}
             />
-          </TouchableOpacity>
-        </TouchableOpacity>
+          </Touchable>
+        </Touchable>
       </Modal>
     </View>
   );
@@ -3023,6 +3036,7 @@ function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
   screen: { flex: 1, backgroundColor: T.bg },
   loadingScreen: { flex: 1, backgroundColor: T.bg, alignItems: 'center', justifyContent: 'center' },
+  // eslint-disable-next-line no-restricted-syntax -- Loading skeleton — stands in for a Section rather than being one.
   skeletonCard: { borderTopWidth: 1, borderTopColor: T.borderStrong, paddingVertical: 14 },
   skeletonSetRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
   errorText: { fontFamily: F.ui, fontSize: 15, color: T.danger, textAlign: 'center' },
@@ -3110,6 +3124,7 @@ function makeStyles(T: ThemeColors) {
   emptyEntries: { alignItems: 'center', paddingVertical: 48 },
   summaryBar: {
     flexDirection: 'row', alignItems: 'center',
+    // eslint-disable-next-line no-restricted-syntax -- Summary bar sits inside the header, not the section flow.
     borderTopWidth: 1, borderTopColor: T.borderStrong,
     borderBottomWidth: 1, borderBottomColor: T.borderStrong,
     paddingVertical: 12, marginBottom: 4,
@@ -3127,6 +3142,7 @@ function makeStyles(T: ThemeColors) {
   // Broadsheet: entries are flat rule-separated sections, not floating cards.
   entryCard: {
     borderTopWidth: 1,
+    // eslint-disable-next-line no-restricted-syntax -- Entry card — a DraggableFlatList cell. Not converted without a release-build drag check.
     borderTopColor: T.borderStrong,
     paddingTop: 12,
     paddingBottom: 4,
@@ -3347,7 +3363,7 @@ function makeStyles(T: ThemeColors) {
   maSaveBtnText: { fontFamily: F.uiSemi, fontSize: 15, color: T.onPrimary },
 
   // Training focus checklist
-  focusCardTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
+  focusCardTitle: { ...TYPE.sectionLabel, color: T.textDim },
   focusCardSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: -2 },
   focusRow: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 5 },
   focusCheckbox: {
@@ -3544,6 +3560,7 @@ function makeStyles(T: ThemeColors) {
     textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 8,
   },
   settingsCard: {
+    // eslint-disable-next-line no-restricted-syntax -- Inside the settings modal, not the page flow.
     borderTopWidth: 1, borderTopColor: T.borderStrong,
   },
   settingsInput: {

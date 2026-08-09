@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useMemo, useState } from 'react';
@@ -17,6 +16,7 @@ import type { PartnerStatsItem } from '@app/shared';
 import { usePartnerStats, useUpdatePartner, useDeletePartner } from '../../../src/hooks/usePartners';
 import { Skeleton } from '../../../src/components/Skeleton';
 import { InlineError } from '../../../src/components/InlineError';
+import { Touchable } from '../../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -85,11 +85,15 @@ export default function PartnersScreen() {
   }
 
   const renderItem = ({ item }: { item: PartnerStatsItem }) => (
-    <TouchableOpacity
+    <Touchable
       style={styles.card}
-      activeOpacity={item.partnerId ? 0.7 : 1}
+      // An unnamed partner row has nothing to rename or delete, so it is inert
+      // rather than pressable-with-no-feedback (activeOpacity={1}, as it was).
+      disabled={!item.partnerId}
+      feedback="row"
       onLongPress={item.partnerId ? () => handleDelete(item) : undefined}
       onPress={item.partnerId ? () => openRename(item) : undefined}
+      hasTextChild
     >
       <View style={styles.cardHead}>
         <View style={[styles.avatar, !item.partnerId && { backgroundColor: T.surface2 }]}>
@@ -118,20 +122,19 @@ export default function PartnersScreen() {
           <Text style={styles.statLabel}>subs against</Text>
         </View>
       </View>
-    </TouchableOpacity>
+    </Touchable>
   );
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <Touchable
           style={styles.backBtn}
           onPress={() => router.back()}
-          accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <Ionicons name="chevron-back" size={22} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
         <Text style={styles.headerTitle}>Training Partners</Text>
       </View>
 
@@ -177,7 +180,7 @@ export default function PartnersScreen() {
       )}
 
       <Modal visible={!!renaming} transparent animationType="fade" onRequestClose={() => setRenaming(null)}>
-        <TouchableOpacity style={styles.modalBackdrop} activeOpacity={1} onPress={() => setRenaming(null)}>
+        <Touchable style={styles.modalBackdrop} onPress={() => setRenaming(null)} feedback="row" hasTextChild>
           <View style={styles.renameSheet}>
             <Text style={styles.renameTitle}>Rename partner</Text>
             <TextInput
@@ -191,15 +194,15 @@ export default function PartnersScreen() {
               onSubmitEditing={submitRename}
             />
             <View style={styles.renameActions}>
-              <TouchableOpacity onPress={() => setRenaming(null)} style={styles.renameBtn}>
+              <Touchable onPress={() => setRenaming(null)} style={styles.renameBtn} hasTextChild>
                 <Text style={styles.renameCancel}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={submitRename} style={[styles.renameBtn, styles.renameSave]}>
+              </Touchable>
+              <Touchable onPress={submitRename} style={[styles.renameBtn, styles.renameSave]} hasTextChild>
                 <Text style={styles.renameSaveText}>Save</Text>
-              </TouchableOpacity>
+              </Touchable>
             </View>
           </View>
-        </TouchableOpacity>
+        </Touchable>
       </Modal>
     </View>
   );
