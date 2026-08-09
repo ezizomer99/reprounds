@@ -14,7 +14,7 @@ import type { AppEnv } from '../env';
 import { estimatedOneRepMax, MAX_CUSTOM_EXERCISES_PER_USER, NAME_MAX_LENGTH } from '@app/shared';
 import { epleyE1rmSql } from '../lib/e1rm';
 import { parseMuscleSelection } from '../lib/muscles';
-import { isIsoDate, isWithinLength } from '../lib/validate';
+import { isIsoDate, isWithinLength, notUuid } from '../lib/validate';
 import type {
   CreateExerciseRequest,
   Exercise,
@@ -214,6 +214,7 @@ exerciseRoutes.post('/', async (c) => {
 exerciseRoutes.put('/:id/muscles', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
+  if (notUuid(id)) return c.json({ error: 'Not found' }, 404);
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
   let body: unknown;
@@ -263,6 +264,7 @@ exerciseRoutes.put('/:id/muscles', async (c) => {
 exerciseRoutes.delete('/:id/muscles', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
+  if (notUuid(id)) return c.json({ error: 'Not found' }, 404);
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
   const [existing] = await db
@@ -289,6 +291,7 @@ exerciseRoutes.delete('/:id/muscles', async (c) => {
 exerciseRoutes.get('/:id', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
+  if (notUuid(id)) return c.json({ error: 'Not found' }, 404);
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
   const [row] = await selectExercisesForUser(db, userId)
@@ -304,6 +307,7 @@ exerciseRoutes.get('/:id', async (c) => {
 exerciseRoutes.patch('/:id', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
+  if (notUuid(id)) return c.json({ error: 'Not found' }, 404);
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
   const existing = await db
@@ -352,6 +356,7 @@ exerciseRoutes.patch('/:id', async (c) => {
 exerciseRoutes.delete('/:id', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
+  if (notUuid(id)) return c.json({ error: 'Not found' }, 404);
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
   const existing = await db
@@ -404,6 +409,7 @@ function mapSet(row: typeof strengthSets.$inferSelect): StrengthSet {
 exerciseRoutes.get('/:id/history', async (c) => {
   const userId = c.get('userId');
   const exerciseId = c.req.param('id');
+  if (notUuid(exerciseId)) return c.json({ error: 'Not found' }, 404);
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
   const entryRows = await db
@@ -484,6 +490,7 @@ exerciseRoutes.get('/:id/history', async (c) => {
 exerciseRoutes.get('/:id/prs', async (c) => {
   const userId = c.get('userId');
   const exerciseId = c.req.param('id');
+  if (notUuid(exerciseId)) return c.json({ error: 'Not found' }, 404);
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
   // The PR is a max — compute it in the database instead of shipping every
@@ -584,6 +591,7 @@ exerciseRoutes.get('/:id/prs', async (c) => {
 exerciseRoutes.get('/:id/progression', async (c) => {
   const userId = c.get('userId');
   const exerciseId = c.req.param('id');
+  if (notUuid(exerciseId)) return c.json({ error: 'Not found' }, 404);
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
   const sinceParam = c.req.query('since');
