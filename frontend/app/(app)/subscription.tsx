@@ -17,6 +17,7 @@ import { useCurrentUser } from '../../src/hooks/useAuth';
 import { F, R, D, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { withAlpha } from '../../src/lib/color';
+import { InlineError } from '../../src/components/InlineError';
 
 const PLAY_STORE_SUBS_URL =
   'https://play.google.com/store/account/subscriptions?package=com.reprounds.app';
@@ -40,7 +41,14 @@ export default function SubscriptionScreen() {
   const styles = useMemo(() => makeStyles(T), [T]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { isPro: isRcPro, isLoading: subLoading, customerInfo, restorePurchases } = useSubscription();
+  const {
+    isPro: isRcPro,
+    isLoading: subLoading,
+    unavailable,
+    refreshEntitlement,
+    customerInfo,
+    restorePurchases,
+  } = useSubscription();
   const { data: user } = useCurrentUser();
   const [restoring, setRestoring] = useState(false);
 
@@ -72,8 +80,18 @@ export default function SubscriptionScreen() {
   async function handleRestore() {
     setRestoring(true);
     try {
-      await restorePurchases();
-      Alert.alert('Purchases restored', 'Your subscription has been restored.');
+      // restorePurchases() resolves whether or not anything came back, so
+      // "didn't throw" was never the same as "restored something" — a user with
+      // no purchase was still told their subscription had been restored.
+      const restored = await restorePurchases();
+      if (restored) {
+        Alert.alert('Purchases restored', 'Your RepRounds Pro subscription is active again.');
+      } else {
+        Alert.alert(
+          'Nothing to restore',
+          'No previous RepRounds Pro purchase was found for this store account. Make sure you’re signed in to the same account you bought it with.',
+        );
+      }
     } catch {
       Alert.alert('Restore failed', 'Could not restore purchases. Please try again.');
     } finally {
@@ -122,7 +140,19 @@ export default function SubscriptionScreen() {
             isTrial={isTrial}
             willRenew={willRenew}
             expirationDate={expirationDate}
+            /* Pro from a remembered answer rather than a live one — say so
+               instead of showing a renewal date we haven't confirmed. */
+            stale={unavailable}
           />
+        ) : unavailable ? (
+          /* The check failed and there was nothing remembered. Asserting
+             "Free Plan" here is what told paying subscribers they had nothing. */
+          <View style={styles.statusLoading}>
+            <InlineError
+              message="Couldn't check your subscription. Your Pro features aren't affected — this screen just can't confirm them right now."
+              onRetry={() => { void refreshEntitlement(); }}
+            />
+          </View>
         ) : (
           <FreeCard styles={styles} T={T} onUpgrade={() => router.push('/paywall' as never)} />
         )}
@@ -215,6 +245,7 @@ function ActiveCard({
   isTrial,
   willRenew,
   expirationDate,
+  stale,
 }: {
   styles: ReturnType<typeof makeStyles>;
   T: ThemeColors;
@@ -222,6 +253,8 @@ function ActiveCard({
   isTrial: boolean;
   willRenew: boolean;
   expirationDate: string | null;
+  /** Shown from the last remembered answer because the store was unreachable. */
+  stale?: boolean;
 }) {
   return (
     <View style={styles.statusCard}>
@@ -241,7 +274,11 @@ function ActiveCard({
           </View>
         ) : null}
       </View>
-      {expirationDate ? (
+      {stale ? (
+        <Text style={styles.statusSub}>
+          Offline — showing your last known status
+        </Text>
+      ) : expirationDate ? (
         <Text style={styles.statusSub}>
           {willRenew ? 'Renews' : 'Expires'} {new Intl.DateTimeFormat('en-US', {
             month: 'short', day: 'numeric', year: 'numeric',

@@ -24,6 +24,7 @@ import * as SecureStore from 'expo-secure-store';
 import { useEffect } from 'react';
 import { ThemeProvider, useTheme } from '../src/theme/ThemeContext';
 import { UnitProvider } from '../src/units/UnitContext';
+import { EffortProvider } from '../src/units/EffortContext';
 import { NotificationsProvider } from '../src/notifications/NotificationsContext';
 import { SubscriptionProvider } from '../src/context/SubscriptionContext';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
@@ -70,11 +71,13 @@ export default function RootLayout() {
     <ThemeProvider>
       <ErrorBoundary>
         <UnitProvider>
-          <NotificationsProvider>
-            <SubscriptionProvider>
-              <AppShell />
-            </SubscriptionProvider>
-          </NotificationsProvider>
+          <EffortProvider>
+            <NotificationsProvider>
+              <SubscriptionProvider>
+                <AppShell />
+              </SubscriptionProvider>
+            </NotificationsProvider>
+          </EffortProvider>
         </UnitProvider>
       </ErrorBoundary>
     </ThemeProvider>

@@ -27,8 +27,8 @@ export interface ActiveRest {
 
 let activeRest: ActiveRest | null = null;
 
-export function getActiveRest(sessionId: string): ActiveRest | null {
-  if (!activeRest || activeRest.sessionId !== sessionId) return null;
+export function getActiveRest(sessionId: string | undefined): ActiveRest | null {
+  if (!sessionId || !activeRest || activeRest.sessionId !== sessionId) return null;
   // Already elapsed — the notification has fired; nothing to restore.
   if (activeRest.endsAt <= Date.now()) {
     activeRest = null;
@@ -37,8 +37,16 @@ export function getActiveRest(sessionId: string): ActiveRest | null {
   return activeRest;
 }
 
-export function setActiveRest(rest: ActiveRest): void {
-  activeRest = rest;
+/**
+ * The session screen reads its id from route params, which are typed as
+ * `string` but are `string | undefined` at runtime. Storing an undefined
+ * sessionId here poisoned the store: `clearActiveRestForSession` compares by
+ * id, so nothing could ever clear it and the rest period outlived its session.
+ * Refuse the write instead.
+ */
+export function setActiveRest(rest: ActiveRest & { sessionId: string | undefined }): void {
+  if (!rest.sessionId) return;
+  activeRest = rest as ActiveRest;
 }
 
 export function updateActiveRestNotifId(notifId: string | null): void {

@@ -28,6 +28,7 @@ import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { Skeleton } from '../../../src/components/Skeleton';
+import { InlineError } from '../../../src/components/InlineError';
 
 const OTHER_KEY = '__other__';
 
@@ -169,14 +170,14 @@ export default function ExercisesScreen() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { data: currentUser } = useCurrentUser();
-  const { isPro, showPaywall } = useProGate();
+  const { isPro, isLoading: gateLoading, showPaywall } = useProGate();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ExerciseChipFilter>(EMPTY_FILTER);
   const [showAdd, setShowAdd] = useState(false);
   const [muscleTarget, setMuscleTarget] = useState<Exercise | null>(null);
 
-  const { data: exercises, isLoading, isError, error, refetch, isRefetching } = useExercises({
+  const { data: exercises, isLoading, isError, refetch, isRefetching } = useExercises({
     search: search.trim() || undefined,
   });
 
@@ -246,7 +247,9 @@ export default function ExercisesScreen() {
 
   function handleAddPress() {
     const customCount = (exercises ?? []).filter((e) => e.userId === currentUser?.id).length;
-    if (!isPro && customCount >= FREE_CUSTOM_EXERCISE_LIMIT) {
+    // Not while the gate is unresolved — a mid-race `false` told paying
+    // users they'd hit a limit that doesn't apply to them.
+    if (!isPro && !gateLoading && customCount >= FREE_CUSTOM_EXERCISE_LIMIT) {
       Alert.alert(
         'Limit reached',
         `Free accounts can create up to ${FREE_CUSTOM_EXERCISE_LIMIT} custom exercises. Upgrade to RepRounds Pro for unlimited exercises.`,
@@ -317,9 +320,10 @@ export default function ExercisesScreen() {
       )}
 
       {isError && (
-        <View style={styles.centered}>
-          <Text style={styles.errorText}>{error?.message ?? 'Failed to load exercises.'}</Text>
-        </View>
+        <InlineError
+          message="Couldn't load your exercises."
+          onRetry={() => { void refetch(); }}
+        />
       )}
 
       {!isLoading && !isError && (

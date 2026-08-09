@@ -17,10 +17,18 @@ import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useCurrentUser, useSignOut, useDeleteAccount, useChangePassword } from '../../src/hooks/useAuth';
+import {
+  useCurrentUser,
+  useSignOut,
+  useDeleteAccount,
+  useChangePassword,
+  useUpdateProfile,
+} from '../../src/hooks/useAuth';
+import { NAME_MAX_LENGTH } from '@app/shared';
 import { F, R, D, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useUnit } from '../../src/units/UnitContext';
+import { useEffortMetric, type EffortMetric } from '../../src/units/EffortContext';
 import { useNotificationsEnabled } from '../../src/notifications/NotificationsContext';
 import { withAlpha } from '../../src/lib/color';
 import type { WeightUnit } from '../../src/units/units';
@@ -38,9 +46,17 @@ const UNITS: { value: WeightUnit; label: string }[] = [
   { value: 'lbs', label: 'Pounds' },
 ];
 
+// Two ways of recording the same thing (RIR ≈ 10 − RPE), so the set row shows
+// one intensity cell and this picks which.
+const EFFORT_METRICS: { value: EffortMetric; label: string }[] = [
+  { value: 'rpe', label: 'RPE' },
+  { value: 'rir', label: 'RIR' },
+];
+
 export default function SettingsScreen() {
   const { T, mode, setMode } = useTheme();
   const { unit, setUnit } = useUnit();
+  const { metric, setMetric } = useEffortMetric();
   const { notificationsEnabled, setNotificationsEnabled } = useNotificationsEnabled();
   const styles = useMemo(() => makeStyles(T), [T]);
   const router = useRouter();
@@ -51,6 +67,7 @@ export default function SettingsScreen() {
   const { deleteAccount } = useDeleteAccount();
   const [deleting, setDeleting] = useState(false);
   const [showChangePw, setShowChangePw] = useState(false);
+  const [showEditName, setShowEditName] = useState(false);
 
   const isGuest = user?.isGuest ?? false;
   const displayName = isGuest
@@ -65,7 +82,18 @@ export default function SettingsScreen() {
         text: 'Sign out',
         style: 'destructive',
         onPress: async () => {
-          await signOut();
+          try {
+            await signOut();
+          } catch {
+            // Unguarded, a SecureStore failure here became an unhandled
+            // rejection and the redirect below still ran — leaving the user on
+            // the sign-in screen with a live token still on disk.
+            Alert.alert(
+              'Sign out failed',
+              "Couldn't clear your session on this device. Please try again.",
+            );
+            return;
+          }
           router.replace('/(auth)/sign-in' as never);
         },
       },
@@ -102,8 +130,15 @@ export default function SettingsScreen() {
                       await deleteAccount();
                       queryClient.clear();
                       router.replace('/(auth)/sign-in' as never);
-                    } catch {
-                      Alert.alert('Delete failed', 'Could not delete your account. Please try again.');
+                    } catch (err) {
+                      // Was a fixed string, so a 401, a 500 and a dropped
+                      // connection all read the same and none of them said
+                      // whether anything had been deleted.
+                      Alert.alert(
+                        'Delete failed',
+                        (err as Error).message ||
+                          'Could not delete your account. Please try again.',
+                      );
                     } finally {
                       setDeleting(false);
                     }
@@ -157,16 +192,35 @@ export default function SettingsScreen() {
               )}
             </View>
           </View>
-          {user?.hasPassword && (
+          {/* A guest has no account to edit yet; everyone else can rename. */}
+          {!isGuest && (
+            <TouchableOpacity
+              style={styles.accountActionRow}
+              onPress={() => setShowEditName(true)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Edit display name"
+            >
+              <Ionicons name="person-outline" size={17} color={T.textDim} />
+              <Text style={styles.rowLabel}>Display name</Text>
+              <Ionicons name="chevron-forward" size={16} color={T.muted} style={{ marginLeft: 'auto' }} />
+            </TouchableOpacity>
+          )}
+          {/* Offered to any non-guest, not just accounts that already have a
+              password: a Google user otherwise had no credential fallback if
+              they lost access to that Google account. */}
+          {!isGuest && (
             <TouchableOpacity
               style={styles.accountActionRow}
               onPress={() => setShowChangePw(true)}
               activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel="Change password"
+              accessibilityLabel={user?.hasPassword ? 'Change password' : 'Set a password'}
             >
               <Ionicons name="key-outline" size={17} color={T.textDim} />
-              <Text style={styles.rowLabel}>Change password</Text>
+              <Text style={styles.rowLabel}>
+                {user?.hasPassword ? 'Change password' : 'Set a password'}
+              </Text>
               <Ionicons name="chevron-forward" size={16} color={T.muted} style={{ marginLeft: 'auto' }} />
             </TouchableOpacity>
           )}
@@ -185,6 +239,9 @@ export default function SettingsScreen() {
                   style={[styles.segment, active && styles.segmentActive]}
                   onPress={() => setMode(value)}
                   activeOpacity={0.75}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={label}
                 >
                   <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
                     {label}
@@ -208,6 +265,9 @@ export default function SettingsScreen() {
                   style={[styles.segment, active && styles.segmentActive]}
                   onPress={() => setUnit(value)}
                   activeOpacity={0.75}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={label}
                 >
                   <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
                     {label}
@@ -216,6 +276,37 @@ export default function SettingsScreen() {
               );
             })}
           </View>
+        </View>
+
+        {/* Logging */}
+        <Text style={styles.sectionLabel}>Logging</Text>
+        <View style={styles.card}>
+          <Text style={styles.rowLabel}>Set intensity</Text>
+          <View style={styles.segmentRow}>
+            {EFFORT_METRICS.map(({ value, label }) => {
+              const active = metric === value;
+              return (
+                <TouchableOpacity
+                  key={value}
+                  style={[styles.segment, active && styles.segmentActive]}
+                  onPress={() => setMetric(value)}
+                  activeOpacity={0.75}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={label}
+                >
+                  <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
+                    {label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <Text style={styles.rowHint}>
+            {metric === 'rir'
+              ? 'Reps in reserve — how many you had left in the tank.'
+              : 'Rate of perceived exertion, 1–10.'}
+          </Text>
         </View>
 
         {/* Notifications */}
@@ -243,10 +334,15 @@ export default function SettingsScreen() {
         </View>
 
         {/* Destructive actions */}
+        {/* Both destructive and both previously unlabelled — and the delete
+            button's busy state swaps its text for a bare spinner, which
+            announces nothing at all without an explicit label. */}
         <TouchableOpacity
           style={styles.signOutBtn}
           onPress={handleSignOut}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={isGuest ? 'Exit guest mode' : 'Sign out'}
         >
           <Ionicons name="log-out-outline" size={16} color={T.danger} />
           <Text style={styles.signOutText}>{isGuest ? 'Exit Guest Mode' : 'Sign Out'}</Text>
@@ -257,6 +353,9 @@ export default function SettingsScreen() {
           onPress={handleDeleteAccount}
           disabled={deleting}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={deleting ? 'Deleting your account' : 'Delete account'}
+          accessibilityState={{ busy: deleting, disabled: deleting }}
         >
           {deleting ? (
             <ActivityIndicator size="small" color={T.danger} />
@@ -266,12 +365,30 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {showChangePw && <ChangePasswordModal onClose={() => setShowChangePw(false)} />}
+      {showChangePw && (
+        <ChangePasswordModal
+          hasPassword={!!user?.hasPassword}
+          onClose={() => setShowChangePw(false)}
+        />
+      )}
+      {showEditName && (
+        <EditNameModal
+          initialName={user?.name ?? ''}
+          onClose={() => setShowEditName(false)}
+        />
+      )}
     </View>
   );
 }
 
-function ChangePasswordModal({ onClose }: { onClose: () => void }) {
+function ChangePasswordModal({
+  hasPassword,
+  onClose,
+}: {
+  /** False when this is a first password on a Google account. */
+  hasPassword: boolean;
+  onClose: () => void;
+}) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const changePassword = useChangePassword();
@@ -279,7 +396,24 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
 
+  // Typed passwords used to survive a dismiss, so reopening the sheet showed
+  // them still sitting in the fields.
+  function handleClose() {
+    setCurrent('');
+    setNext('');
+    setConfirm('');
+    onClose();
+  }
+
   async function handleSave() {
+    // The current field wasn't checked at all, so an empty one was posted and
+    // came back a 401 reading "Current password is incorrect" — which is true
+    // but unhelpful when the field was simply blank. Skipped entirely when
+    // there is no existing password to prove.
+    if (hasPassword && !current) {
+      Alert.alert('Current password required', 'Enter your current password to change it.');
+      return;
+    }
     if (next.length < 8) {
       Alert.alert('Password too short', 'Your new password must be at least 8 characters.');
       return;
@@ -288,10 +422,24 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
       Alert.alert('Passwords do not match', 'The new password and confirmation must match.');
       return;
     }
+    if (hasPassword && next === current) {
+      Alert.alert('Choose a different password', 'Your new password must differ from the current one.');
+      return;
+    }
     try {
-      await changePassword.mutateAsync({ currentPassword: current, newPassword: next });
-      Alert.alert('Password changed', 'Your password has been updated.');
-      onClose();
+      await changePassword.mutateAsync({
+        // Omitted entirely when setting a first password — the server doesn't
+        // ask for one it can't verify.
+        ...(hasPassword ? { currentPassword: current } : {}),
+        newPassword: next,
+      });
+      Alert.alert(
+        hasPassword ? 'Password changed' : 'Password set',
+        hasPassword
+          ? 'Your password has been updated.'
+          : 'You can now sign in with your email and password as well as with Google.',
+      );
+      handleClose();
     } catch (err) {
       const msg = (err as Error & { body?: { error?: string } })?.body?.error
         ?? (err as Error).message
@@ -301,21 +449,29 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
-      <Pressable style={styles.pwBackdrop} onPress={onClose} />
+    <Modal visible animationType="slide" transparent onRequestClose={handleClose}>
+      <Pressable style={styles.pwBackdrop} onPress={handleClose} />
       <View style={styles.pwSheet}>
         <View style={styles.pwHandle} />
-        <Text style={styles.pwTitle}>Change password</Text>
+        <Text style={styles.pwTitle}>{hasPassword ? 'Change password' : 'Set a password'}</Text>
+        {!hasPassword && (
+          <Text style={styles.pwHint}>
+            Adds email and password sign-in to this account. You can still sign in with Google.
+          </Text>
+        )}
 
-        <TextInput
-          style={styles.pwInput}
-          value={current}
-          onChangeText={setCurrent}
-          placeholder="Current password"
-          placeholderTextColor={T.muted}
-          secureTextEntry
-          autoCapitalize="none"
-        />
+        {hasPassword && (
+          <TextInput
+            style={styles.pwInput}
+            value={current}
+            onChangeText={setCurrent}
+            placeholder="Current password"
+            placeholderTextColor={T.muted}
+            secureTextEntry
+            autoCapitalize="none"
+            accessibilityLabel="Current password"
+          />
+        )}
         <TextInput
           style={styles.pwInput}
           value={next}
@@ -324,6 +480,7 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
           placeholderTextColor={T.muted}
           secureTextEntry
           autoCapitalize="none"
+          accessibilityLabel="New password"
         />
         <TextInput
           style={styles.pwInput}
@@ -333,6 +490,7 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
           placeholderTextColor={T.muted}
           secureTextEntry
           autoCapitalize="none"
+          accessibilityLabel="Confirm new password"
         />
 
         <TouchableOpacity
@@ -340,12 +498,81 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
           onPress={handleSave}
           disabled={changePassword.isPending}
           accessibilityRole="button"
-          accessibilityLabel="Save new password"
+          accessibilityLabel={hasPassword ? 'Save new password' : 'Set password'}
         >
           {changePassword.isPending ? (
             <ActivityIndicator size="small" color={T.onPrimary} />
           ) : (
-            <Text style={styles.pwSaveText}>Update password</Text>
+            <Text style={styles.pwSaveText}>
+              {hasPassword ? 'Update password' : 'Set password'}
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </Modal>
+  );
+}
+
+/**
+ * The display name came from Google or the registration form and could never be
+ * changed — there was no UI and no route behind it.
+ */
+function EditNameModal({ initialName, onClose }: { initialName: string; onClose: () => void }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const updateProfile = useUpdateProfile();
+  const [name, setName] = useState(initialName);
+
+  const trimmed = name.trim();
+  const unchanged = trimmed === initialName.trim();
+
+  async function handleSave() {
+    if (trimmed.length > NAME_MAX_LENGTH) {
+      Alert.alert('Name too long', `Keep it to ${NAME_MAX_LENGTH} characters or fewer.`);
+      return;
+    }
+    try {
+      // Empty clears it, and the greeting falls back to the email's local part.
+      await updateProfile.mutateAsync({ name: trimmed || null });
+      onClose();
+    } catch (err) {
+      Alert.alert('Error', (err as Error).message || 'Could not update your name.');
+    }
+  }
+
+  return (
+    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+      <Pressable style={styles.pwBackdrop} onPress={onClose} />
+      <View style={styles.pwSheet}>
+        <View style={styles.pwHandle} />
+        <Text style={styles.pwTitle}>Display name</Text>
+        <Text style={styles.pwHint}>Used to greet you. Leave it empty to go back to the default.</Text>
+
+        <TextInput
+          style={styles.pwInput}
+          value={name}
+          onChangeText={setName}
+          placeholder="Your name"
+          placeholderTextColor={T.muted}
+          maxLength={NAME_MAX_LENGTH}
+          autoCapitalize="words"
+          returnKeyType="done"
+          onSubmitEditing={handleSave}
+          accessibilityLabel="Display name"
+          autoFocus
+        />
+
+        <TouchableOpacity
+          style={[styles.pwSaveBtn, (updateProfile.isPending || unchanged) && { opacity: 0.6 }]}
+          onPress={handleSave}
+          disabled={updateProfile.isPending || unchanged}
+          accessibilityRole="button"
+          accessibilityLabel="Save display name"
+        >
+          {updateProfile.isPending ? (
+            <ActivityIndicator size="small" color={T.onPrimary} />
+          ) : (
+            <Text style={styles.pwSaveText}>Save</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -376,6 +603,7 @@ function makeStyles(T: ThemeColors) {
       paddingTop: 14, gap: 14,
     },
     rowLabel: { fontFamily: F.uiSemi, fontSize: 15, color: T.text },
+    rowHint: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: 8 },
     segmentRow: {
       flexDirection: 'row',
       backgroundColor: T.surface2,
@@ -439,6 +667,7 @@ function makeStyles(T: ThemeColors) {
       backgroundColor: T.border, marginBottom: 6,
     },
     pwTitle: { fontFamily: F.uiBold, fontSize: 18, color: T.text, marginBottom: 4 },
+    pwHint: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim, marginBottom: 8, lineHeight: 18 },
     pwInput: {
       fontFamily: F.uiMed, fontSize: 15, color: T.text,
       borderWidth: 1, borderColor: T.border, borderRadius: R.sm,

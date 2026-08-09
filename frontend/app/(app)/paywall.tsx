@@ -15,6 +15,7 @@ import { useSubscription } from '../../src/context/SubscriptionContext';
 import { F, R, D, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { withAlpha } from '../../src/lib/color';
+import { InlineError } from '../../src/components/InlineError';
 
 const PRO_FEATURES = [
   { icon: 'infinite-outline' as const, text: 'Unlimited custom exercises & disciplines' },
@@ -30,7 +31,8 @@ export default function PaywallScreen() {
   const insets = useSafeAreaInsets();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const { purchasePro, restorePurchases, prices } = useSubscription();
+  const { purchasePro, restorePurchases, prices, pricesUnavailable, refreshPrices } =
+    useSubscription();
   const [loading, setLoading] = useState<'monthly' | 'annual' | 'restore' | null>(null);
 
   async function handlePurchase(plan: 'reprounds_pro_monthly' | 'reprounds_pro_annual') {
@@ -40,10 +42,13 @@ export default function PaywallScreen() {
       await purchasePro(plan);
       router.back();
     } catch (err: unknown) {
+      // The SDK sets `userCancelled` on the error. This used to substring-match
+      // the message for "cancel", which is localized — so in any language but
+      // English, backing out of the store sheet raised a "Purchase failed"
+      // alert for something the user did on purpose.
+      if ((err as { userCancelled?: boolean })?.userCancelled) return;
       const msg = err instanceof Error ? err.message : 'Purchase failed.';
-      if (!msg.includes('cancel')) {
-        Alert.alert('Purchase failed', msg);
-      }
+      Alert.alert('Purchase failed', msg);
     } finally {
       setLoading(null);
     }
@@ -52,9 +57,18 @@ export default function PaywallScreen() {
   async function handleRestore() {
     setLoading('restore');
     try {
-      await restorePurchases();
-      Alert.alert('Restored', 'Your purchases have been restored.');
-      router.back();
+      // Resolves whether or not anything was found, so the result has to be
+      // read rather than assumed.
+      const restored = await restorePurchases();
+      if (restored) {
+        Alert.alert('Restored', 'Your RepRounds Pro subscription is active again.');
+        router.back();
+        return;
+      }
+      Alert.alert(
+        'Nothing to restore',
+        'No previous RepRounds Pro purchase was found for this store account.',
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Restore failed.';
       Alert.alert('Restore failed', msg);
@@ -62,6 +76,14 @@ export default function PaywallScreen() {
       setLoading(null);
     }
   }
+
+  // Prices come from the store, so a failed offerings fetch left both buttons
+  // reading "Loading price…" forever — and still tappable, so tapping raised a
+  // bare "No offerings available." Show the failure and offer a retry instead.
+  const priceLabel = (value: string | null, suffix: string) => {
+    if (value) return `${value} / ${suffix}`;
+    return pricesUnavailable ? 'Price unavailable' : 'Loading price…';
+  };
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
@@ -100,12 +122,25 @@ export default function PaywallScreen() {
           ))}
         </View>
 
+        {/* Both plan buttons are disabled without prices, so the only way
+            forward is a retry. */}
+        {pricesUnavailable && (
+          <InlineError
+            message="Couldn't load subscription prices from the store."
+            onRetry={() => { void refreshPrices(); }}
+          />
+        )}
+
         {/* Plans */}
         <TouchableOpacity
-          style={[styles.planBtn, styles.planBtnAnnual, loading && styles.planBtnDisabled]}
+          style={[
+            styles.planBtn,
+            styles.planBtnAnnual,
+            (loading || pricesUnavailable) && styles.planBtnDisabled,
+          ]}
           onPress={() => handlePurchase('reprounds_pro_annual')}
           activeOpacity={0.8}
-          disabled={!!loading}
+          disabled={!!loading || pricesUnavailable}
         >
           <View style={styles.planBtnBadge}>
             <Text style={styles.planBtnBadgeText}>BEST VALUE</Text>
@@ -116,7 +151,7 @@ export default function PaywallScreen() {
             <>
               <Text style={[styles.planBtnTitle, { color: T.onPrimary }]}>Annual Plan</Text>
               <Text style={[styles.planBtnPrice, { color: T.onPrimary }]}>
-                {prices.annual ? `${prices.annual} / year` : 'Loading price…'}
+                {priceLabel(prices.annual, 'year')}
               </Text>
               <Text style={[styles.planBtnSub, { color: withAlpha(T.onPrimary, 0.75) }]}>
                 ~40% off monthly · 7-day free trial
@@ -126,10 +161,14 @@ export default function PaywallScreen() {
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={[styles.planBtn, styles.planBtnMonthly, loading && styles.planBtnDisabled]}
+          style={[
+            styles.planBtn,
+            styles.planBtnMonthly,
+            (loading || pricesUnavailable) && styles.planBtnDisabled,
+          ]}
           onPress={() => handlePurchase('reprounds_pro_monthly')}
           activeOpacity={0.8}
-          disabled={!!loading}
+          disabled={!!loading || pricesUnavailable}
         >
           {loading === 'monthly' ? (
             <ActivityIndicator color={T.primary} />
@@ -137,7 +176,7 @@ export default function PaywallScreen() {
             <>
               <Text style={styles.planBtnTitle}>Monthly Plan</Text>
               <Text style={styles.planBtnPrice}>
-                {prices.monthly ? `${prices.monthly} / month` : 'Loading price…'}
+                {priceLabel(prices.monthly, 'month')}
               </Text>
               <Text style={styles.planBtnSub}>7-day free trial</Text>
             </>

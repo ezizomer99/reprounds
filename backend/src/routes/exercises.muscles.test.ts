@@ -32,7 +32,7 @@ import { signJwt } from '../lib/jwt';
 
 const SECRET = 'test-secret-at-least-32-chars-long-xxxxx';
 const USER_ID = 'user-abc';
-const EX_ID = 'ex-1';
+const EX_ID = '55555555-5555-4555-8555-555555555555';
 const env = { JWT_SECRET: SECRET, DATABASE_URL: 'postgres://test' };
 
 /** A row as `SELECT * FROM exercises` returns it. */

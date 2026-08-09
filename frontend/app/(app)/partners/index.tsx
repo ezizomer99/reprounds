@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import type { PartnerStatsItem } from '@app/shared';
 import { usePartnerStats, useUpdatePartner, useDeletePartner } from '../../../src/hooks/usePartners';
 import { Skeleton } from '../../../src/components/Skeleton';
+import { InlineError } from '../../../src/components/InlineError';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -39,7 +40,7 @@ export default function PartnersScreen() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
 
-  const { data, isLoading, refetch, isRefetching } = usePartnerStats();
+  const { data, isLoading, isError, refetch, isRefetching } = usePartnerStats();
   const updatePartner = useUpdatePartner();
   const deletePartner = useDeletePartner();
 
@@ -140,6 +141,13 @@ export default function PartnersScreen() {
             <Skeleton key={i} width="100%" height={110} radius={R.card} />
           ))}
         </View>
+      ) : isError && partners.length === 0 ? (
+        // Was indistinguishable from having no partners: a dropped connection
+        // rendered "No partner data yet" and told the user to go tag some.
+        <InlineError
+          message="Couldn't load your training partners."
+          onRetry={() => { void refetch(); }}
+        />
       ) : partners.length === 0 ? (
         <View style={styles.empty}>
           <Ionicons name="people-outline" size={36} color={T.muted} />

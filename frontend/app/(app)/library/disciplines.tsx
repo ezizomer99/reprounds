@@ -20,6 +20,7 @@ import {
   useDisciplines,
 } from '../../../src/hooks/useDisciplines';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
+import { InlineError } from '../../../src/components/InlineError';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -192,7 +193,7 @@ export default function DisciplinesScreen() {
   const { data: currentUser } = useCurrentUser();
   const [showAdd, setShowAdd] = useState(false);
 
-  const { data: disciplines, isLoading, isError, error } = useDisciplines();
+  const { data: disciplines, isLoading, isError, refetch } = useDisciplines();
   const deleteDiscipline = useDeleteDiscipline();
 
   function handleDelete(id: string) {
@@ -230,9 +231,10 @@ export default function DisciplinesScreen() {
       )}
 
       {isError && (
-        <View style={styles.centered}>
-          <Text style={styles.errorText}>{error?.message ?? 'Failed to load disciplines.'}</Text>
-        </View>
+        <InlineError
+          message="Couldn't load your disciplines."
+          onRetry={() => { void refetch(); }}
+        />
       )}
 
       {!isLoading && !isError && (

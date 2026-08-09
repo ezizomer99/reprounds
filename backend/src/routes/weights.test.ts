@@ -29,7 +29,7 @@ const SECRET = 'test-secret-at-least-32-chars-long-xxxxx';
 const USER_ID = 'user-w';
 const env = { JWT_SECRET: SECRET, DATABASE_URL: 'postgres://test' };
 const ROW = {
-  id: 'w1',
+  id: '77777777-7777-4777-8777-777777777777',
   userId: USER_ID,
   date: '2026-07-01',
   weightKg: '80',
@@ -92,7 +92,7 @@ describe('POST /weights', () => {
   });
 
   it('updates (200) the existing entry for the same date instead of duplicating', async () => {
-    mock.selectQueue.push([{ id: 'w1' }]); // existing row for this date
+    mock.selectQueue.push([{ id: '77777777-7777-4777-8777-777777777777' }]); // existing row for this date
     const res = await makeApp().request(
       '/weights',
       { method: 'POST', headers: await bearer(), body: JSON.stringify({ date: '2026-07-01', weightKg: 81 }) },
@@ -107,7 +107,7 @@ describe('POST /weights', () => {
 describe('PATCH /weights/:id', () => {
   it('updates fields and returns the row', async () => {
     const res = await makeApp().request(
-      '/weights/w1',
+      '/weights/77777777-7777-4777-8777-777777777777',
       { method: 'PATCH', headers: await bearer(), body: JSON.stringify({ weightKg: 79.5 }) },
       env,
     );
@@ -117,7 +117,7 @@ describe('PATCH /weights/:id', () => {
 
   it('rejects an out-of-range weightKg with 400', async () => {
     const res = await makeApp().request(
-      '/weights/w1',
+      '/weights/77777777-7777-4777-8777-777777777777',
       { method: 'PATCH', headers: await bearer(), body: JSON.stringify({ weightKg: -3 }) },
       env,
     );

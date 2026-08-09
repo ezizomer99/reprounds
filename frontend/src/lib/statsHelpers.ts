@@ -1,4 +1,4 @@
-import type { WeeklyBucket } from '@app/shared';
+import { addDaysISO, type WeeklyBucket } from '@app/shared';
 import { parseLocalDate, toISODate } from './calendar';
 
 /**
@@ -44,6 +44,20 @@ function localISO(d: Date): string {
 /** ISO date (local) of the Monday of the week containing `d`. */
 export function mondayISO(d: Date = new Date()): string {
   return localISO(mondayOf(d));
+}
+
+/**
+ * The inclusive `[monday, sunday]` ISO bounds of the week containing
+ * `todayISO`.
+ *
+ * Shared rather than derived twice: MyWeek and the Workout tab both need this
+ * week's sessions, and `useSessionsInRange` keys its cache on the exact
+ * arguments — so two copies of the same arithmetic that drifted by a character
+ * would quietly become two requests for the same rows.
+ */
+export function weekRangeOf(todayISO: string): { from: string; to: string } {
+  const from = mondayISO(parseLocalDate(todayISO));
+  return { from, to: addDaysISO(from, 6) };
 }
 
 /**

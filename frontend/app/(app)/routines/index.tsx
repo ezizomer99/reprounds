@@ -19,6 +19,7 @@ import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
 import { Skeleton } from '../../../src/components/Skeleton';
+import { InlineError } from '../../../src/components/InlineError';
 
 const FREE_ROUTINE_LIMIT = 2;
 
@@ -87,8 +88,8 @@ export default function RoutinesScreen() {
   const insets = useSafeAreaInsets();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const { isPro, showPaywall } = useProGate();
-  const { data: routines, isLoading, isError, error } = useRoutines();
+  const { isPro, isLoading: gateLoading, showPaywall } = useProGate();
+  const { data: routines, isLoading, isError, refetch } = useRoutines();
   const deleteRoutine = useDeleteRoutine();
   const reorderRoutines = useReorderRoutines();
 
@@ -114,7 +115,8 @@ export default function RoutinesScreen() {
   const list = routines ?? [];
 
   function handleNewRoutine() {
-    if (!isPro && list.length >= FREE_ROUTINE_LIMIT) {
+    // See exercises/index.tsx — don't enforce a limit on an unresolved gate.
+    if (!isPro && !gateLoading && list.length >= FREE_ROUTINE_LIMIT) {
       Alert.alert(
         'Limit reached',
         `Free accounts can create up to ${FREE_ROUTINE_LIMIT} routines. Upgrade to RepRounds Pro for unlimited routines.`,
@@ -168,9 +170,10 @@ export default function RoutinesScreen() {
       )}
 
       {isError && (
-        <View style={styles.centered}>
-          <Text style={styles.errorText}>{error?.message ?? 'Failed to load routines.'}</Text>
-        </View>
+        <InlineError
+          message="Couldn't load your routines."
+          onRetry={() => { void refetch(); }}
+        />
       )}
 
       {!isLoading && !isError && (

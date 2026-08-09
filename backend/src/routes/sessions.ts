@@ -44,6 +44,7 @@ import {
   isIntInRange,
   isIsoDate,
   isUuid,
+  notUuid,
   isWithinLength,
   isWithinSerializedSize,
   validateIdList,
@@ -560,6 +561,7 @@ sessionRoutes.get('/', async (c) => {
 sessionRoutes.get('/:id', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
+  if (notUuid(id)) return c.json({ error: 'Not found' }, 404);
   const db = getDb(c.env);
 
   const session = await fetchSessionWithEntries(db, id, userId);
@@ -761,6 +763,7 @@ sessionRoutes.post('/', async (c) => {
 sessionRoutes.patch('/:id', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
+  if (notUuid(id)) return c.json({ error: 'Not found' }, 404);
   const db = getDb(c.env);
 
   const existing = await db
@@ -811,6 +814,7 @@ sessionRoutes.patch('/:id', async (c) => {
 sessionRoutes.delete('/:id', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
+  if (notUuid(id)) return c.json({ error: 'Not found' }, 404);
   const db = getDb(c.env);
 
   const existing = await db
@@ -834,6 +838,7 @@ sessionRoutes.delete('/:id', async (c) => {
 sessionRoutes.post('/:id/start', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
+  if (notUuid(id)) return c.json({ error: 'Not found' }, 404);
   const db = getDb(c.env);
 
   const [existing] = await db
@@ -903,6 +908,7 @@ sessionRoutes.post('/:id/start', async (c) => {
 sessionRoutes.post('/:id/skip', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
+  if (notUuid(id)) return c.json({ error: 'Not found' }, 404);
   const db = getDb(c.env);
 
   const [existing] = await db
@@ -931,6 +937,7 @@ sessionRoutes.post('/:id/skip', async (c) => {
 sessionRoutes.post('/:id/complete', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
+  if (notUuid(id)) return c.json({ error: 'Not found' }, 404);
   const db = getDb(c.env);
 
   const [existing] = await db
@@ -968,9 +975,15 @@ sessionRoutes.post('/:id/complete', async (c) => {
   if (body.durationMinutes !== undefined) updates.durationMinutes = body.durationMinutes ?? null;
   if (body.notes !== undefined) updates.notes = body.notes ?? null;
   // Backdating a finished session is how a past workout gets its real date —
-  // validate it like every other date the API accepts.
+  // validate it like every other date the API accepts. The window matters as
+  // much as the format here: `sessions.date` takes dates arbitrarily far out,
+  // and a mistyped year on the one screen where a user types a date lands a
+  // workout centuries away, where it sorts first in the PR feed and counts as a
+  // current top lift forever (see the note in routes/stats.ts).
   if (body.date !== undefined) {
     if (!isIsoDate(body.date)) return c.json({ error: 'date must be YYYY-MM-DD' }, 400);
+    const dateErr = validateSessionDate(body.date, false);
+    if (dateErr) return c.json(dateErr, 400);
     updates.date = body.date;
   }
 
@@ -989,6 +1002,7 @@ sessionRoutes.post('/:id/complete', async (c) => {
 sessionRoutes.put('/:id/focuses', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
+  if (notUuid(id)) return c.json({ error: 'Not found' }, 404);
   const db = getDb(c.env);
 
   const [existing] = await db
@@ -1044,6 +1058,7 @@ sessionRoutes.put('/:id/focuses', async (c) => {
 sessionRoutes.post('/:id/entries', async (c) => {
   const userId = c.get('userId');
   const sessionId = c.req.param('id');
+  if (notUuid(sessionId)) return c.json({ error: 'Not found' }, 404);
   const db = getDb(c.env);
 
   const ownerCheck = await db
@@ -1132,6 +1147,7 @@ sessionRoutes.post('/:id/entries', async (c) => {
 sessionRoutes.put('/:id/entries/order', async (c) => {
   const userId = c.get('userId');
   const sessionId = c.req.param('id');
+  if (notUuid(sessionId)) return c.json({ error: 'Not found' }, 404);
   const db = getDb(c.env);
 
   const ownerCheck = await db
@@ -1177,6 +1193,7 @@ sessionRoutes.patch('/:id/entries/:entryId', async (c) => {
   const userId = c.get('userId');
   const sessionId = c.req.param('id');
   const entryId = c.req.param('entryId');
+  if (notUuid(sessionId, entryId)) return c.json({ error: 'Not found' }, 404);
   const db = getDb(c.env);
 
   const ownerCheck = await db
@@ -1261,6 +1278,7 @@ sessionRoutes.delete('/:id/entries/:entryId', async (c) => {
   const userId = c.get('userId');
   const sessionId = c.req.param('id');
   const entryId = c.req.param('entryId');
+  if (notUuid(sessionId, entryId)) return c.json({ error: 'Not found' }, 404);
   const db = getDb(c.env);
 
   const ownerCheck = await db
@@ -1292,6 +1310,7 @@ sessionRoutes.post('/:id/entries/:entryId/sets', async (c) => {
   const userId = c.get('userId');
   const sessionId = c.req.param('id');
   const entryId = c.req.param('entryId');
+  if (notUuid(sessionId, entryId)) return c.json({ error: 'Not found' }, 404);
   const db = getDb(c.env);
 
   const ownerCheck = await db
@@ -1347,6 +1366,7 @@ sessionRoutes.patch('/:id/entries/:entryId/sets/:setId', async (c) => {
   const sessionId = c.req.param('id');
   const entryId = c.req.param('entryId');
   const setId = c.req.param('setId');
+  if (notUuid(sessionId, entryId, setId)) return c.json({ error: 'Not found' }, 404);
   const db = getDb(c.env);
 
   const ownerCheck = await db
@@ -1418,6 +1438,7 @@ sessionRoutes.delete('/:id/entries/:entryId/sets/:setId', async (c) => {
   const sessionId = c.req.param('id');
   const entryId = c.req.param('entryId');
   const setId = c.req.param('setId');
+  if (notUuid(sessionId, entryId, setId)) return c.json({ error: 'Not found' }, 404);
   const db = getDb(c.env);
 
   const ownerCheck = await db

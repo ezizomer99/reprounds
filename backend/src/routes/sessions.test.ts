@@ -41,7 +41,7 @@ const SECRET = 'test-secret-at-least-32-chars-long-xxxxx';
 const USER_ID = 'user-abc';
 const SESSION_ID = '22222222-2222-4222-8222-222222222222';
 const ENTRY_ID = '33333333-3333-4333-8333-333333333333';
-const SET_ID = 'set-abc';
+const SET_ID = '44444444-4444-4444-8444-444444444444';
 const env = { JWT_SECRET: SECRET, DATABASE_URL: 'postgres://test' };
 
 function makeApp() {

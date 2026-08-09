@@ -715,6 +715,36 @@ export interface WeekStreakResponse {
   anchorWeek: string;
 }
 
+/**
+ * Lifetime training counts.
+ *
+ * Server-side for the same reason as the streak above, and the Profile tab is
+ * the screen that needed it: "Workouts Completed" was `sessions.length` over
+ * `GET /sessions`, which caps at 200 — so it stopped counting at 200 and read
+ * 0 whenever the request failed, while downloading 200 full session rows to
+ * render one integer.
+ *
+ * The window is open-ended below and bounded above by the caller's exclusive
+ * `until`, so a session logged with a mistyped year can't inflate the total —
+ * the same reason every other `/stats/*` window is bounded at the top.
+ */
+export interface TrainingTotalsResponse {
+  /** Completed sessions, all time. */
+  sessions: number;
+  /** Completed sessions containing at least one lifting entry. */
+  gymSessions: number;
+  /** Completed sessions containing at least one martial-arts entry. */
+  matSessions: number;
+  /**
+   * Total kg lifted across completed sets. Counts warm-ups, matching
+   * `totalVolume` in calculators/volume.ts and the per-session figure on the
+   * session list — this is workload, not a lift comparison.
+   */
+  volumeKg: number;
+  /** ISO date of the earliest completed session, or null if there are none. */
+  firstSessionDate: string | null;
+}
+
 // ---- Mat (martial arts) stats ----
 
 export interface MatWeekBucket {

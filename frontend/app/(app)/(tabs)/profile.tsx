@@ -1,6 +1,7 @@
 import {
   ActivityIndicator,
   Alert,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -14,7 +15,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { statusCodes } from '@react-native-google-signin/google-signin';
 import { useCurrentUser, useSignIn } from '../../../src/hooks/useAuth';
-import { MAX_SESSIONS_PAGE, useSessions } from '../../../src/hooks/useSession';
+import { useTrainingTotals } from '../../../src/hooks/useStats';
+import { useTodayISO } from '../../../src/hooks/useTodayISO';
+import { InlineError } from '../../../src/components/InlineError';
+import { useUnit } from '../../../src/units/UnitContext';
+import { kgToUnit } from '../../../src/units/units';
+import { parseLocalDate } from '../../../src/lib/calendar';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -33,8 +39,19 @@ function NavRow({ icon, label, onPress, last, iconColor, iconBg }: NavRowProps) 
   const styles = useMemo(() => makeStyles(T), [T]);
   return (
     <>
-      <TouchableOpacity style={styles.navRow} onPress={onPress} activeOpacity={0.7}>
-        <View style={[styles.navRowIcon, iconBg ? { backgroundColor: iconBg } : undefined]}>
+      <TouchableOpacity
+        style={styles.navRow}
+        onPress={onPress}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+      >
+        {/* Decorative — the row already announces its label, and without this
+            a screen reader reads the icon glyph name alongside it. */}
+        <View
+          style={[styles.navRowIcon, iconBg ? { backgroundColor: iconBg } : undefined]}
+          importantForAccessibility="no"
+        >
           <Ionicons name={icon} size={18} color={iconColor ?? T.textDim} />
         </View>
         <Text style={styles.navRowLabel}>{label}</Text>
@@ -45,6 +62,18 @@ function NavRow({ icon, label, onPress, last, iconColor, iconBg }: NavRowProps) 
   );
 }
 
+/** One figure in the profile summary grid. */
+function SummaryCell({ value, label }: { value: string; label: string }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  return (
+    <View style={styles.summaryCell} accessible accessibilityLabel={`${value} ${label}`}>
+      <Text style={styles.summaryValue} numberOfLines={1}>{value}</Text>
+      <Text style={styles.summaryLabel}>{label}</Text>
+    </View>
+  );
+}
+
 export default function ProfileTab() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
@@ -52,16 +81,37 @@ export default function ProfileTab() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { data: user } = useCurrentUser();
-  const { data: sessions, isLoading: sessionsLoading } = useSessions('completed', MAX_SESSIONS_PAGE);
+  const todayISO = useTodayISO();
+  // Was `sessions.length` over GET /sessions, which caps at 200 — so the count
+  // stopped at 200 for anyone with a longer history, and read a flat 0 whenever
+  // the request failed, since only the *loading* case was handled. Both numbers
+  // now come from an aggregate that counts in SQL.
+  const {
+    data: totals,
+    isLoading: totalsLoading,
+    isError: totalsError,
+    isFetching: totalsFetching,
+    refetch: refetchTotals,
+  } = useTrainingTotals(todayISO);
+  const { unit } = useUnit();
   const { signInWithGoogle } = useSignIn();
   const [googleLinking, setGoogleLinking] = useState(false);
 
   const isGuest = user?.isGuest ?? false;
-  // '—' rather than a hard 0 while loading: the old placeholder read as "you
-  // have never trained".
-  const completedCount = sessionsLoading && !sessions ? '—' : String(sessions?.length ?? 0);
-  const displayName = user?.name ?? user?.email ?? 'Athlete';
-  const firstName = isGuest ? 'Guest' : displayName.split(' ')[0];
+  // '—' rather than a hard 0 for both unknown states: the old placeholder read
+  // as "you have never trained".
+  const completedCount =
+    totals !== undefined ? String(totals.sessions) : totalsLoading || totalsError ? '—' : '0';
+  // `name` can be an empty string, and falling through to `email` produced
+  // "Hi, sam@example.com!" — so take the first word of a real name, else the
+  // local part of an email, else a neutral fallback.
+  const firstName = useMemo(() => {
+    if (isGuest) return 'Guest';
+    const named = user?.name?.trim().split(/\s+/)[0];
+    if (named) return named;
+    const local = user?.email?.split('@')[0]?.trim();
+    return local || 'Athlete';
+  }, [isGuest, user?.name, user?.email]);
 
   async function handleLinkGoogle() {
     setGoogleLinking(true);
@@ -86,6 +136,8 @@ export default function ProfileTab() {
           style={styles.gearBtn}
           onPress={() => router.push('/settings' as never)}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Settings"
         >
           <Ionicons name="settings-outline" size={20} color={T.textDim} />
         </TouchableOpacity>
@@ -95,6 +147,14 @@ export default function ProfileTab() {
         style={styles.scroll}
         contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={totalsFetching}
+            onRefresh={() => { void refetchTotals(); }}
+            tintColor={T.primary}
+            colors={[T.primary]}
+          />
+        }
       >
         {/* User card */}
         <View style={styles.userCard}>
@@ -122,12 +182,28 @@ export default function ProfileTab() {
               onPress={handleLinkGoogle}
               disabled={googleLinking}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Sign in with Google to save your data"
+              accessibilityState={{ busy: googleLinking, disabled: googleLinking }}
             >
               {googleLinking ? (
                 <ActivityIndicator color={T.onPrimary} size="small" />
               ) : (
                 <Text style={styles.guestBannerBtnText}>Sign in with Google</Text>
               )}
+            </TouchableOpacity>
+            {/* Registering and signing in with email both migrate guest data
+                too (they send the same guestToken), but this banner offered
+                Google alone — so a guest who didn't want a Google account had
+                no way from here to save their history. */}
+            <TouchableOpacity
+              onPress={() => router.push('/(auth)/sign-in' as never)}
+              disabled={googleLinking}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Use email instead to save your data"
+            >
+              <Text style={styles.guestBannerAlt}>Use email instead</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -142,17 +218,65 @@ export default function ProfileTab() {
             <TouchableOpacity
               onPress={() => router.push('/history' as never)}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Workout history"
             >
               <Ionicons name="time-outline" size={18} color={T.textDim} />
             </TouchableOpacity>
           </View>
-          <View style={styles.workoutStatRow}>
-            <View style={styles.workoutStatIcon}>
-              <Ionicons name="ribbon-outline" size={18} color={T.textDim} />
-            </View>
-            <Text style={styles.workoutStatNum}>{completedCount}</Text>
-            <Text style={styles.workoutStatLabel}>Workouts Completed</Text>
-          </View>
+          {totalsError && !totals ? (
+            <InlineError
+              message="Couldn't load your training totals."
+              onRetry={() => { void refetchTotals(); }}
+            />
+          ) : (
+            <>
+              <View
+                style={styles.workoutStatRow}
+                accessible
+                accessibilityLabel={`${completedCount} workouts completed`}
+              >
+                <View style={styles.workoutStatIcon} importantForAccessibility="no">
+                  <Ionicons name="ribbon-outline" size={18} color={T.textDim} />
+                </View>
+                <Text style={styles.workoutStatNum}>{completedCount}</Text>
+                <Text style={styles.workoutStatLabel}>Workouts Completed</Text>
+              </View>
+
+              {/* The card rendered a single integer. The totals aggregate
+                  already returns the rest for the same round-trip, so there's
+                  no reason for it to stay that thin. */}
+              <View style={styles.summaryGrid}>
+                <SummaryCell
+                  value={totals ? totals.gymSessions.toLocaleString() : '—'}
+                  label="gym"
+                />
+                <SummaryCell
+                  value={totals ? totals.matSessions.toLocaleString() : '—'}
+                  label="mat"
+                />
+                <SummaryCell
+                  value={
+                    totals
+                      ? Math.round(kgToUnit(totals.volumeKg, unit)).toLocaleString()
+                      : '—'
+                  }
+                  label={`${unit} lifted`}
+                />
+                <SummaryCell
+                  value={
+                    totals?.firstSessionDate
+                      ? parseLocalDate(totals.firstSessionDate).toLocaleDateString('en-US', {
+                          month: 'short',
+                          year: 'numeric',
+                        })
+                      : '—'
+                  }
+                  label="training since"
+                />
+              </View>
+            </>
+          )}
         </View>
 
         {/* Training links */}
@@ -272,6 +396,13 @@ function makeStyles(T: ThemeColors) {
       marginTop: 2,
     },
     guestBannerBtnText: { fontFamily: F.uiBold, fontSize: 14, color: T.onPrimary },
+    guestBannerAlt: {
+      fontFamily: F.uiMed,
+      fontSize: 13,
+      color: T.primary,
+      textAlign: 'center',
+      paddingVertical: 6,
+    },
 
     // Broadsheet: flat rule-separated section.
     card: {
@@ -304,6 +435,22 @@ function makeStyles(T: ThemeColors) {
     },
     workoutStatNum: { fontFamily: F.monoBold, fontSize: 17, color: T.text },
     workoutStatLabel: { fontFamily: F.uiMed, fontSize: 14, color: T.textDim },
+
+    summaryGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      marginTop: 16,
+      rowGap: 14,
+    },
+    summaryCell: { width: '50%', gap: 2 },
+    summaryValue: { fontFamily: F.monoBold, fontSize: 16, color: T.text },
+    summaryLabel: {
+      fontFamily: F.uiMed,
+      fontSize: 11,
+      color: T.textDim,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    },
 
     // Section label
     sectionLabel: { marginBottom: -4 },

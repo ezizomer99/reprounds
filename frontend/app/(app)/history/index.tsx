@@ -14,6 +14,7 @@ import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
 import { Skeleton } from '../../../src/components/Skeleton';
 import { SessionRow, buildRoutineMap, rowSeparatorMargin } from '../../../src/components/SessionRow';
+import { InlineError } from '../../../src/components/InlineError';
 import { sessionIsMat } from '../../../src/lib/sessionMarkers';
 import { parseLocalDate } from '../../../src/lib/calendar';
 
@@ -31,8 +32,8 @@ export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const { isPro, showPaywall } = useProGate();
-  const { data: sessions, isLoading, isError, error, refetch, isRefetching } = useSessions('completed', MAX_SESSIONS_PAGE);
+  const { isPro, isLoading: gateLoading, showPaywall } = useProGate();
+  const { data: sessions, isLoading, isError, refetch, isRefetching } = useSessions('completed', MAX_SESSIONS_PAGE);
   const { data: routines, refetch: refetchRoutines } = useRoutines();
   const deleteSession = useDeleteSession();
   const [filter, setFilter] = useState<Filter>('all');
@@ -41,12 +42,15 @@ export default function HistoryScreen() {
   const allSessions = sessions ?? [];
 
   const cutoff = useMemo(() => {
-    if (isPro) return null;
+    // Not while the gate is unresolved: truncating on a mid-race `false`
+    // flashed a shortened list and an "older sessions hidden" upsell at
+    // people who had already paid.
+    if (isPro || gateLoading) return null;
     const d = new Date();
     d.setDate(d.getDate() - FREE_HISTORY_DAYS);
     d.setHours(0, 0, 0, 0);
     return d;
-  }, [isPro]);
+  }, [isPro, gateLoading]);
 
   const windowed = cutoff
     ? allSessions.filter((s) => parseLocalDate(s.date) >= cutoff)
@@ -128,9 +132,10 @@ export default function HistoryScreen() {
       )}
 
       {isError && (
-        <View style={styles.centered}>
-          <Text style={styles.errorText}>{error?.message ?? 'Failed to load history.'}</Text>
-        </View>
+        <InlineError
+          message="Couldn't load your history."
+          onRetry={() => { void refetch(); }}
+        />
       )}
 
       {!isLoading && !isError && (

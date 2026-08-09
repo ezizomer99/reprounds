@@ -80,7 +80,7 @@ export default function ExerciseHistoryScreen() {
   const insets = useSafeAreaInsets();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const { isPro, showPaywall } = useProGate();
+  const { isPro, isLoading: gateLoading, showPaywall } = useProGate();
   const { unit } = useUnit();
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
 
@@ -101,7 +101,12 @@ export default function ExerciseHistoryScreen() {
     [exerciseDetail],
   );
 
-  if (!isPro) {
+  // The gate resolves asynchronously (store entitlement + /me comp status), and
+  // `useProGate` documents that a lock must not be derived while it's loading:
+  // a mid-race `false` is indistinguishable from a genuine free user. Rendering
+  // this wall then flashed "RepRounds Pro Feature" at paying subscribers on
+  // every cold start.
+  if (!isPro && !gateLoading) {
     return (
       <View style={[styles.screen, { paddingTop: insets.top }]}>
         <View style={styles.header}>

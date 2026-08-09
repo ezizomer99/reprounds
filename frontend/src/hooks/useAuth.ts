@@ -14,6 +14,7 @@ import {
 } from '../lib/auth';
 import { cancelScheduledByKind } from '../lib/notifications';
 import { clearActiveRest } from '../lib/restTimerStore';
+import { clearCachedEntitlement } from '../lib/entitlementCache';
 
 interface MeResponse {
   user: User;
@@ -63,6 +64,24 @@ async function getGuestToken(): Promise<string | null> {
 export function useSignIn() {
   const queryClient = useQueryClient();
 
+  /**
+   * Adopt a new session's data.
+   *
+   * Every sign-in path set the token and overwrote `['auth', 'me']` but left
+   * every other cached query untouched. Query keys carry no user id, so after a
+   * guest merged into an account that already had history, the cache still held
+   * only the guest's rows — the merged sessions, routines and stats didn't
+   * appear until each query happened to go stale.
+   *
+   * `invalidateQueries` rather than `clear()`: clearing drops the mutation
+   * cache too, and mutations queued offline are replayed by
+   * `resumePausedMutations()` on reconnect.
+   */
+  function adoptSession(user: User) {
+    queryClient.setQueryData<User>(['auth', 'me'], user);
+    void queryClient.invalidateQueries();
+  }
+
   async function signInWithGoogle(): Promise<void> {
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
     await GoogleSignin.signIn();
@@ -74,7 +93,7 @@ export function useSignIn() {
     await setSessionToken(data.sessionToken);
     await clearGuestData();
     markSessionActive();
-    queryClient.setQueryData<User>(['auth', 'me'], data.user);
+    adoptSession(data.user);
   }
 
   async function signInAsGuest(): Promise<void> {
@@ -83,7 +102,7 @@ export function useSignIn() {
     await setSessionToken(data.sessionToken);
     await setGuestUserId(data.user.id);
     markSessionActive();
-    queryClient.setQueryData<User>(['auth', 'me'], data.user);
+    adoptSession(data.user);
   }
 
   async function registerWithEmail(email: string, password: string, name?: string): Promise<void> {
@@ -97,7 +116,7 @@ export function useSignIn() {
     await setSessionToken(data.sessionToken);
     await clearGuestData();
     markSessionActive();
-    queryClient.setQueryData<User>(['auth', 'me'], data.user);
+    adoptSession(data.user);
   }
 
   async function signInWithEmail(email: string, password: string): Promise<void> {
@@ -106,7 +125,7 @@ export function useSignIn() {
     await setSessionToken(data.sessionToken);
     await clearGuestData();
     markSessionActive();
-    queryClient.setQueryData<User>(['auth', 'me'], data.user);
+    adoptSession(data.user);
   }
 
   return { signInWithGoogle, signInAsGuest, registerWithEmail, signInWithEmail };
@@ -135,6 +154,11 @@ export function useSignOut() {
   async function signOut(): Promise<void> {
     await clearSessionToken();
     await clearLocalTimers();
+    // The remembered Pro answer is per-account. Detaching the RevenueCat
+    // customer normally overwrites it, but that call is best-effort and
+    // swallows its errors — so a sign-out while offline would leave this
+    // account's entitlement cached for whoever signs in next.
+    await clearCachedEntitlement();
     try { await GoogleSignin.signOut(); } catch { /* ignore if not signed in via Google */ }
     await clearPersistedCache();
   }
@@ -150,6 +174,7 @@ export function useDeleteAccount() {
     await clearSessionToken();
     await clearGuestData();
     await clearLocalTimers();
+    await clearCachedEntitlement();
     try { await GoogleSignin.signOut(); } catch { /* ignore if not signed in via Google */ }
     await clearPersistedCache();
   }
@@ -157,8 +182,33 @@ export function useDeleteAccount() {
   return { deleteAccount };
 }
 
+/**
+ * Sets a password as well as changes one. `currentPassword` is omitted when the
+ * account doesn't have one yet — a Google account gaining a credential
+ * fallback, where the session itself is the proof.
+ */
 export function useChangePassword() {
-  return useMutation<void, Error, { currentPassword: string; newPassword: string }>({
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, { currentPassword?: string; newPassword: string }>({
     mutationFn: (body) => apiPatch<void>('/auth/password', body),
+    // `hasPassword` flips on the first set, and it's what decides whether the
+    // settings row says "Change password" or "Set a password".
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+    },
+  });
+}
+
+/** Update the profile fields the user owns. Currently just the display name. */
+export function useUpdateProfile() {
+  const queryClient = useQueryClient();
+  return useMutation<User, Error, { name: string | null }>({
+    mutationFn: async (body) => {
+      const data = await apiPatch<MeResponse>('/auth/me', body);
+      return data.user;
+    },
+    onSuccess: (user) => {
+      queryClient.setQueryData<User>(['auth', 'me'], user);
+    },
   });
 }

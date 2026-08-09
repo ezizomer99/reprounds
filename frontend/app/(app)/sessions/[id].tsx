@@ -1,14 +1,17 @@
 import {
   ActivityIndicator,
   Alert,
+  type AlertButton,
   AppState,
   FlatList,
   Modal,
   ScrollView,
+  type StyleProp,
   StyleSheet,
   Switch,
   Text,
   TextInput,
+  type TextStyle,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -36,6 +39,7 @@ import {
   NOTES_MAX_LENGTH,
   REPS_RANGE,
   REST_SECONDS_RANGE,
+  RIR_RANGE,
   RPE_RANGE,
   totalVolume,
 } from '@app/shared';
@@ -59,17 +63,20 @@ import {
   useUpdateStrengthSet,
   useDeleteStrengthSet,
   useExerciseHistory,
+  useExercisePRs,
 } from '../../../src/hooks/useSession';
 import { useRoutines } from '../../../src/hooks/useRoutines';
 import { useFocuses, useSetSessionFocuses } from '../../../src/hooks/useFocuses';
 import { RestTimer } from '../../../src/components/RestTimer';
 import { CutCornerView } from '../../../src/components/CutCornerView';
 import { Skeleton } from '../../../src/components/Skeleton';
+import { InlineError } from '../../../src/components/InlineError';
 import { RoundLogger, BOXING_WEAPONS, MUAY_THAI_WEAPONS } from '../../../src/components/RoundLogger';
 import { PlateCalculator } from '../../../src/components/PlateCalculator';
 import { CalendarPicker } from '../../../src/components/CalendarPicker';
 import { formatDayTitle, localTodayISO } from '../../../src/lib/calendar';
 import { useUnit } from '../../../src/units/UnitContext';
+import { useEffortMetric } from '../../../src/units/EffortContext';
 import {
   fmtWeight,
   kgToUnit,
@@ -91,6 +98,14 @@ import {
   parseNumberInRangeResult,
 } from '../../../src/lib/parseNumber';
 import { suggestOverload } from '../../../src/lib/overload';
+import {
+  bestOfSet,
+  checkPR,
+  mergeBest,
+  priorBestFromPRs,
+  type PRKind,
+  type PriorBest,
+} from '../../../src/lib/prCheck';
 import { isOptimisticId, reorderPayload } from '../../../src/lib/reorder';
 import { generateWarmupRamp } from '../../../src/lib/warmup';
 import { cancelScheduled, cancelScheduledByKind, scheduleInSeconds } from '../../../src/lib/notifications';
@@ -136,8 +151,64 @@ const SET_TYPE_SHORT: Record<SetType, string> = {
  */
 const MA_NUMBER_RANGE = { min: 0, max: 100_000 };
 
+/** Fallback rest duration, and what `restTotal` resets to between rests. */
+const DEFAULT_REST_SECONDS = 120;
+
+/**
+ * What the workout came to, captured at the moment it's finished. Snapshotted
+ * rather than read live, because completing invalidates the session query and
+ * the numbers would shift out from under the card that's showing them.
+ */
+interface FinishSummary {
+  sets: number;
+  volumeKg: number;
+  durationMinutes: number;
+  entries: number;
+  /** Exercise names that set a record this session, in the order they happened. */
+  prs: string[];
+}
+
 function nextSetNumber(sets: readonly StrengthSet[]): number {
   return sets.reduce((max, s) => Math.max(max, s.setNumber), 0) + 1;
+}
+
+/**
+ * The running session clock.
+ *
+ * A leaf on purpose. This used to be `elapsed` state on SessionScreen, so every
+ * tick re-rendered the whole screen — every entry card, every set row, every
+ * RoundLogger — once a second for the length of the workout, to change four
+ * characters of text. Now only this component re-renders; `sharedRef` carries
+ * the value to the one other consumer, the round logger's "stamp from timer",
+ * which reads it when tapped rather than rendering from it.
+ */
+function ElapsedClock({ startedAt, paused, sharedRef, style }: {
+  /** ISO timestamp the session went live; null holds the clock at zero. */
+  startedAt: string | null;
+  /** Held still for the length of a drag — see the DraggableFlatList note in CLAUDE.md. */
+  paused: React.RefObject<boolean>;
+  sharedRef: React.MutableRefObject<number>;
+  style?: StyleProp<TextStyle>;
+}) {
+  const [secs, setSecs] = useState(0);
+
+  useEffect(() => {
+    if (!startedAt) return;
+    const startedMs = new Date(startedAt).getTime();
+    const tick = () => {
+      if (paused.current) return;
+      // Derived from the start timestamp, not decremented, so it snaps back to
+      // the truth after a background rather than resuming where JS froze.
+      const next = Math.max(0, Math.floor((Date.now() - startedMs) / 1000));
+      sharedRef.current = next;
+      setSecs(next);
+    };
+    tick();
+    const intervalId = setInterval(tick, 1000);
+    return () => clearInterval(intervalId);
+  }, [startedAt, paused, sharedRef]);
+
+  return <Text style={style}>{formatElapsed(secs)}</Text>;
 }
 
 function formatElapsed(secs: number): string {
@@ -163,8 +234,18 @@ function PickExerciseModal({ visible, onClose, onPick, title = 'Add Exercise' }:
   const [filter, setFilter] = useState<ExerciseChipFilter>(EMPTY_FILTER);
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState('');
-  const { data: exercises, isLoading } = useExercises({ search: search.trim() || undefined });
-  const { isPro, showPaywall } = useProGate();
+  const {
+    data: exercises,
+    isLoading,
+    isError,
+    refetch,
+  } = useExercises({ search: search.trim() || undefined });
+  // The whole catalogue, for counting how many custom exercises the user
+  // already has. Counting from the list above meant the free limit vanished
+  // the moment a search narrowed it. Same query key as the session screen's
+  // own unfiltered call, so this shares its cache rather than refetching.
+  const { data: allExercises } = useExercises();
+  const { isPro, isLoading: gateLoading, showPaywall } = useProGate();
 
   const filteredExercises = useMemo(
     () => filterByChips(exercises ?? [], filter),
@@ -179,9 +260,9 @@ function PickExerciseModal({ visible, onClose, onPick, title = 'Add Exercise' }:
   }
 
   function handleCreatePress() {
-    const allCustom = (exercises ?? []).filter((e) => e.userId != null);
-    const searchActive = search.trim().length > 0;
-    if (!isPro && !searchActive && allCustom.length >= FREE_CUSTOM_EXERCISE_LIMIT) {
+    const allCustom = (allExercises ?? []).filter((e) => e.userId != null);
+    // See exercises/index.tsx — don't enforce a limit on an unresolved gate.
+    if (!isPro && !gateLoading && allCustom.length >= FREE_CUSTOM_EXERCISE_LIMIT) {
       Alert.alert(
         'Limit reached',
         `Free accounts can create up to ${FREE_CUSTOM_EXERCISE_LIMIT} custom exercises. Upgrade to RepRounds Pro for unlimited exercises.`,
@@ -223,6 +304,15 @@ function PickExerciseModal({ visible, onClose, onPick, title = 'Add Exercise' }:
           )}
           {isLoading ? (
             <View style={styles.centered}><ActivityIndicator color={T.primary} /></View>
+          ) : isError ? (
+            // A dropped connection used to fall through to the empty state,
+            // which reads "No exercises found." and offers to create one —
+            // pushing the user into a duplicate of an exercise they already
+            // have, and burning a slot off the free limit to do it.
+            <InlineError
+              message="Couldn't load your exercises."
+              onRetry={() => { void refetch(); }}
+            />
           ) : (
             <FlatList
               data={filteredExercises}
@@ -315,7 +405,7 @@ function PickDisciplineModal({ visible, onClose, onPick }: {
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const { data: disciplines, isLoading } = useDisciplines();
+  const { data: disciplines, isLoading, isError, refetch } = useDisciplines();
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -328,6 +418,13 @@ function PickDisciplineModal({ visible, onClose, onPick }: {
         </View>
         {isLoading ? (
           <View style={styles.centered}><ActivityIndicator color={T.primary} /></View>
+        ) : isError ? (
+          // Otherwise a failed fetch is indistinguishable from having no
+          // disciplines at all.
+          <InlineError
+            message="Couldn't load your disciplines."
+            onRetry={() => { void refetch(); }}
+          />
         ) : (
           <FlatList
             data={disciplines ?? []}
@@ -354,7 +451,12 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   sessionId: string;
   entryId: string;
   displayNumber: number | null; // null = warm-up
-  onCompleted?: (weightKg: number | null) => void;
+  /**
+   * Fired once a set is successfully marked complete, with what it actually
+   * holds — weight in kg and reps — so the card can check it for a record.
+   * Null on both counts for a warm-up, which is never a PR.
+   */
+  onCompleted?: (result: { weightKg: number | null; reps: number | null }) => void;
   onOpenMenu: () => void;
   exerciseType?: 'strength' | 'conditioning';
 }) {
@@ -372,7 +474,15 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   const [reps, setReps] = useState(set.reps !== null ? String(set.reps) : '');
   const [weight, setWeight] = useState(set.weight !== null ? fmtWeight(set.weight, unit) : '');
   const [duration, setDuration] = useState(set.reps !== null ? fmtDuration(set.reps) : '');
-  const [rpe, setRpe] = useState(set.rpe !== null ? String(set.rpe) : '');
+  // One intensity cell, showing whichever of RPE / RIR the user records in.
+  // Both columns have existed in the schema since the first migration and both
+  // are validated by the API; only RPE ever had an input, so `rir` was dead
+  // storage.
+  const { metric: effortMetric } = useEffortMetric();
+  const isRir = effortMetric === 'rir';
+  const effortRange = isRir ? RIR_RANGE : RPE_RANGE;
+  const storedEffort = isRir ? set.rir : set.rpe;
+  const [effort, setEffort] = useState(storedEffort !== null ? String(storedEffort) : '');
   const [notes, setNotes] = useState(set.notes ?? '');
   const [showNote, setShowNote] = useState(false);
   // Which cells currently hold something unusable, so they can be flagged
@@ -397,8 +507,13 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
     }
   }, [set.weight, unit]);
   useEffect(() => {
-    if (focusedField.current !== 'rpe') setRpe(set.rpe !== null ? String(set.rpe) : '');
-  }, [set.rpe]);
+    if (focusedField.current !== 'effort') setEffort(storedEffort !== null ? String(storedEffort) : '');
+  }, [storedEffort]);
+  // Notes were the one field left out of this, so a note the server rejected
+  // stayed on screen looking saved while the cache had already rolled back.
+  useEffect(() => {
+    if (focusedField.current !== 'notes') setNotes(set.notes ?? '');
+  }, [set.notes]);
 
   const onFieldFocus = (key: string) => () => { focusedField.current = key; };
   const onFieldBlur = (key: string, handler: () => void) => () => {
@@ -443,12 +558,19 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
     updateSet.mutate({ sessionId, entryId, setId: set.id, reps: secs });
   }
 
-  function handleBlurRpe() {
+  function handleBlurEffort() {
     if (isOptimistic) return;
-    const { value, invalid } = parseNumberInRangeResult(rpe, RPE_RANGE);
-    markField('rpe', invalid);
+    // RIR is a whole number of reps left; RPE is a half-point scale.
+    const { value, invalid } = isRir
+      ? parseIntInRangeResult(effort, effortRange)
+      : parseNumberInRangeResult(effort, effortRange);
+    markField('effort', invalid);
     if (invalid) return;
-    updateSet.mutate({ sessionId, entryId, setId: set.id, rpe: value });
+    updateSet.mutate(
+      isRir
+        ? { sessionId, entryId, setId: set.id, rir: value }
+        : { sessionId, entryId, setId: set.id, rpe: value },
+    );
   }
 
   const isDone = set.completed;
@@ -463,10 +585,22 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
     const next = !isDone;
     const parsedWeight = parseNumberInRange(weight, weightInputRange(unit));
     const wKg = isTime || parsedWeight === null ? null : unitToKg(parsedWeight, unit);
+    // Read from the on-screen text rather than the cached row: the blur that
+    // would have saved it hasn't necessarily landed when the circle is tapped.
+    const parsedReps = isTime ? null : parseIntInRangeResult(reps, REPS_RANGE).value;
     if (next) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     updateSet.mutate(
       { sessionId, entryId, setId: set.id, completed: next },
-      { onSuccess: () => { if (next) onCompleted?.(set.setType !== 'warmup' ? wKg : null); } },
+      {
+        onSuccess: () => {
+          if (!next) return;
+          const isWorking = set.setType !== 'warmup';
+          onCompleted?.({
+            weightKg: isWorking ? wKg : null,
+            reps: isWorking ? parsedReps : null,
+          });
+        },
+      },
     );
   }
 
@@ -558,22 +692,24 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
           </View>
 
           {!isWarm && (
-            <View style={[styles.cellRpe, isDone && styles.cellDone, badFields.rpe && styles.cellInvalid]}>
+            <View style={[styles.cellRpe, isDone && styles.cellDone, badFields.effort && styles.cellInvalid]}>
               <TextInput
                 style={[styles.cellValue, { fontSize: 15 }]}
-                value={rpe}
-                onChangeText={setRpe}
-                onFocus={onFieldFocus('rpe')}
-                onBlur={onFieldBlur('rpe', handleBlurRpe)}
+                value={effort}
+                onChangeText={setEffort}
+                onFocus={onFieldFocus('effort')}
+                onBlur={onFieldBlur('effort', handleBlurEffort)}
                 placeholder="—"
                 placeholderTextColor={T.muted}
-                keyboardType="decimal-pad"
+                keyboardType={isRir ? 'number-pad' : 'decimal-pad'}
                 returnKeyType="done"
                 editable={!isDone && !isOptimistic}
                 textAlign="center"
                 maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}
               />
-              <Text style={styles.cellUnit} maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}>RPE</Text>
+              <Text style={styles.cellUnit} maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}>
+                {isRir ? 'RIR' : 'RPE'}
+              </Text>
             </View>
           )}
         </>
@@ -597,7 +733,8 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
         style={[styles.maInput, styles.setNoteInput]}
         value={notes}
         onChangeText={setNotes}
-        onBlur={handleBlurNotes}
+        onFocus={onFieldFocus('notes')}
+        onBlur={onFieldBlur('notes', handleBlurNotes)}
         placeholder="Note…"
         placeholderTextColor={T.muted}
         multiline
@@ -814,7 +951,7 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
   onStartRest: (restSecs: number) => void;
   onStopRest: () => void;
   restingActive: boolean;
-  onPR?: (exerciseName: string) => void;
+  onPR?: (exerciseName: string, kind: PRKind) => void;
   exerciseType?: 'strength' | 'conditioning';
   exerciseMeta?: { equipment: string | null; bodyPart: string | null };
   sessionActive?: boolean;
@@ -826,6 +963,7 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { unit } = useUnit();
+  const { metric: effortMetric } = useEffortMetric();
   const isTime = exerciseType === 'conditioning';
   const addSet = useAddStrengthSet();
   const updateSet = useUpdateStrengthSet();
@@ -862,19 +1000,25 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
     [isTime, lastSessionWorking, exerciseMeta, unit],
   );
 
-  // Max weight ever logged for this exercise (across all history).
-  const maxHistoryWeight = useMemo(() => {
-    if (!history?.history?.length) return null;
-    let max = 0;
-    for (const h of history.history) {
-      for (const s of h.entry.sets) {
-        if (s.completed && s.weight != null && s.setType !== 'warmup' && s.weight > max) {
-          max = s.weight;
-        }
-      }
-    }
-    return max > 0 ? max : null;
-  }, [history]);
+  // What this lift has to beat. Read from the PRs endpoint, which ranks all
+  // completed history by Epley e1RM — the same definition the Stats tab and the
+  // PR feed use. This used to be the max weight across `history`, which the API
+  // caps at the last five sessions, so the banner both fired on sets that were
+  // not records and stayed silent on ones that were.
+  const { data: prs } = useExercisePRs(isTime ? null : entry.exerciseId);
+  const priorBest = useMemo(() => priorBestFromPRs(prs), [prs]);
+  // Records set during this session. The endpoint only sees completed sessions,
+  // so without folding these in every heavier set after the first record would
+  // fire the banner again.
+  const sessionBest = useRef<PriorBest>({ e1rmKg: null, weightKg: null });
+
+  function handleSetCompleted(result: { weightKg: number | null; reps: number | null }) {
+    const baseline = mergeBest(priorBest, sessionBest.current);
+    const hit = checkPR(result, baseline);
+    if (!hit) return;
+    sessionBest.current = mergeBest(sessionBest.current, bestOfSet(result));
+    onPR?.(entry.exerciseName ?? 'Exercise', hit.kind);
+  }
 
   function handleAddWarmup() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1113,7 +1257,9 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
           <>
             <Text style={styles.colHeader}>Weight</Text>
             <Text style={styles.colHeader}>Reps</Text>
-            <Text style={[styles.colHeader, { width: 56 }]}>RPE</Text>
+            <Text style={[styles.colHeader, { width: 56 }]}>
+              {effortMetric === 'rir' ? 'RIR' : 'RPE'}
+            </Text>
           </>
         )}
         <View style={{ width: 32 }} />
@@ -1126,11 +1272,7 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
           sessionId={sessionId}
           entryId={entry.id}
           displayNumber={i + 1}
-          onCompleted={(wKg) => {
-            if (wKg !== null && maxHistoryWeight !== null && wKg > maxHistoryWeight) {
-              onPR?.(entry.exerciseName ?? 'Exercise');
-            }
-          }}
+          onCompleted={handleSetCompleted}
           onOpenMenu={() => setMenuSet(set)}
           exerciseType={exerciseType}
         />
@@ -1183,15 +1325,22 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
         />
       )}
 
-      <PickExerciseModal
-        visible={showSwapPicker}
-        title="Swap Exercise"
-        onClose={() => setShowSwapPicker(false)}
-        onPick={(e) => {
-          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          updateEntry.mutate({ sessionId, entryId: entry.id, exerciseId: e.id });
-        }}
-      />
+      {/* Mounted only while open, like every other overlay in this file. It
+          used to be mounted always with visible={false}, so a ten-exercise
+          session carried ten hidden exercise pickers — each with its own
+          queries, its own filter chips and its own filtering memo, all
+          re-rendering with their card. */}
+      {showSwapPicker && (
+        <PickExerciseModal
+          visible
+          title="Swap Exercise"
+          onClose={() => setShowSwapPicker(false)}
+          onPick={(e) => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            updateEntry.mutate({ sessionId, entryId: entry.id, exerciseId: e.id });
+          }}
+        />
+      )}
     </Animated.View>
   );
 }
@@ -1213,16 +1362,26 @@ function Chevron({ collapsed }: { collapsed: boolean }) {
 
 // ─── Martial arts entry card ──────────────────────────────────────────────────
 
-function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, sessionActive, collapsed = false, onToggleCollapse, onDrag }: {
+function MartialArtsEntryCard({ entry, sessionId, disciplines, disciplinesError, onRetryDisciplines, elapsedRef, sessionActive, collapsed = false, onToggleCollapse, onDrag, onRegisterFlush }: {
   entry: SessionEntryWithSets;
   sessionId: string;
   disciplines: Discipline[];
-  elapsedSeconds?: number;
+  /** The discipline list failed to load, so the form can't be built at all. */
+  disciplinesError?: boolean;
+  onRetryDisciplines?: () => void;
+  /** Live session stopwatch, read on tap rather than rendered from. */
+  elapsedRef?: React.MutableRefObject<number>;
   sessionActive?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
   /** Provided only while collapsed — long-pressing the header starts a drag. */
   onDrag?: () => void;
+  /**
+   * Publishes a "save my unsaved edits" callback to the screen while this card
+   * is dirty, so finishing or leaving the session can flush it. Passing null
+   * withdraws it.
+   */
+  onRegisterFlush?: (entryId: string, flush: (() => Promise<void>) | null) => void;
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
@@ -1230,6 +1389,12 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
   const discipline = disciplines.find((d) => d.id === entry.disciplineId);
   const [details, setDetails] = useState<Record<string, unknown>>((entry.details as Record<string, unknown>) ?? {});
   const [justSaved, setJustSaved] = useState(false);
+  // Everything typed here lives in local state until Save, so the card has to
+  // track whether that state has run ahead of the server. Set by every edit,
+  // cleared by a successful save — a flag rather than a deep compare of
+  // `details`, which would be wrong the moment a value round-trips to an
+  // equal-but-differently-ordered object.
+  const [dirty, setDirty] = useState(false);
   // Raw text for numeric detail fields while they're being typed.
   const [numberText, setNumberText] = useState<Record<string, string>>({});
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1241,25 +1406,68 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
     [],
   );
 
+  // Pull server state in whenever the card has nothing of its own to lose. This
+  // used to never happen at all: `details` was seeded once at mount, so a
+  // refetch — which any sibling mutation triggers — could not reach this form.
+  useEffect(() => {
+    if (dirty) return;
+    setDetails((entry.details as Record<string, unknown>) ?? {});
+  }, [entry.details, dirty]);
+
   const handleSave = useCallback(async () => {
     try {
       await updateEntry.mutateAsync({ sessionId, entryId: entry.id, details });
+      setDirty(false);
       setJustSaved(true);
       savedTimerRef.current = setTimeout(() => setJustSaved(false), 1500);
     } catch (err) {
       Alert.alert('Error', (err as Error).message ?? 'Failed to save.');
+      throw err;
     }
   }, [sessionId, entry.id, details, updateEntry]);
 
+  // A just-added entry still carries a client id, so a PATCH against it would
+  // 404 — the same reason the Save button is disabled. Registering it would
+  // only make Finish fail on a save that cannot succeed; the id swap re-runs
+  // this effect moments later and registers it properly.
+  const savable = dirty && !entry.id.startsWith('optimistic-');
+
+  // While dirty, hand the screen a way to flush this card. Without it, Finish
+  // and Back both completed while the rounds were still only in local state.
+  useEffect(() => {
+    if (!onRegisterFlush) return;
+    onRegisterFlush(entry.id, savable ? handleSave : null);
+    return () => onRegisterFlush(entry.id, null);
+  }, [onRegisterFlush, entry.id, savable, handleSave]);
+
+  // Collapsing hides the Save button, so collapsing has to save. Fires on the
+  // transition only, not on every render while collapsed.
+  const wasCollapsed = useRef(collapsed);
+  useEffect(() => {
+    const justCollapsed = collapsed && !wasCollapsed.current;
+    wasCollapsed.current = collapsed;
+    if (justCollapsed && savable) {
+      handleSave().catch(() => {
+        // handleSave already alerted; the card stays dirty so the flush on
+        // finish/back gets another go.
+      });
+    }
+  }, [collapsed, savable, handleSave]);
+
   function setField(key: string, value: unknown) {
     setDetails((prev) => ({ ...prev, [key]: value }));
+    setDirty(true);
   }
 
-  // Collapsed summary: how much has been logged so far.
+  // Collapsed summary: how much has been logged so far. The unsaved marker is
+  // appended to this same line rather than added as its own element — a badge
+  // that appears and disappears would change the cell's height, which is what
+  // wedges DraggableFlatList mid-drag (see CLAUDE.md).
   const roundCount = isRoundsSession(details) ? details.rounds.length : 0;
-  const summary = roundCount > 0
-    ? `${roundCount} round${roundCount !== 1 ? 's' : ''} logged`
-    : 'Nothing logged yet';
+  const summary =
+    (roundCount > 0
+      ? `${roundCount} round${roundCount !== 1 ? 's' : ''} logged`
+      : 'Nothing logged yet') + (dirty ? ' · Unsaved' : '');
 
   const head = (name: string) => (
     <View style={styles.entryHead}>
@@ -1279,7 +1487,7 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
         </View>
       </TouchableOpacity>
       {collapsed ? (
-        <View style={[styles.gymDotBadge, { backgroundColor: T.grappling }]} />
+        <View style={[styles.gymDotBadge, { backgroundColor: dirty ? T.gold : T.grappling }]} />
       ) : (
         <View style={[styles.gymBadge, { backgroundColor: withAlpha(T.grappling, 0.15), borderColor: withAlpha(T.grappling, 0.3) }]}>
           <Text style={[styles.gymBadgeText, { color: T.grappling }]}>Martial Arts</Text>
@@ -1292,7 +1500,19 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
     return (
       <Animated.View style={styles.entryCard}>
         {head(entry.disciplineName ?? 'Discipline')}
-        {!collapsed && <ActivityIndicator style={{ margin: 12 }} color={T.primary} />}
+        {!collapsed && (
+          // The discipline drives the whole form, so there's nothing to render
+          // without it. This used to spin forever on a failed fetch, with no
+          // way to retry short of leaving the session.
+          disciplinesError ? (
+            <InlineError
+              message="Couldn't load this discipline's form."
+              onRetry={onRetryDisciplines}
+            />
+          ) : (
+            <ActivityIndicator style={{ margin: 12 }} color={T.primary} />
+          )
+        )}
       </Animated.View>
     );
   }
@@ -1316,9 +1536,12 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
         <RoundLogger
           category={discipline.category}
           value={isRoundsSession(details) ? details : null}
-          onChange={(next) => setDetails(next as unknown as Record<string, unknown>)}
+          onChange={(next) => {
+            setDetails(next as unknown as Record<string, unknown>);
+            setDirty(true);
+          }}
           strikeWeapons={strikeWeapons}
-          elapsedSeconds={elapsedSeconds}
+          elapsedRef={elapsedRef}
           sessionActive={sessionActive}
         />
       ) : discipline.fieldConfig.map((field) => {
@@ -1426,13 +1649,20 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
       })}
 
       <TouchableOpacity
-        style={[styles.maSaveBtn, (updateEntry.isPending || justSaved) && { opacity: 0.6 }]}
-        onPress={handleSave}
-        disabled={updateEntry.isPending || entry.id.startsWith('optimistic-')}
+        style={[
+          styles.maSaveBtn,
+          (updateEntry.isPending || justSaved || !dirty) && { opacity: 0.6 },
+        ]}
+        // handleSave rethrows so the flush registry can see a failure; a direct
+        // onPress={handleSave} would surface that as an unhandled rejection.
+        onPress={() => { handleSave().catch(() => {}); }}
+        disabled={updateEntry.isPending || !dirty || entry.id.startsWith('optimistic-')}
+        accessibilityRole="button"
+        accessibilityLabel={dirty ? 'Save logged rounds' : 'Rounds saved'}
       >
         {updateEntry.isPending
           ? <ActivityIndicator size="small" color={T.onPrimary} />
-          : <Text style={styles.maSaveBtnText}>{justSaved ? 'Saved ✓' : 'Save'}</Text>}
+          : <Text style={styles.maSaveBtnText}>{justSaved || !dirty ? 'Saved ✓' : 'Save'}</Text>}
       </TouchableOpacity>
       </Animated.View>
       )}
@@ -1595,13 +1825,20 @@ function TimeInput({ value, onChange }: {
 
 // ─── Session settings sheet ──────────────────────────────────────────────────
 
-function SessionSettingsSheet({ session, routineName, onSave, onFinish, onDiscard, isPending }: {
+function SessionSettingsSheet({ session, routineName, onSave, onCancel, onFinish, onDiscard, isPending, isDiscarding, isSaving }: {
   session: SessionWithEntries;
   routineName: string | null;
   onSave: (name: string, notes: string) => void;
+  /** Dismiss without writing — used when nothing was edited. */
+  onCancel: () => void;
   onFinish: (name: string, notes: string, date: string, durationMinutes: number) => void;
   onDiscard: () => void;
+  /** The finish request is in flight. */
   isPending: boolean;
+  /** The discard request is in flight. */
+  isDiscarding: boolean;
+  /** The name/notes save is in flight. */
+  isSaving: boolean;
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
@@ -1621,15 +1858,27 @@ function SessionSettingsSheet({ session, routineName, onSave, onFinish, onDiscar
   const [endH, setEndH] = useState(isBackdated ? 19 : now.getHours());
   const [endM, setEndM] = useState(isBackdated ? 0 : now.getMinutes());
 
-  const durationMinutes = useMemo(() => {
-    let mins = (endH * 60 + endM) - (startH * 60 + startM);
-    if (mins < 0) mins += 1440; // crossed midnight
-    return mins;
+  const { durationMinutes, wrappedMidnight } = useMemo(() => {
+    const raw = (endH * 60 + endM) - (startH * 60 + startM);
+    // A session that runs past midnight is real, so a negative difference has
+    // to wrap. But so does a typo'd end time, and wrapping turns "19:00–18:00"
+    // into a 23-hour workout — so say when the wrap happened rather than
+    // quietly banking it.
+    return { durationMinutes: raw < 0 ? raw + 1440 : raw, wrappedMidnight: raw < 0 };
   }, [startH, startM, endH, endM]);
 
 
+  // Closing used to PATCH unconditionally. That cost a write on every peek at
+  // the sheet, and made the failure path incoherent: the screen alerts and
+  // keeps the sheet open, but an iOS pageSheet swipe-dismiss has already torn
+  // it down, so "still open" was a state nobody could see.
+  const savedName = session.name ?? routineName ?? '';
+  const savedNotes = session.notes ?? '';
+  const settingsDirty = name !== savedName || notes !== savedNotes;
+
   function handleClose() {
-    onSave(name, notes);
+    if (settingsDirty) onSave(name, notes);
+    else onCancel();
   }
 
   function handleFinish() {
@@ -1689,8 +1938,9 @@ function SessionSettingsSheet({ session, routineName, onSave, onFinish, onDiscar
               />
             </View>
           </View>
-          <Text style={styles.settingsDurationHint}>
+          <Text style={[styles.settingsDurationHint, wrappedMidnight && { color: T.gold }]}>
             Duration: {fmtMinutes(durationMinutes)}
+            {wrappedMidnight ? ' — ends the next day' : ''}
           </Text>
 
           {/* Notes */}
@@ -1706,25 +1956,35 @@ function SessionSettingsSheet({ session, routineName, onSave, onFinish, onDiscar
             textAlignVertical="top"
           />
 
-          {/* Finish button */}
-          <TouchableOpacity
-            style={[styles.settingsFinishBtn, isPending && { opacity: 0.5 }]}
-            onPress={handleFinish}
-            disabled={isPending}
-          >
-            {isPending
-              ? <ActivityIndicator size="small" color={T.onPrimary} />
-              : <Text style={styles.settingsFinishBtnText}>Finish Workout</Text>}
-          </TouchableOpacity>
+          {/* Finish and Discard both write, and each used to be gated on the
+              *finish* request alone — so Discard stayed live for the whole
+              DELETE and a second tap fired a second one. */}
+          {(() => {
+            const busy = isPending || isDiscarding || isSaving;
+            return (
+              <>
+                <TouchableOpacity
+                  style={[styles.settingsFinishBtn, busy && { opacity: 0.5 }]}
+                  onPress={handleFinish}
+                  disabled={busy}
+                >
+                  {isPending
+                    ? <ActivityIndicator size="small" color={T.onPrimary} />
+                    : <Text style={styles.settingsFinishBtnText}>Finish Workout</Text>}
+                </TouchableOpacity>
 
-          {/* Discard button */}
-          <TouchableOpacity
-            style={[styles.settingsDiscardBtn, isPending && { opacity: 0.5 }]}
-            onPress={onDiscard}
-            disabled={isPending}
-          >
-            <Text style={styles.settingsDiscardBtnText}>Discard Workout</Text>
-          </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.settingsDiscardBtn, busy && { opacity: 0.5 }]}
+                  onPress={onDiscard}
+                  disabled={busy}
+                >
+                  {isDiscarding
+                    ? <ActivityIndicator size="small" color={T.danger} />
+                    : <Text style={styles.settingsDiscardBtnText}>Discard Workout</Text>}
+                </TouchableOpacity>
+              </>
+            );
+          })()}
         </ScrollView>
       </View>
     </Modal>
@@ -1741,7 +2001,7 @@ export default function SessionScreen() {
   const insets = useSafeAreaInsets();
 
   const { unit } = useUnit();
-  const { data: session, isLoading, isError } = useSession(id ?? null);
+  const { data: session, isLoading, isError, refetch: refetchSession } = useSession(id ?? null);
   const completeSession = useCompleteSession();
   const deleteSession = useDeleteSession();
   const updateSession = useUpdateSession();
@@ -1750,7 +2010,11 @@ export default function SessionScreen() {
   const reorderEntries = useReorderSessionEntries();
   const updateEntry = useUpdateSessionEntry();
   const addEntry = useAddSessionEntry();
-  const { data: disciplines } = useDisciplines();
+  const {
+    data: disciplines,
+    isError: disciplinesError,
+    refetch: refetchDisciplines,
+  } = useDisciplines();
   const { data: allExercises } = useExercises();
   const { data: routines } = useRoutines();
 
@@ -1784,7 +2048,7 @@ export default function SessionScreen() {
   const [restSeconds, setRestSeconds] = useState<number | null>(
     restoredRest ? Math.max(0, Math.ceil((restoredRest.endsAt - Date.now()) / 1000)) : null,
   );
-  const [restTotal, setRestTotal] = useState(restoredRest?.total ?? 120);
+  const [restTotal, setRestTotal] = useState(restoredRest?.total ?? DEFAULT_REST_SECONDS);
   // Which entry's rest timer is running, so its card can show a stop control.
   const [restEntryId, setRestEntryId] = useState<string | null>(restoredRest?.entryId ?? null);
   // Absolute wall-clock time (epoch ms) the rest period ends. The visible
@@ -1792,11 +2056,12 @@ export default function SessionScreen() {
   // aligned with the scheduled "Rest complete" notification even when the app
   // is backgrounded (JS timers freeze while the notification fires on time).
   const [restEndsAt, setRestEndsAt] = useState<number | null>(restoredRest?.endsAt ?? null);
-  const [elapsed, setElapsed] = useState(0);
-  const [prBanner, setPrBanner] = useState<string | null>(null);
+  // Written by ElapsedClock, read on tap by the round logger's stamp button.
+  const elapsedRef = useRef(0);
+  const [prBanner, setPrBanner] = useState<{ name: string; kind: PRKind } | null>(null);
   const prTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const finishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [showCelebration, setShowCelebration] = useState(false);
+  const prsHitRef = useRef(new Map<string, PRKind>());
+  const [summary, setSummary] = useState<FinishSummary | null>(null);
   // True from the moment a card is picked up until the drop is handled. The
   // rest and elapsed ticks below re-render the whole screen twice a second
   // between them, which rebuilds every cell while DraggableFlatList is midway
@@ -1805,6 +2070,27 @@ export default function SessionScreen() {
   // drop snaps back to the right value rather than resuming where it paused.
   // A ref, not state, so setting it doesn't itself cause the render it prevents.
   const draggingRef = useRef(false);
+
+  // Cards holding edits that haven't reached the server, keyed by entry id.
+  // Martial-arts rounds live in their card's local state until Save, so
+  // finishing or backing out used to drop a whole session's worth of rounds
+  // without a word. A ref rather than state: registering a flush must not
+  // re-render the list on every keystroke.
+  const pendingFlushes = useRef(new Map<string, () => Promise<void>>());
+  const registerFlush = useCallback(
+    (entryId: string, flush: (() => Promise<void>) | null) => {
+      if (flush) pendingFlushes.current.set(entryId, flush);
+      else pendingFlushes.current.delete(entryId);
+    },
+    [],
+  );
+  /** Save every dirty card. Returns false if any of them failed. */
+  const flushPendingEntries = useCallback(async () => {
+    const flushes = [...pendingFlushes.current.values()];
+    if (flushes.length === 0) return true;
+    const results = await Promise.allSettled(flushes.map((f) => f()));
+    return results.every((r) => r.status === 'fulfilled');
+  }, []);
 
   // Derive the visible rest countdown from the absolute end time. The interval
   // only recomputes from Date.now(), so on return from background it snaps to
@@ -1857,18 +2143,9 @@ export default function SessionScreen() {
     return () => sub.remove();
   }, [restEndsAt]);
 
-  useEffect(() => {
-    if (!session?.startedAt || session.status !== 'in_progress') return;
-    // Backdated log: the wall-clock elapsed time is meaningless, so don't run.
-    if (session.date < localTodayISO()) return;
-    const tick = () => {
-      if (draggingRef.current) return;
-      setElapsed(Math.floor((Date.now() - new Date(session.startedAt!).getTime()) / 1000));
-    };
-    tick();
-    const intervalId = setInterval(tick, 1000);
-    return () => clearInterval(intervalId);
-  }, [session?.startedAt, session?.status, session?.date]);
+  // The interval that used to live here now lives in ElapsedClock, which is
+  // mounted only when the session is live and not backdated — the same two
+  // conditions this effect used to check before starting.
 
   // Held stable across the rest countdown's twice-a-second ticks: only whether
   // a timer is up matters for the entry list's bottom inset, not the number on
@@ -1890,13 +2167,11 @@ export default function SessionScreen() {
   }, [session?.status]);
 
   // Timers that outlive the screen otherwise: the rest pill's auto-dismiss and
-  // the PR banner both setState after unmount, and the celebration's deferred
-  // router.back() (below) could pop a screen the user had already navigated to.
+  // the PR banner both setState after unmount.
   useEffect(
     () => () => {
       if (restDismissRef.current) clearTimeout(restDismissRef.current);
       if (prTimerRef.current) clearTimeout(prTimerRef.current);
-      if (finishTimerRef.current) clearTimeout(finishTimerRef.current);
     },
     [],
   );
@@ -1924,6 +2199,24 @@ export default function SessionScreen() {
     void armChain.current;
   }
 
+  /**
+   * Cancel on the same queue that arms.
+   *
+   * Skipping used to cancel `restNotifId.current` directly, but arming nulls
+   * that ref *before* awaiting the schedule call. Skip inside that window and
+   * the cancel hit null while the in-flight arm went on to store a live id — so
+   * "Rest complete" fired for a rest the user had already skipped, and
+   * `updateActiveRestNotifId` no-oped because the store had been cleared.
+   */
+  function cancelRestNotification() {
+    armChain.current = armChain.current.then(async () => {
+      const previous = restNotifId.current;
+      restNotifId.current = null;
+      await cancelScheduled(previous);
+    });
+    void armChain.current;
+  }
+
   function handleStartRest(entryId: string, secs: number) {
     if (secs <= 0) return;
     if (restDismissRef.current) {
@@ -1941,8 +2234,7 @@ export default function SessionScreen() {
   }
 
   function handleStopRest() {
-    void cancelScheduled(restNotifId.current);
-    restNotifId.current = null;
+    cancelRestNotification();
     clearActiveRest();
     if (restDismissRef.current) {
       clearTimeout(restDismissRef.current);
@@ -1952,6 +2244,9 @@ export default function SessionScreen() {
     setRestEndsAt(null);
     setRestSeconds(null);
     setRestEntryId(null);
+    // Left at the previous rest's duration, the next countdown rendered its
+    // progress bar against the wrong denominator until the first tick.
+    setRestTotal(DEFAULT_REST_SECONDS);
   }
 
   function handleRestAdd() {
@@ -1976,32 +2271,62 @@ export default function SessionScreen() {
     armRestNotification(remaining);
   }
 
-  function handlePR(exerciseName: string) {
+  function handlePR(exerciseName: string, kind: PRKind) {
     if (prTimerRef.current) clearTimeout(prTimerRef.current);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setPrBanner(exerciseName);
+    setPrBanner({ name: exerciseName, kind });
+    // Kept for the finish summary. A ref because nothing renders from it until
+    // the workout ends, and a Map so a lift that sets two records in one
+    // session is listed once — insertion order is the order they happened.
+    prsHitRef.current.set(exerciseName, kind);
     prTimerRef.current = setTimeout(() => setPrBanner(null), 3000);
   }
 
+  async function saveThenLeave() {
+    if (await flushPendingEntries()) {
+      router.back();
+      return;
+    }
+    Alert.alert(
+      'Error',
+      "Couldn't save your logged rounds. Check your connection — they're still here if you stay.",
+    );
+  }
+
   function handleBack() {
-    // Leaving a scheduled, skipped or finished session is normal navigation —
-    // the leave-warning only applies to a live in-progress session.
-    if (
+    // Unsaved round data is worth warning about whatever the session's status
+    // is — a completed session can still be edited, and those edits are just as
+    // local until they're saved.
+    const unsaved = pendingFlushes.current.size > 0;
+    // Leaving a scheduled, skipped or finished session is otherwise normal
+    // navigation — the in-progress warning only applies to a live session.
+    const isLive =
       session?.status !== 'completed' &&
       session?.status !== 'planned' &&
-      session?.status !== 'skipped'
-    ) {
-      Alert.alert(
-        'Leave Session?',
-        'Your session will still be in progress. Use the Resume button to return.',
-        [
-          { text: 'Stay', style: 'cancel' },
-          { text: 'Leave', style: 'destructive', onPress: () => router.back() },
-        ],
-      );
-    } else {
+      session?.status !== 'skipped';
+
+    if (!unsaved && !isLive) {
       router.back();
+      return;
     }
+
+    const buttons: AlertButton[] = [{ text: 'Stay', style: 'cancel' }];
+    if (unsaved) {
+      buttons.push({ text: 'Save & Leave', onPress: () => { void saveThenLeave(); } });
+    }
+    buttons.push({
+      text: unsaved ? 'Discard & Leave' : 'Leave',
+      style: 'destructive',
+      onPress: () => router.back(),
+    });
+
+    Alert.alert(
+      unsaved ? 'Unsaved Rounds' : 'Leave Session?',
+      unsaved
+        ? "You've logged rounds that haven't been saved yet. Leaving now discards them."
+        : 'Your session will still be in progress. Use the Resume button to return.',
+      buttons,
+    );
   }
 
   async function handleStartPlanned() {
@@ -2063,22 +2388,39 @@ export default function SessionScreen() {
 
   async function doFinish(name: string, notes: string, date: string, durationMinutes: number) {
     if (!id) return;
+    // Rounds typed into a martial-arts card are local until that card saves.
+    // Completing first meant the session closed without them, and the user had
+    // no way to tell.
+    if (!(await flushPendingEntries())) {
+      Alert.alert(
+        'Unsaved Rounds',
+        "Couldn't save your logged rounds, so the session wasn't finished. Check your connection and try again.",
+      );
+      return;
+    }
     try {
       await completeSession.mutateAsync({
         id,
         name: name.trim() || null,
         notes: notes.trim() || null,
-        durationMinutes: durationMinutes || null,
+        // `|| null` here discarded a genuine 0 — a session started and finished
+        // in the same minute is short, not unrecorded.
+        durationMinutes,
         date,
       });
       handleStopRest();
       setShowSettings(false);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setShowCelebration(true);
-      // Held in a ref and cleared on unmount: if the user taps back during the
-      // celebration this would otherwise fire a second router.back() and pop
-      // them off whatever screen they'd already reached.
-      finishTimerRef.current = setTimeout(() => router.back(), 1800);
+      // The celebration used to be 1.8s of confetti and an automatic back —
+      // the one moment the user is most interested in what they just did, and
+      // every number was already computed and then thrown away.
+      setSummary({
+        sets: doneCount,
+        volumeKg: sessionVolume,
+        durationMinutes,
+        entries: session?.entries.length ?? 0,
+        prs: [...prsHitRef.current.keys()],
+      });
     } catch (err) {
       Alert.alert('Error', (err as Error).message ?? 'Failed to complete session.');
     }
@@ -2086,15 +2428,18 @@ export default function SessionScreen() {
 
   async function handleSaveSettings(name: string, notes: string) {
     if (!id) return;
+    // Close first. On iOS a pageSheet swipe-dismiss has already torn the modal
+    // down by the time this runs, so keeping it "open" on failure left the
+    // state and the UI disagreeing — and re-showing it would have stomped
+    // whatever the user did next. The alert carries the failure instead.
+    setShowSettings(false);
     try {
       await updateSession.mutateAsync({ id, name: name.trim() || null, notes: notes.trim() || null });
     } catch (err) {
       // Was swallowed as "non-critical", which meant a failed rename or a lost
       // session note closed the sheet looking like it had saved.
       Alert.alert('Error', (err as Error).message ?? 'Failed to save session details.');
-      return;
     }
-    setShowSettings(false);
   }
 
   function handleDiscard() {
@@ -2162,8 +2507,10 @@ export default function SessionScreen() {
   if (isError || !session) {
     return (
       <View style={styles.loadingScreen}>
-        <Text style={styles.errorText}>Failed to load session.</Text>
-        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 12 }}>
+        {/* A dropped connection is the likeliest cause and it's recoverable, so
+            offer the retry before the exit — this used to be a dead end. */}
+        <InlineError message="Couldn't load this session." onRetry={() => { void refetchSession(); }} />
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 4 }}>
           <Text style={{ fontFamily: F.uiMed, color: T.primary }}>Go back</Text>
         </TouchableOpacity>
       </View>
@@ -2251,7 +2598,12 @@ export default function SessionScreen() {
               </Text>
             </>
           ) : isActive ? (
-            <Text style={styles.headerTimer}>{formatElapsed(elapsed)}</Text>
+            <ElapsedClock
+              startedAt={session.startedAt}
+              paused={draggingRef}
+              sharedRef={elapsedRef}
+              style={styles.headerTimer}
+            />
           ) : (
             <Text style={styles.headerDoneLabel} numberOfLines={1}>
               {session.name ?? routineName ?? 'Session'}
@@ -2457,11 +2809,14 @@ export default function SessionScreen() {
                       entry={entry}
                       sessionId={session.id}
                       disciplines={disciplines ?? []}
-                      elapsedSeconds={elapsed}
+                      disciplinesError={disciplinesError}
+                      onRetryDisciplines={() => { void refetchDisciplines(); }}
+                      elapsedRef={elapsedRef}
                       sessionActive={isActive}
                       collapsed={isCollapsed}
                       onToggleCollapse={() => toggleCollapsed(entry.id)}
                       onDrag={dragHandler}
+                      onRegisterFlush={registerFlush}
                     />
                   )}
                 </View>
@@ -2513,7 +2868,11 @@ export default function SessionScreen() {
         >
           <View style={styles.prBannerRow}>
             <Ionicons name="trophy" size={15} color="#1A1200" style={{ marginRight: 6 }} />
-            <Text style={styles.prBannerText}>New PR — {prBanner}</Text>
+            {/* An over-cap set has no 1RM estimate, so it can only ever be the
+                heaviest — saying "New PR" for it would claim more than we know. */}
+            <Text style={styles.prBannerText}>
+              {prBanner.kind === 'e1rm' ? 'New PR' : 'Heaviest yet'} — {prBanner.name}
+            </Text>
           </View>
         </CutCornerView>
       )}
@@ -2546,20 +2905,90 @@ export default function SessionScreen() {
           session={session}
           routineName={routineName}
           onSave={handleSaveSettings}
+          onCancel={() => setShowSettings(false)}
           onFinish={doFinish}
           onDiscard={handleDiscard}
           isPending={completeSession.isPending}
+          isDiscarding={deleteSession.isPending}
+          isSaving={updateSession.isPending}
         />
       )}
 
-      {showCelebration && (
-        <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
-          <LottieView
-            source={require('../../../assets/celebration.json')}
-            autoPlay
-            loop={false}
-            style={{ flex: 1 }}
-          />
+      {summary && (
+        <View style={StyleSheet.absoluteFillObject}>
+          <View style={styles.summaryScrim} />
+          <View style={StyleSheet.absoluteFillObject} pointerEvents="none">
+            <LottieView
+              source={require('../../../assets/celebration.json')}
+              autoPlay
+              loop={false}
+              style={{ flex: 1 }}
+            />
+          </View>
+          <View style={styles.summaryWrap} pointerEvents="box-none">
+            <CutCornerView fill={T.surface} stroke={T.borderStrong} style={styles.summaryCard}>
+              <Text style={styles.summaryTitle}>Workout complete</Text>
+              <Text style={styles.summaryName} numberOfLines={1}>
+                {session.name ?? routineName ?? formatDayTitle(session.date, { weekday: 'short' })}
+              </Text>
+
+              <View style={styles.summaryGrid}>
+                <View style={styles.summaryCell}>
+                  <Text style={styles.summaryCellNum}>{fmtMinutes(summary.durationMinutes)}</Text>
+                  <Text style={styles.summaryCellKey}>duration</Text>
+                </View>
+                <View style={styles.summaryCell}>
+                  <Text style={styles.summaryCellNum}>{summary.entries}</Text>
+                  <Text style={styles.summaryCellKey}>
+                    {hasMartialArts ? 'disciplines' : 'exercises'}
+                  </Text>
+                </View>
+                {/* Mat sessions have neither sets nor volume, so those cells
+                    would just read 0 — drop them instead. */}
+                {!hasMartialArts && (
+                  <>
+                    <View style={styles.summaryCell}>
+                      <Text style={styles.summaryCellNum}>{summary.sets}</Text>
+                      <Text style={styles.summaryCellKey}>sets done</Text>
+                    </View>
+                    <View style={styles.summaryCell}>
+                      <Text style={styles.summaryCellNum}>
+                        {Math.round(kgToUnit(summary.volumeKg, unit)).toLocaleString()}
+                      </Text>
+                      <Text style={styles.summaryCellKey}>{unit} volume</Text>
+                    </View>
+                  </>
+                )}
+              </View>
+
+              {summary.prs.length > 0 && (
+                <View style={styles.summaryPrs}>
+                  <View style={styles.summaryPrHead}>
+                    <Ionicons name="trophy" size={14} color={T.gold} />
+                    <Text style={styles.summaryPrTitle}>
+                      {summary.prs.length} personal record{summary.prs.length !== 1 ? 's' : ''}
+                    </Text>
+                  </View>
+                  {summary.prs.map((name) => (
+                    <Text key={name} style={styles.summaryPrName} numberOfLines={1}>
+                      {name}
+                    </Text>
+                  ))}
+                </View>
+              )}
+
+              <TouchableOpacity
+                onPress={() => { setSummary(null); router.back(); }}
+                activeOpacity={0.85}
+                accessibilityRole="button"
+                accessibilityLabel="Close workout summary"
+              >
+                <CutCornerView fill={T.primary} style={styles.summaryDoneBtn}>
+                  <Text style={styles.summaryDoneText}>Done</Text>
+                </CutCornerView>
+              </TouchableOpacity>
+            </CutCornerView>
+          </View>
         </View>
       )}
 
@@ -2941,6 +3370,64 @@ function makeStyles(T: ThemeColors) {
     zIndex: 50,
     marginHorizontal: 0,
   },
+    summaryScrim: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: withAlpha(T.bg, 0.92),
+    },
+    summaryWrap: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: D.pad,
+    },
+    summaryCard: { width: '100%', maxWidth: 380, padding: 22, gap: 4 },
+    summaryTitle: {
+      fontFamily: F.uiBold,
+      fontSize: 11,
+      color: T.textDim,
+      textTransform: 'uppercase',
+      letterSpacing: 1.2,
+    },
+    summaryName: { fontFamily: F.uiBold, fontSize: 21, color: T.text, letterSpacing: -0.3 },
+    summaryGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      marginTop: 16,
+      rowGap: 16,
+    },
+    summaryCell: { width: '50%', gap: 2 },
+    summaryCellNum: { fontFamily: F.monoBold, fontSize: 20, color: T.text },
+    summaryCellKey: {
+      fontFamily: F.uiMed,
+      fontSize: 11,
+      color: T.textDim,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    },
+    summaryPrs: {
+      marginTop: 18,
+      paddingTop: 14,
+      borderTopWidth: 1,
+      borderTopColor: T.border,
+      gap: 4,
+    },
+    summaryPrHead: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 },
+    summaryPrTitle: {
+      fontFamily: F.uiBold,
+      fontSize: 11,
+      color: T.gold,
+      textTransform: 'uppercase',
+      letterSpacing: 1,
+    },
+    summaryPrName: { fontFamily: F.uiMed, fontSize: 14, color: T.text },
+    summaryDoneBtn: {
+      marginTop: 22,
+      paddingVertical: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    summaryDoneText: { fontFamily: F.uiBold, fontSize: 16, color: T.onPrimary },
+
   prBanner: {
     position: 'absolute',
     left: 18,

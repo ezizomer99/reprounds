@@ -41,6 +41,18 @@ export function isUuid(value: unknown): value is string {
   return typeof value === 'string' && UUID_RE.test(value);
 }
 
+/**
+ * True when any of these path params is not a UUID.
+ *
+ * Body ids were checked with `isUuid` from the start; path params were not, so
+ * a mistyped or stale URL reached `eq(table.id, 'foo')` and came back as the
+ * 500 described above instead of a 404. Handlers guard with this before their
+ * first query.
+ */
+export function notUuid(...values: (string | undefined)[]): boolean {
+  return values.some((value) => !isUuid(value));
+}
+
 /** A whole number inside an inclusive range. */
 export function isIntInRange(value: unknown, range: NumericRange): value is number {
   return Number.isInteger(value) && isNumberInRange(value, range.min, range.max);

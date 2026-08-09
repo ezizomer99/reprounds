@@ -27,6 +27,7 @@ import { useProGate } from '../../../src/hooks/useProGate';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { CutCornerView } from '../../../src/components/CutCornerView';
+import { InlineError } from '../../../src/components/InlineError';
 import { withAlpha } from '../../../src/lib/color';
 
 const FREE_FOCUS_LIMIT = 3;
@@ -276,13 +277,13 @@ export default function FocusesScreen() {
   const insets = useSafeAreaInsets();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const { isPro, showPaywall } = useProGate();
+  const { isPro, isLoading: gateLoading, showPaywall } = useProGate();
 
   const [statusFilter, setStatusFilter] = useState<FocusStatus>('active');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<FocusWithStats | null>(null);
 
-  const { data: focuses, isLoading, isError, error } = useFocuses(statusFilter);
+  const { data: focuses, isLoading, isError, refetch } = useFocuses(statusFilter);
   const { data: disciplines } = useDisciplines();
   const updateFocus = useUpdateFocus();
   const deleteFocus = useDeleteFocus();
@@ -293,7 +294,8 @@ export default function FocusesScreen() {
     // Gate on the number of active focuses so the paywall doesn't block editing
     // or archiving existing ones.
     const activeCount = statusFilter === 'active' ? list.length : 0;
-    if (!isPro && statusFilter === 'active' && activeCount >= FREE_FOCUS_LIMIT) {
+    // See exercises/index.tsx — don't enforce a limit on an unresolved gate.
+    if (!isPro && !gateLoading && statusFilter === 'active' && activeCount >= FREE_FOCUS_LIMIT) {
       Alert.alert(
         'Limit reached',
         `Free accounts can keep up to ${FREE_FOCUS_LIMIT} active focuses. Upgrade to RepRounds Pro for unlimited focuses.`,
@@ -380,9 +382,10 @@ export default function FocusesScreen() {
       )}
 
       {isError && (
-        <View style={styles.centered}>
-          <Text style={styles.errorText}>{error?.message ?? 'Failed to load focuses.'}</Text>
-        </View>
+        <InlineError
+          message="Couldn't load your focuses."
+          onRetry={() => { void refetch(); }}
+        />
       )}
 
       {!isLoading && !isError && (

@@ -357,3 +357,71 @@ describe('POST /sessions/:id/complete status guard', () => {
     expect(mock.update).not.toHaveBeenCalled();
   });
 });
+
+// Finish is the one screen where a user types a session date, and it was the
+// one date route that checked only the format. A mistyped year landed a
+// workout centuries out, where it sorts first in the PR feed and counts as a
+// current top lift forever — the exact failure routes/stats.ts warns about.
+describe('POST /sessions/:id/complete date window', () => {
+  it('rejects a date beyond the allowed window', async () => {
+    ownedSession();
+    const res = await send('POST', `/sessions/${SESSION_ID}/complete`, { date: '9999-12-31' });
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('date_out_of_range');
+    expect(mock.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects a date far enough in the past to be a typo', async () => {
+    ownedSession();
+    const res = await send('POST', `/sessions/${SESSION_ID}/complete`, { date: '1900-01-01' });
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('date_out_of_range');
+    expect(mock.update).not.toHaveBeenCalled();
+  });
+
+  it('still rejects a malformed date on format alone', async () => {
+    ownedSession();
+    const res = await send('POST', `/sessions/${SESSION_ID}/complete`, { date: '31-12-2026' });
+    expect(res.status).toBe(400);
+    expect(mock.update).not.toHaveBeenCalled();
+  });
+
+  it('accepts a backdated finish, which is the whole point of the field', async () => {
+    ownedSession();
+    // The rest of this file only exercises rejection paths, so `update` is a
+    // bare spy; give it a chain so the accepted path can run to completion.
+    mock.update.mockReturnValue({ set: () => ({ where: async () => undefined }) });
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const res = await send('POST', `/sessions/${SESSION_ID}/complete`, { date: yesterday });
+    expect(res.status).toBe(200);
+    expect(mock.update).toHaveBeenCalled();
+  });
+});
+
+// A non-UUID path param went straight into `eq(table.id, value)`, where
+// Postgres raises `invalid input syntax for type uuid` — surfacing through the
+// global handler as a 500 for what is plainly a stale or mistyped URL.
+describe('non-UUID path params', () => {
+  const cases: [string, string, unknown][] = [
+    ['GET', '/sessions/not-a-uuid', undefined],
+    ['PATCH', '/sessions/not-a-uuid', { name: 'x' }],
+    ['DELETE', '/sessions/not-a-uuid', undefined],
+    ['POST', '/sessions/not-a-uuid/start', {}],
+    ['POST', '/sessions/not-a-uuid/complete', {}],
+    ['POST', '/sessions/not-a-uuid/entries', { kind: 'exercise' }],
+    ['PATCH', `/sessions/${SESSION_ID}/entries/not-a-uuid`, { notes: 'x' }],
+    ['DELETE', `/sessions/${SESSION_ID}/entries/not-a-uuid`, undefined],
+    ['POST', `/sessions/${SESSION_ID}/entries/not-a-uuid/sets`, { setNumber: 1 }],
+    ['PATCH', `/sessions/${SESSION_ID}/entries/${ENTRY_ID}/sets/not-a-uuid`, { reps: 5 }],
+    ['DELETE', `/sessions/${SESSION_ID}/entries/${ENTRY_ID}/sets/not-a-uuid`, undefined],
+  ];
+
+  for (const [method, path, body] of cases) {
+    it(`404s on ${method} ${path}`, async () => {
+      const res = await send(method, path, body);
+      expect(res.status).toBe(404);
+      // The point is that it never reached the driver.
+      expect(mock.select).not.toHaveBeenCalled();
+    });
+  }
+});
