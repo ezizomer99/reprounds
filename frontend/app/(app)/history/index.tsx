@@ -1,4 +1,4 @@
-import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeOutLeft, LinearTransition } from 'react-native-reanimated';
 import { FlashList } from '@shopify/flash-list';
 import * as Haptics from 'expo-haptics';
@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { MAX_SESSIONS_PAGE, useDeleteSession, useSessions } from '../../../src/hooks/useSession';
 import { useRoutines } from '../../../src/hooks/useRoutines';
 import { useProGate } from '../../../src/hooks/useProGate';
+import { Touchable } from '../../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -79,40 +80,39 @@ export default function HistoryScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <Touchable
           style={styles.backBtn}
           onPress={() => router.back()}
-          accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <Ionicons name="chevron-back" size={22} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>History</Text>
           {list.length > 0 && <Text style={styles.headerSub}>{list.length} sessions logged</Text>}
         </View>
-        <TouchableOpacity
+        <Touchable
           style={styles.backBtn}
           onPress={() => router.push('/calendar' as never)}
-          accessibilityRole="button"
           accessibilityLabel="Open calendar"
         >
           <Ionicons name="calendar-outline" size={20} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
       </View>
 
       <View style={styles.filterRow}>
         {FILTERS.map(({ key, label }) => {
           const active = filter === key;
           return (
-            <TouchableOpacity
+            <Touchable
               key={key}
               style={[styles.filterChip, active && styles.filterChipActive]}
               onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setFilter(key); }}
-              activeOpacity={0.7}
+              feedback="row"
+              hasTextChild
             >
               <Text style={[styles.filterChipText, active && styles.filterChipTextActive]}>{label}</Text>
-            </TouchableOpacity>
+            </Touchable>
           );
         })}
       </View>
@@ -171,13 +171,13 @@ export default function HistoryScreen() {
           }
           ListFooterComponent={
             hiddenCount > 0 ? (
-              <TouchableOpacity style={styles.upgradeFooter} onPress={showPaywall} activeOpacity={0.8}>
+              <Touchable style={styles.upgradeFooter} onPress={showPaywall} feedback="card" hasTextChild>
                 <Ionicons name="lock-closed" size={14} color={T.gold} />
                 <Text style={styles.upgradeFooterText}>
                   {hiddenCount} older session{hiddenCount !== 1 ? 's' : ''} hidden — upgrade to see full history
                 </Text>
                 <Ionicons name="chevron-forward" size={14} color={T.gold} />
-              </TouchableOpacity>
+              </Touchable>
             ) : null
           }
           contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}

@@ -4,7 +4,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useState, useMemo } from 'react';
@@ -12,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useSubscription } from '../../src/context/SubscriptionContext';
+import { Touchable } from '../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { withAlpha } from '../../src/lib/color';
@@ -91,9 +91,9 @@ export default function PaywallScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.closeBtn} onPress={() => router.back()}>
+        <Touchable style={styles.closeBtn} onPress={() => router.back()} haptic={false} accessibilityLabel="Close">
           <Ionicons name="close" size={22} color={T.textDim} />
-        </TouchableOpacity>
+        </Touchable>
       </View>
 
       <ScrollView
@@ -135,15 +135,16 @@ export default function PaywallScreen() {
         )}
 
         {/* Plans */}
-        <TouchableOpacity
+        <Touchable
           style={[
             styles.planBtn,
             styles.planBtnAnnual,
             (loading || pricesUnavailable) && styles.planBtnDisabled,
           ]}
           onPress={() => handlePurchase('reprounds_pro_annual')}
-          activeOpacity={0.8}
           disabled={!!loading || pricesUnavailable}
+          feedback="card"
+          hasTextChild
         >
           <View style={styles.planBtnBadge}>
             <Text style={styles.planBtnBadgeText}>BEST VALUE</Text>
@@ -161,17 +162,18 @@ export default function PaywallScreen() {
               </Text>
             </>
           )}
-        </TouchableOpacity>
+        </Touchable>
 
-        <TouchableOpacity
+        <Touchable
           style={[
             styles.planBtn,
             styles.planBtnMonthly,
             (loading || pricesUnavailable) && styles.planBtnDisabled,
           ]}
           onPress={() => handlePurchase('reprounds_pro_monthly')}
-          activeOpacity={0.8}
           disabled={!!loading || pricesUnavailable}
+          feedback="card"
+          hasTextChild
         >
           {loading === 'monthly' ? (
             <ActivityIndicator color={T.primary} />
@@ -184,20 +186,21 @@ export default function PaywallScreen() {
               <Text style={styles.planBtnSub}>7-day free trial</Text>
             </>
           )}
-        </TouchableOpacity>
+        </Touchable>
 
-        <TouchableOpacity
+        <Touchable
           style={styles.restoreBtn}
           onPress={handleRestore}
           disabled={!!loading}
-          activeOpacity={0.7}
+          feedback="row"
+          hasTextChild
         >
           {loading === 'restore' ? (
             <ActivityIndicator color={T.muted} size="small" />
           ) : (
             <Text style={styles.restoreText}>Restore Purchases</Text>
           )}
-        </TouchableOpacity>
+        </Touchable>
 
         <Text style={styles.legalText}>
           Payment charged to your Google Play account. Subscription auto-renews unless cancelled

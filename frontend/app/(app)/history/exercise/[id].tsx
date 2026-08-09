@@ -1,4 +1,4 @@
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,6 +13,7 @@ import { fmtWeight, kgToUnit, type WeightUnit } from '../../../../src/units/unit
 import { Sparkline } from '../../../../src/components/Sparkline';
 import { buildBodyData } from '../../../../src/lib/muscleSlugMap';
 import { useProGate } from '../../../../src/hooks/useProGate';
+import { Touchable } from '../../../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../../../src/theme/colors';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../../src/lib/color';
@@ -110,9 +111,9 @@ export default function ExerciseHistoryScreen() {
     return (
       <View style={[styles.screen, { paddingTop: insets.top }]}>
         <View style={styles.header}>
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Go back">
+          <Touchable style={styles.backBtn} onPress={() => router.back()} accessibilityLabel="Go back">
             <Ionicons name="chevron-back" size={22} color={T.text} />
-          </TouchableOpacity>
+          </Touchable>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle} numberOfLines={1}>{name ?? 'Exercise History'}</Text>
           </View>
@@ -126,9 +127,9 @@ export default function ExerciseHistoryScreen() {
           <Text style={styles.proGateSub}>
             Exercise history, PR tracking, and 1RM estimates are available with RepRounds Pro.
           </Text>
-          <TouchableOpacity style={styles.proGateBtn} onPress={showPaywall} activeOpacity={0.8}>
+          <Touchable style={styles.proGateBtn} onPress={showPaywall} feedback="card" hasTextChild>
             <Text style={styles.proGateBtnText}>Upgrade to Pro</Text>
-          </TouchableOpacity>
+          </Touchable>
         </View>
       </View>
     );
@@ -158,9 +159,9 @@ export default function ExerciseHistoryScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Go back">
+        <Touchable style={styles.backBtn} onPress={() => router.back()} accessibilityLabel="Go back">
           <Ionicons name="chevron-back" size={22} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle} numberOfLines={1}>{headerTitle}</Text>
           {history[0]?.entry.exerciseName && <Text style={styles.headerSub}>{history[0].entry.exerciseName}</Text>}
@@ -216,15 +217,16 @@ export default function ExerciseHistoryScreen() {
                 <Text style={styles.eyebrow}>Muscles Targeted</Text>
                 <View style={styles.muscleToggle}>
                   {(['front', 'back'] as const).map((side) => (
-                    <TouchableOpacity
+                    <Touchable
                       key={side}
                       style={[styles.muscleToggleBtn, muscleView === side && styles.muscleToggleBtnActive]}
                       onPress={() => setMuscleView(side)}
+                      hasTextChild
                     >
                       <Text style={[styles.muscleToggleText, muscleView === side && styles.muscleToggleTextActive]}>
                         {side.charAt(0).toUpperCase() + side.slice(1)}
                       </Text>
-                    </TouchableOpacity>
+                    </Touchable>
                   ))}
                 </View>
               </View>

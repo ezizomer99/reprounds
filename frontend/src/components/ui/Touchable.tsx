@@ -23,8 +23,11 @@ const ACTIVE_OPACITY: Record<Feedback, number> = { row: 0.7, card: 0.8, cta: 0.8
 
 type Base = {
   children: ReactNode;
-  onPress: () => void;
+  /** Optional so a row can be conditionally inert without changing component. */
+  onPress?: () => void;
   onLongPress?: () => void;
+  /** ms before onLongPress fires — drag handles want this shorter than the default. */
+  delayLongPress?: number;
   /**
    * Impact fired on press. Defaults to a Light impact — the app's convention,
    * previously hand-inlined at every call site. `false` opts out (navigation
@@ -36,6 +39,8 @@ type Base = {
   hitSlop?: number | Insets;
   accessibilityRole?: AccessibilityRole;
   accessibilityState?: AccessibilityState;
+  /** The "what happens next" line, e.g. "Press and hold, then drag up or down". */
+  accessibilityHint?: string;
   style?: StyleProp<ViewStyle>;
   testID?: string;
 };
@@ -59,6 +64,7 @@ export function Touchable({
   children,
   onPress,
   onLongPress,
+  delayLongPress,
   haptic = Haptics.ImpactFeedbackStyle.Light,
   disabled = false,
   feedback = 'row',
@@ -66,17 +72,23 @@ export function Touchable({
   accessibilityRole = 'button',
   accessibilityState,
   accessibilityLabel,
+  accessibilityHint,
   style,
   testID,
 }: TouchableProps) {
   return (
     <TouchableOpacity
       style={style}
-      onPress={() => {
-        if (haptic !== false) void Haptics.impactAsync(haptic);
-        onPress();
-      }}
+      onPress={
+        onPress
+          ? () => {
+              if (haptic !== false) void Haptics.impactAsync(haptic);
+              onPress();
+            }
+          : undefined
+      }
       onLongPress={onLongPress}
+      delayLongPress={delayLongPress}
       disabled={disabled}
       activeOpacity={ACTIVE_OPACITY[feedback]}
       hitSlop={typeof hitSlop === 'number' ? { top: hitSlop, bottom: hitSlop, left: hitSlop, right: hitSlop } : hitSlop}
@@ -85,6 +97,7 @@ export function Touchable({
       // not have to restate `disabled` to keep the two in sync.
       accessibilityState={{ disabled, ...accessibilityState }}
       accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
       testID={testID}
     >
       {children}

@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -14,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useSubscription } from '../../src/context/SubscriptionContext';
 import { useCurrentUser } from '../../src/hooks/useAuth';
+import { Touchable } from '../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { withAlpha } from '../../src/lib/color';
@@ -107,15 +107,14 @@ export default function SubscriptionScreen() {
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
+        <Touchable
           style={styles.backBtn}
           onPress={() => router.back()}
-          activeOpacity={0.7}
-          accessibilityRole="button"
           accessibilityLabel="Go back"
+          feedback="row"
         >
           <Ionicons name="chevron-back" size={22} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
         <Text style={styles.headerTitle}>Subscription</Text>
         <View style={styles.backBtn} />
       </View>
@@ -305,9 +304,9 @@ function FreeCard({
       </View>
       <Text style={styles.statusTitle}>Free Plan</Text>
       <Text style={styles.statusSub}>Unlock unlimited workouts, analytics, and more.</Text>
-      <TouchableOpacity style={styles.upgradeBtn} onPress={onUpgrade} activeOpacity={0.8}>
+      <Touchable style={styles.upgradeBtn} onPress={onUpgrade} feedback="card" hasTextChild>
         <Text style={styles.upgradeBtnText}>Upgrade to RepRounds Pro</Text>
-      </TouchableOpacity>
+      </Touchable>
     </View>
   );
 }
@@ -329,7 +328,7 @@ function ActionRow({
   T: ThemeColors;
 }) {
   return (
-    <TouchableOpacity style={styles.actionRow} onPress={onPress} activeOpacity={0.7} disabled={loading}>
+    <Touchable style={styles.actionRow} onPress={onPress} disabled={loading} feedback="row" hasTextChild>
       <View style={styles.actionIcon}>
         <Ionicons name={icon} size={17} color={T.textDim} />
       </View>
@@ -339,7 +338,7 @@ function ActionRow({
       ) : (
         <Ionicons name="chevron-forward" size={16} color={T.muted} />
       )}
-    </TouchableOpacity>
+    </Touchable>
   );
 }
 

@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useState, useMemo } from 'react';
@@ -21,6 +20,7 @@ import {
 } from '../../../src/hooks/useDisciplines';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { InlineError } from '../../../src/components/InlineError';
+import { Touchable } from '../../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -69,9 +69,9 @@ function DisciplineRow({ discipline, isOwned, onDelete }: DisciplineRowProps) {
         <Text style={[styles.rowCat, { color: catColor }]}>{discipline.category}</Text>
       </View>
       {isOwned ? (
-        <TouchableOpacity onPress={handleDelete} style={styles.deleteButton} activeOpacity={0.7}>
+        <Touchable onPress={handleDelete} style={styles.deleteButton} feedback="row" accessibilityLabel={`Delete ${discipline.name}`}>
           <Ionicons name="trash-outline" size={15} color={T.danger} />
-        </TouchableOpacity>
+        </Touchable>
       ) : (
         <Ionicons name="chevron-forward" size={16} color={T.muted} />
       )}
@@ -126,9 +126,9 @@ function AddDisciplineModal({ visible, onClose }: AddDisciplineModalProps) {
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Add Discipline</Text>
-          <TouchableOpacity onPress={handleClose}>
+          <Touchable onPress={handleClose} hasTextChild>
             <Text style={styles.modalCancel}>Cancel</Text>
-          </TouchableOpacity>
+          </Touchable>
         </View>
 
         <View style={styles.field}>
@@ -152,34 +152,36 @@ function AddDisciplineModal({ visible, onClose }: AddDisciplineModalProps) {
               const active = category === value;
               const color = categoryColor(value, T);
               return (
-                <TouchableOpacity
+                <Touchable
                   key={value}
                   style={[
                     styles.categoryButton,
                     active && { backgroundColor: withAlpha(color, 0.18), borderColor: color },
                   ]}
                   onPress={() => setCategory(value)}
-                  activeOpacity={0.7}
+                  feedback="row"
+                  hasTextChild
                 >
                   <Text style={[styles.categoryButtonText, active && { color }]}>{label}</Text>
-                </TouchableOpacity>
+                </Touchable>
               );
             })}
           </View>
         </View>
 
-        <TouchableOpacity
+        <Touchable
           style={[styles.submitButton, createDiscipline.isPending && styles.submitButtonDisabled]}
           onPress={handleSubmit}
           disabled={createDiscipline.isPending}
-          activeOpacity={0.8}
+          feedback="card"
+          hasTextChild
         >
           {createDiscipline.isPending ? (
             <ActivityIndicator color={T.onPrimary} />
           ) : (
             <Text style={styles.submitText}>Add Discipline</Text>
           )}
-        </TouchableOpacity>
+        </Touchable>
       </View>
     </Modal>
   );
@@ -207,23 +209,22 @@ export default function DisciplinesScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <Touchable
           style={styles.backBtn}
           onPress={() => router.back()}
-          accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <Ionicons name="chevron-back" size={22} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Disciplines</Text>
           {list.length > 0 && (
             <Text style={styles.headerSub}>{list.length} discipline{list.length !== 1 ? 's' : ''}</Text>
           )}
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={() => setShowAdd(true)}>
+        <Touchable style={styles.addBtn} onPress={() => setShowAdd(true)} accessibilityLabel="Add a discipline">
           <Ionicons name="add" size={18} color={T.onPrimary} />
-        </TouchableOpacity>
+        </Touchable>
       </View>
 
       {isLoading && (

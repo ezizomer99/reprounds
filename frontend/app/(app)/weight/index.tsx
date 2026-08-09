@@ -9,7 +9,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -29,6 +28,7 @@ import { Sparkline } from '../../../src/components/Sparkline';
 import { InlineError } from '../../../src/components/InlineError';
 import { CalendarPicker } from '../../../src/components/CalendarPicker';
 import { localTodayISO, parseLocalDate } from '../../../src/lib/calendar';
+import { Touchable } from '../../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 
@@ -68,23 +68,21 @@ export default function WeightScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <Touchable
           style={styles.backBtn}
           onPress={() => router.back()}
-          accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <Ionicons name="chevron-back" size={22} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
         <Text style={styles.headerTitle}>Body weight</Text>
-        <TouchableOpacity
+        <Touchable
           style={styles.backBtn}
           onPress={() => setShowAdd(true)}
-          accessibilityRole="button"
           accessibilityLabel="Add weigh-in"
         >
           <Ionicons name="add" size={24} color={T.primary} />
-        </TouchableOpacity>
+        </Touchable>
       </View>
 
       <FlatList
@@ -137,8 +135,9 @@ export default function WeightScreen() {
                 {formatDate(item.date)}{item.notes ? ` · ${item.notes}` : ''}
               </Text>
             </View>
-            <TouchableOpacity
+            <Touchable
               hitSlop={8}
+              accessibilityLabel="Delete this weigh-in"
               onPress={() =>
                 Alert.alert('Delete entry?', 'This cannot be undone.', [
                   { text: 'Cancel', style: 'cancel' },
@@ -157,7 +156,7 @@ export default function WeightScreen() {
               }
             >
               <Ionicons name="trash-outline" size={16} color={T.muted} />
-            </TouchableOpacity>
+            </Touchable>
           </View>
         )}
         ItemSeparatorComponent={() => <View style={{ height: D.gap }} />}
@@ -260,17 +259,18 @@ function AddWeightModal({ onClose }: { onClose: () => void }) {
             textAlignVertical="top"
           />
 
-          <TouchableOpacity
+          <Touchable
             style={[styles.saveBtn, createWeight.isPending && { opacity: 0.6 }]}
             onPress={handleSave}
             disabled={createWeight.isPending}
+            hasTextChild
           >
             {createWeight.isPending ? (
               <ActivityIndicator size="small" color={T.onPrimary} />
             ) : (
               <Text style={styles.saveBtnText}>Save weigh-in</Text>
             )}
-          </TouchableOpacity>
+          </Touchable>
         </ScrollView>
       </View>
     </Modal>

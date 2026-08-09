@@ -2,7 +2,6 @@ import {
   Alert,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
@@ -15,6 +14,7 @@ import * as Haptics from 'expo-haptics';
 import type { RoutineWithItems } from '@app/shared';
 import { useDeleteRoutine, useReorderRoutines, useRoutines } from '../../../src/hooks/useRoutines';
 import { useProGate } from '../../../src/hooks/useProGate';
+import { Touchable } from '../../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -40,7 +40,7 @@ function RoutineRow({ routine, onPress, onDelete, drag, isActive }: RoutineRowPr
     <View style={[styles.row, isActive && styles.rowActive]}>
       {/* Drag is bound to the handle only, so the row's own long-press (delete)
           and the handle's long-press (drag) never contend for the gesture. */}
-      <TouchableOpacity
+      <Touchable
         onLongPress={() => {
           if (!drag) return;
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -49,19 +49,19 @@ function RoutineRow({ routine, onPress, onDelete, drag, isActive }: RoutineRowPr
         delayLongPress={120}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
         style={styles.gripHandle}
-        activeOpacity={0.6}
         disabled={!drag}
-        accessibilityRole="button"
         accessibilityLabel={`Reorder ${routine.name}`}
         accessibilityHint="Press and hold, then drag up or down"
+        feedback="row"
       >
         <Ionicons name="reorder-three-outline" size={20} color={isActive ? T.primary : T.muted} />
-      </TouchableOpacity>
-      <TouchableOpacity
+      </Touchable>
+      <Touchable
         style={styles.rowMain}
         onPress={() => onPress(routine.id)}
         onLongPress={() => onDelete(routine.id, routine.name)}
-        activeOpacity={0.7}
+        feedback="row"
+        hasTextChild
       >
         <View style={[styles.iconAvatar, hasMartialArts && styles.iconAvatarMat]}>
           {hasMartialArts ? (
@@ -78,7 +78,7 @@ function RoutineRow({ routine, onPress, onDelete, drag, isActive }: RoutineRowPr
           </Text>
         </View>
         <Ionicons name="chevron-forward" size={16} color={T.muted} />
-      </TouchableOpacity>
+      </Touchable>
     </View>
   );
 }
@@ -133,26 +133,26 @@ export default function RoutinesScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <Touchable
           style={styles.backBtn}
           onPress={() => router.back()}
-          accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <Ionicons name="chevron-back" size={22} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Routines</Text>
           {list.length > 0 && (
             <Text style={styles.headerSub}>{list.length} routine{list.length !== 1 ? 's' : ''}</Text>
           )}
         </View>
-        <TouchableOpacity
+        <Touchable
           style={styles.addBtn}
           onPress={handleNewRoutine}
+          accessibilityLabel="Create a routine"
         >
           <Ionicons name="add" size={18} color={T.onPrimary} />
-        </TouchableOpacity>
+        </Touchable>
       </View>
 
       {isLoading && (

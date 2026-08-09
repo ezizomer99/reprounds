@@ -6,7 +6,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -16,6 +15,7 @@ import { useState, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RepRoundsLockup } from '../../src/components/RepRoundsLockup';
 import { useSignIn } from '../../src/hooks/useAuth';
+import { Touchable } from '../../src/components/ui';
 import { F, R, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 
@@ -143,18 +143,19 @@ export default function SignInScreen() {
         <View style={styles.bottom}>
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
-          <TouchableOpacity
+          <Touchable
             style={[styles.googleBtn, isLoading && styles.btnDisabled]}
             onPress={handleGoogle}
             disabled={isLoading}
-            activeOpacity={0.75}
+            feedback="card"
+            hasTextChild
           >
             {googleLoading ? (
               <ActivityIndicator color={T.text} />
             ) : (
               <Text style={styles.googleBtnText}>Continue with Google</Text>
             )}
-          </TouchableOpacity>
+          </Touchable>
 
           {showEmailForm ? (
             <View style={styles.emailForm}>
@@ -203,53 +204,56 @@ export default function SignInScreen() {
 
               {fieldError ? <Text style={styles.error}>{fieldError}</Text> : null}
 
-              <TouchableOpacity
+              <Touchable
                 style={[styles.emailSubmitBtn, isLoading && styles.btnDisabled]}
                 onPress={handleEmailSubmit}
                 disabled={isLoading}
-                activeOpacity={0.85}
+                feedback="cta"
+                hasTextChild
               >
                 {emailLoading ? (
                   <ActivityIndicator color={T.onPrimary} />
                 ) : (
                   <Text style={styles.emailSubmitText}>{submitLabel}</Text>
                 )}
-              </TouchableOpacity>
+              </Touchable>
 
-              <TouchableOpacity onPress={toggleEmailMode} disabled={isLoading} activeOpacity={0.7}>
+              <Touchable onPress={toggleEmailMode} disabled={isLoading} feedback="row" hasTextChild>
                 <Text style={styles.toggleText}>
                   {emailMode === 'signIn'
                     ? "Don't have an account? Create one"
                     : 'Already have an account? Sign in'}
                 </Text>
-              </TouchableOpacity>
+              </Touchable>
             </View>
           ) : (
-            <TouchableOpacity
+            <Touchable
               style={[styles.emailToggleBtn, isLoading && styles.btnDisabled]}
               onPress={() => {
                 setShowEmailForm(true);
                 setError(null);
               }}
               disabled={isLoading}
-              activeOpacity={0.75}
+              feedback="card"
+              hasTextChild
             >
               <Text style={styles.emailToggleText}>Continue with email</Text>
-            </TouchableOpacity>
+            </Touchable>
           )}
 
-          <TouchableOpacity
+          <Touchable
             style={[styles.guestBtn, isLoading && styles.btnDisabled]}
             onPress={handleGuest}
             disabled={isLoading}
-            activeOpacity={0.75}
+            feedback="card"
+            hasTextChild
           >
             {guestLoading ? (
               <ActivityIndicator color={T.textDim} />
             ) : (
               <Text style={styles.guestBtnText}>Continue as Guest</Text>
             )}
-          </TouchableOpacity>
+          </Touchable>
 
           <Text style={styles.guestDisclaimer}>
             Guest data is saved to this device only. Sign in with Google to protect your history across devices.

@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
@@ -47,6 +46,7 @@ import {
   type WeightUnit,
 } from '../../../src/units/units';
 import { parseIntInRangeResult, parseNumberInRangeResult } from '../../../src/lib/parseNumber';
+import { Touchable } from '../../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -133,7 +133,7 @@ function ItemRow({ name, kind, targetSummary, onPress, onRemove, drag, isActive 
       {/* Drag lives on the handle alone so the row body stays tappable for
           editing sets. The default 500ms long-press felt like nothing was
           happening, hence the shorter delay. */}
-      <TouchableOpacity
+      <Touchable
         onLongPress={() => {
           if (!drag) return;
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -142,18 +142,17 @@ function ItemRow({ name, kind, targetSummary, onPress, onRemove, drag, isActive 
         delayLongPress={120}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 4 }}
         style={styles.gripHandle}
-        activeOpacity={0.6}
         disabled={!drag}
-        accessibilityRole="button"
         accessibilityLabel={`Reorder ${name}`}
         accessibilityHint="Press and hold, then drag up or down"
+        feedback="row"
       >
         <Ionicons
           name="reorder-three-outline"
           size={20}
           color={isActive ? T.primary : drag ? T.textDim : T.muted}
         />
-      </TouchableOpacity>
+      </Touchable>
       <View style={[styles.kindBadge, kind === 'martial_arts' && styles.kindBadgeMat]}>
         {kind === 'martial_arts' ? (
           <Ionicons name="flash" size={13} color={T.grappling} />
@@ -161,11 +160,12 @@ function ItemRow({ name, kind, targetSummary, onPress, onRemove, drag, isActive 
           <Ionicons name="barbell" size={13} color={T.textDim} />
         )}
       </View>
-      <TouchableOpacity
+      <Touchable
         style={styles.itemMain}
         onPress={onPress}
         disabled={!tappable}
-        activeOpacity={0.7}
+        feedback="row"
+        hasTextChild
       >
         <Text style={styles.itemName} numberOfLines={1}>{name}</Text>
         {tappable && (
@@ -173,10 +173,10 @@ function ItemRow({ name, kind, targetSummary, onPress, onRemove, drag, isActive 
             {targetSummary ?? 'Tap to plan sets · reps'}
           </Text>
         )}
-      </TouchableOpacity>
-      <TouchableOpacity onPress={onRemove} style={styles.removeButton} activeOpacity={0.7}>
+      </Touchable>
+      <Touchable onPress={onRemove} style={styles.removeButton} feedback="row" accessibilityLabel={`Remove ${name}`}>
         <Ionicons name="close" size={14} color={T.danger} />
-      </TouchableOpacity>
+      </Touchable>
     </View>
   );
 }
@@ -304,14 +304,15 @@ function PlanSetRow({ row, index, type, onChange, onCycleType, onRemove }: {
       {isWarm ? (
         <View style={styles.planTypePlaceholder} />
       ) : (
-        <TouchableOpacity
+        <Touchable
           style={[styles.planTypeChip, { borderColor: withAlpha(SET_TYPE_COLOR[row.setType], 0.45) }]}
           onPress={onCycleType}
+          hasTextChild
         >
           <Text style={[styles.planTypeChipText, { color: SET_TYPE_COLOR[row.setType] }]}>
             {SET_TYPE_LABEL[row.setType]}
           </Text>
-        </TouchableOpacity>
+        </Touchable>
       )}
 
       {isTime ? (
@@ -372,9 +373,9 @@ function PlanSetRow({ row, index, type, onChange, onCycleType, onRemove }: {
         </>
       )}
 
-      <TouchableOpacity onPress={onRemove} style={styles.planRemove} activeOpacity={0.7}>
+      <Touchable onPress={onRemove} style={styles.planRemove} feedback="row" accessibilityLabel="Remove this planned set">
         <Ionicons name="close" size={14} color={T.danger} />
-      </TouchableOpacity>
+      </Touchable>
     </View>
   );
 }
@@ -435,9 +436,9 @@ function PlannedSetsModal({ visible, name, type, initial, onClose, onSave }: Pla
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle} numberOfLines={1}>{name}</Text>
-          <TouchableOpacity onPress={onClose}>
+          <Touchable onPress={onClose} hasTextChild>
             <Text style={styles.modalCancel}>Cancel</Text>
-          </TouchableOpacity>
+          </Touchable>
         </View>
 
         <ScrollView style={{ flex: 1 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 32 }}>
@@ -455,10 +456,10 @@ function PlannedSetsModal({ visible, name, type, initial, onClose, onSave }: Pla
               onRemove={() => removeRow(row._id)}
             />
           ))}
-          <TouchableOpacity style={styles.planAddRow} onPress={addWarmup} activeOpacity={0.7}>
+          <Touchable style={styles.planAddRow} onPress={addWarmup} feedback="row" hasTextChild>
             <Ionicons name="add" size={15} color={T.gold} />
             <Text style={[styles.planAddText, { color: T.gold }]}>Warm-up</Text>
-          </TouchableOpacity>
+          </Touchable>
 
           {/* Working sets */}
           {working.map((row, i) => (
@@ -472,14 +473,14 @@ function PlannedSetsModal({ visible, name, type, initial, onClose, onSave }: Pla
               onRemove={() => removeRow(row._id)}
             />
           ))}
-          <TouchableOpacity style={styles.planAddRow} onPress={addWorking} activeOpacity={0.7}>
+          <Touchable style={styles.planAddRow} onPress={addWorking} feedback="row" hasTextChild>
             <Ionicons name="add" size={15} color={T.primary} />
             <Text style={styles.planAddText}>Set</Text>
-          </TouchableOpacity>
+          </Touchable>
 
-          <TouchableOpacity style={styles.saveTargetBtn} onPress={handleSave} activeOpacity={0.85}>
+          <Touchable style={styles.saveTargetBtn} onPress={handleSave} feedback="cta" hasTextChild>
             <Text style={styles.saveTargetText}>Save Plan</Text>
-          </TouchableOpacity>
+          </Touchable>
         </ScrollView>
       </View>
     </Modal>
@@ -515,9 +516,9 @@ function PickExerciseModal({ visible, onClose, onPick }: PickExerciseModalProps)
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Add Exercise</Text>
-          <TouchableOpacity onPress={handleClose}>
+          <Touchable onPress={handleClose} hasTextChild>
             <Text style={styles.modalCancel}>Cancel</Text>
-          </TouchableOpacity>
+          </Touchable>
         </View>
 
         <TextInput
@@ -540,16 +541,17 @@ function PickExerciseModal({ visible, onClose, onPick }: PickExerciseModalProps)
             data={exercises ?? []}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
-              <TouchableOpacity
+              <Touchable
                 style={styles.pickRow}
                 onPress={() => { onPick(item); handleClose(); }}
-                activeOpacity={0.7}
+                feedback="row"
+                hasTextChild
               >
                 <View style={styles.pickRowInfo}>
                   <Text style={styles.pickRowName}>{item.name}</Text>
                   <Text style={styles.pickRowType}>{item.equipment ?? item.muscleGroup ?? item.type}</Text>
                 </View>
-              </TouchableOpacity>
+              </Touchable>
             )}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
             ListEmptyComponent={
@@ -587,9 +589,9 @@ function PickDisciplineModal({ visible, onClose, onPick }: PickDisciplineModalPr
       <View style={styles.modalContainer}>
         <View style={styles.modalHeader}>
           <Text style={styles.modalTitle}>Add Discipline</Text>
-          <TouchableOpacity onPress={onClose}>
+          <Touchable onPress={onClose} hasTextChild>
             <Text style={styles.modalCancel}>Cancel</Text>
-          </TouchableOpacity>
+          </Touchable>
         </View>
 
         {isLoading ? (
@@ -601,14 +603,15 @@ function PickDisciplineModal({ visible, onClose, onPick }: PickDisciplineModalPr
             data={disciplines ?? []}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
-              <TouchableOpacity
+              <Touchable
                 style={styles.pickRow}
                 onPress={() => { onPick(item); onClose(); }}
-                activeOpacity={0.7}
+                feedback="row"
+                hasTextChild
               >
                 <Text style={styles.pickRowName}>{item.name}</Text>
                 <Text style={styles.pickRowType}>{item.category}</Text>
-              </TouchableOpacity>
+              </Touchable>
             )}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
             ListEmptyComponent={
@@ -824,26 +827,26 @@ export default function RoutineEditorScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <Touchable
           style={styles.backBtn}
           onPress={() => router.back()}
-          accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <Ionicons name="chevron-back" size={22} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
         <Text style={styles.headerTitle} numberOfLines={1}>{screenTitle}</Text>
-        <TouchableOpacity
+        <Touchable
           onPress={handleSave}
           style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
           disabled={isSaving}
+          hasTextChild
         >
           {isSaving ? (
             <ActivityIndicator color={T.onPrimary} size="small" />
           ) : (
             <Text style={styles.saveButtonText}>Save</Text>
           )}
-        </TouchableOpacity>
+        </Touchable>
       </View>
 
       {/* The items list is the page scroller. It must NOT be nested inside a
@@ -875,22 +878,24 @@ export default function RoutineEditorScreen() {
         }
         ListFooterComponent={
           <View style={styles.addItemsRow}>
-            <TouchableOpacity
+            <Touchable
               style={styles.addItemButton}
               onPress={() => setShowExercisePicker(true)}
-              activeOpacity={0.7}
+              feedback="row"
+              hasTextChild
             >
               <Ionicons name="add" size={14} color={T.primary} />
               <Text style={styles.addItemButtonText}>Add Exercise</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
+            </Touchable>
+            <Touchable
               style={styles.addItemButton}
               onPress={() => setShowDisciplinePicker(true)}
-              activeOpacity={0.7}
+              feedback="row"
+              hasTextChild
             >
               <Ionicons name="add" size={14} color={T.primary} />
               <Text style={styles.addItemButtonText}>Add Discipline</Text>
-            </TouchableOpacity>
+            </Touchable>
           </View>
         }
         renderItem={({ item, drag, isActive }: RenderItemParams<ItemRowVM>) => (
