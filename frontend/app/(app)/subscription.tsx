@@ -369,6 +369,7 @@ function makeStyles(T: ThemeColors) {
     // Status card
     statusCard: {
       borderTopWidth: 1,
+      // eslint-disable-next-line no-restricted-syntax -- Reused across several rows in this screen — needs a Section-per-row pass.
       borderTopColor: T.borderStrong,
       paddingVertical: 18,
       alignItems: 'center',
@@ -413,6 +414,7 @@ function makeStyles(T: ThemeColors) {
     // List card (actions + history)
     listCard: {
       borderTopWidth: 1,
+      // eslint-disable-next-line no-restricted-syntax -- Reused across several rows in this screen — needs a Section-per-row pass.
       borderTopColor: T.borderStrong,
     },
     rowDivider: {

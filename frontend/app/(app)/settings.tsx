@@ -592,6 +592,7 @@ function makeStyles(T: ThemeColors) {
       textTransform: 'uppercase', letterSpacing: 1.2,
     },
     card: {
+      // eslint-disable-next-line no-restricted-syntax -- Applied to six blocks here; converting them is its own change.
       borderTopWidth: 1, borderTopColor: T.borderStrong,
       paddingTop: 14, gap: 14,
     },

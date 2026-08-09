@@ -22,7 +22,8 @@ import { useCreatePromotion, useDeletePromotion, usePromotions } from '../../../
 import { useProGate } from '../../../src/hooks/useProGate';
 import { CalendarPicker } from '../../../src/components/CalendarPicker';
 import { localTodayISO, parseLocalDate } from '../../../src/lib/calendar';
-import { Touchable } from '../../../src/components/ui';
+import { Section, Touchable } from '../../../src/components/ui';
+import { TYPE } from '../../../src/theme/type';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -160,7 +161,7 @@ export default function DisciplineDetailScreen() {
                   </Touchable>
                 </View>
                 {currentRank ? (
-                  <View style={styles.rankCard}>
+                  <Section style={styles.rankCard}>
                     <View style={styles.rankCurrent}>
                       <Text style={styles.rankName}>{currentRank.rank}</Text>
                       {currentRank.stripes ? (
@@ -176,7 +177,7 @@ export default function DisciplineDetailScreen() {
                         {promoList.length} promotion{promoList.length !== 1 ? 's' : ''} logged
                       </Text>
                     )}
-                  </View>
+                  </Section>
                 ) : (
                   <Text style={styles.compEmpty}>No promotions logged yet.</Text>
                 )}
@@ -643,6 +644,7 @@ function makeStyles(T: ThemeColors) {
     statCard: {
       flex: 1,
       borderTopWidth: 1,
+      // eslint-disable-next-line no-restricted-syntax -- A stat cell in a row, not a page section.
       borderTopColor: T.borderStrong,
       paddingVertical: 14,
       alignItems: 'center',
@@ -717,7 +719,6 @@ function makeStyles(T: ThemeColors) {
     logBtnText: { fontFamily: F.uiSemi, fontSize: 13, color: T.primary },
     compEmpty: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, paddingHorizontal: D.pad, paddingBottom: 4 },
     rankCard: {
-      borderTopWidth: 1, borderTopColor: T.borderStrong,
       paddingVertical: 12, gap: 6,
     },
     rankCurrent: { flexDirection: 'row', alignItems: 'center', gap: 10 },
@@ -746,7 +747,7 @@ function makeStyles(T: ThemeColors) {
     },
     handle: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: T.borderStrong, marginBottom: 12 },
     sheetTitle: { fontFamily: F.uiBold, fontSize: 19, color: T.text, marginBottom: 14 },
-    sheetLabel: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 14, marginBottom: 6 },
+    sheetLabel: { ...TYPE.fieldLabel, color: T.textDim, marginTop: 14, marginBottom: 6 },
     sheetInput: {
       fontFamily: F.uiMed, fontSize: 15, color: T.text,
       backgroundColor: T.surface2, borderRadius: R.sm, borderWidth: 1, borderColor: T.border,

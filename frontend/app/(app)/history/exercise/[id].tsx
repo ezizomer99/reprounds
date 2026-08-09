@@ -13,7 +13,7 @@ import { fmtWeight, kgToUnit, type WeightUnit } from '../../../../src/units/unit
 import { Sparkline } from '../../../../src/components/Sparkline';
 import { buildBodyData } from '../../../../src/lib/muscleSlugMap';
 import { useProGate } from '../../../../src/hooks/useProGate';
-import { Touchable } from '../../../../src/components/ui';
+import { Section, Touchable } from '../../../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../../../src/theme/colors';
 import { useTheme } from '../../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../../src/lib/color';
@@ -281,11 +281,11 @@ export default function ExerciseHistoryScreen() {
               <Text style={styles.emptyText}>No history yet.</Text>
             </View>
           ) : (
-            <View style={styles.historyCard}>
+            <Section style={styles.historyCard}>
               {history.map((entry, i) => (
                 <HistoryRow key={entry.sessionId} entry={entry} isLast={i === history.length - 1} />
               ))}
-            </View>
+            </Section>
           )}
         </ScrollView>
       )}
@@ -330,12 +330,14 @@ function makeStyles(T: ThemeColors) {
     muscleToggleText: { fontFamily: F.uiMed, fontSize: 11, color: T.textDim },
     muscleToggleTextActive: { color: T.onPrimary },
 
+    // eslint-disable-next-line no-restricted-syntax -- Applied to four blocks here; converting them is its own change.
     card: { borderTopWidth: 1, borderTopColor: T.borderStrong, paddingTop: 14, paddingBottom: 10, overflow: 'hidden' },
     sparklineHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
     sparklineRange: { fontFamily: F.mono, fontSize: 12, color: T.textDim },
 
     eyebrow: { fontFamily: F.uiBold, fontSize: 11, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1.2 },
 
+    // eslint-disable-next-line no-restricted-syntax -- Rule-only divider on a list container, with no section padding.
     historyCard: { borderTopWidth: 1, borderTopColor: T.borderStrong },
     historyRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 10 },
     historyDate: { fontFamily: F.uiSemi, fontSize: 14, color: T.text, width: 76 },

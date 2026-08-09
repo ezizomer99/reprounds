@@ -109,6 +109,7 @@ import { isOptimisticId, reorderPayload } from '../../../src/lib/reorder';
 import { generateWarmupRamp } from '../../../src/lib/warmup';
 import { cancelScheduled, cancelScheduledByKind, scheduleInSeconds } from '../../../src/lib/notifications';
 import { Touchable } from '../../../src/components/ui';
+import { TYPE } from '../../../src/theme/type';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -3035,6 +3036,7 @@ function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
   screen: { flex: 1, backgroundColor: T.bg },
   loadingScreen: { flex: 1, backgroundColor: T.bg, alignItems: 'center', justifyContent: 'center' },
+  // eslint-disable-next-line no-restricted-syntax -- Loading skeleton — stands in for a Section rather than being one.
   skeletonCard: { borderTopWidth: 1, borderTopColor: T.borderStrong, paddingVertical: 14 },
   skeletonSetRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
   errorText: { fontFamily: F.ui, fontSize: 15, color: T.danger, textAlign: 'center' },
@@ -3122,6 +3124,7 @@ function makeStyles(T: ThemeColors) {
   emptyEntries: { alignItems: 'center', paddingVertical: 48 },
   summaryBar: {
     flexDirection: 'row', alignItems: 'center',
+    // eslint-disable-next-line no-restricted-syntax -- Summary bar sits inside the header, not the section flow.
     borderTopWidth: 1, borderTopColor: T.borderStrong,
     borderBottomWidth: 1, borderBottomColor: T.borderStrong,
     paddingVertical: 12, marginBottom: 4,
@@ -3139,6 +3142,7 @@ function makeStyles(T: ThemeColors) {
   // Broadsheet: entries are flat rule-separated sections, not floating cards.
   entryCard: {
     borderTopWidth: 1,
+    // eslint-disable-next-line no-restricted-syntax -- Entry card — a DraggableFlatList cell. Not converted without a release-build drag check.
     borderTopColor: T.borderStrong,
     paddingTop: 12,
     paddingBottom: 4,
@@ -3359,7 +3363,7 @@ function makeStyles(T: ThemeColors) {
   maSaveBtnText: { fontFamily: F.uiSemi, fontSize: 15, color: T.onPrimary },
 
   // Training focus checklist
-  focusCardTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
+  focusCardTitle: { ...TYPE.sectionLabel, color: T.textDim },
   focusCardSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, marginTop: -2 },
   focusRow: { flexDirection: 'row', alignItems: 'center', gap: 11, paddingVertical: 5 },
   focusCheckbox: {
@@ -3556,6 +3560,7 @@ function makeStyles(T: ThemeColors) {
     textTransform: 'uppercase', letterSpacing: 0.8, marginTop: 8,
   },
   settingsCard: {
+    // eslint-disable-next-line no-restricted-syntax -- Inside the settings modal, not the page flow.
     borderTopWidth: 1, borderTopColor: T.borderStrong,
   },
   settingsInput: {

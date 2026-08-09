@@ -28,17 +28,26 @@ describe('TYPE', () => {
     }
   });
 
-  // Guards the drift this file exists to end: the section-label style had reached
-  // seven size/tracking combinations. There is one card eyebrow, and it is this.
-  it('has exactly one uppercase eyebrow role', () => {
+  // Guards the drift this file exists to end: the uppercase label had reached
+  // seven size/tracking combinations across 58 sites. There are exactly two
+  // roles behind those — a card eyebrow and a form-field label — and they are
+  // named here so a third cannot appear by accident.
+  it('has exactly two uppercase roles, and they are distinguishable', () => {
     const upper = ROLES.filter((r) => TYPE[r].textTransform === 'uppercase');
-    expect(upper).toEqual(['sectionLabel']);
+    expect(upper.sort()).toEqual(['fieldLabel', 'sectionLabel']);
     expect(TYPE.sectionLabel).toEqual({
       fontFamily: F.uiBold,
       fontSize: 12,
       textTransform: 'uppercase',
       letterSpacing: 1,
     });
+    // Same size, deliberately: what separates them is weight and tracking. The
+    // eyebrow heads a section; the field label labels an input.
+    expect(TYPE.fieldLabel.fontSize).toBe(TYPE.sectionLabel.fontSize);
+    expect(TYPE.fieldLabel.fontFamily).not.toBe(TYPE.sectionLabel.fontFamily);
+    expect(TYPE.fieldLabel.letterSpacing).toBeLessThan(
+      TYPE.sectionLabel.letterSpacing as number,
+    );
   });
 
   // These two look similar enough to be confused for each other, and were: a

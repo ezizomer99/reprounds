@@ -25,7 +25,8 @@ import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { CutCornerView } from '../../../src/components/CutCornerView';
 import { WeekSection } from '../../../src/components/WeekSection';
-import { EmptyState, ScreenHeader, Touchable } from '../../../src/components/ui';
+import { Section, EmptyState, ScreenHeader, Touchable } from '../../../src/components/ui';
+import { TYPE } from '../../../src/theme/type';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -323,7 +324,7 @@ export default function MatTab() {
             <>
               <View style={styles.headerBlock}>
                 {/* Quick Start — mirrors the Workout tab's hero */}
-                <View style={styles.heroCard}>
+                <Section style={styles.heroCard}>
                   <View style={styles.heroRow}>
                     <View style={styles.heroIconBox}>
                       <Ionicons name="flash" size={18} color={T.primary} />
@@ -345,7 +346,7 @@ export default function MatTab() {
                       <Text style={styles.startBtnText}>Start New Mat Session</Text>
                     </CutCornerView>
                   </Touchable>
-                </View>
+                </Section>
 
                 {/* My Week */}
                 <WeekSection />
@@ -476,8 +477,6 @@ function makeStyles(T: ThemeColors) {
     },
     // Broadsheet: flat section separated by a rule, matching the Workout tab.
     heroCard: {
-      borderTopWidth: 1,
-      borderTopColor: T.borderStrong,
       paddingTop: 14,
       paddingBottom: 4,
     },
@@ -495,7 +494,7 @@ function makeStyles(T: ThemeColors) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    heroTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 2 },
+    heroTitle: { ...TYPE.sectionLabel, color: T.textDim, marginBottom: 2 },
     heroSub: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim },
     startBtn: {
       paddingVertical: 14,

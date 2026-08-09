@@ -227,6 +227,7 @@ function makeStyles(T: ThemeColors) {
 
     groupCard: {
       borderTopWidth: 1,
+      // eslint-disable-next-line no-restricted-syntax -- A SectionList group header, which is a different role from a page section.
       borderTopColor: T.borderStrong,
       paddingTop: 12,
       paddingBottom: 4,

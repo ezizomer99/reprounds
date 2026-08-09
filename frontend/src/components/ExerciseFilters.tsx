@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import type { Exercise } from '@app/shared';
 import { Touchable } from './ui';
+import { TYPE } from '../theme/type';
 import { F, R, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../lib/color';
@@ -239,13 +240,7 @@ function makeStyles(T: ThemeColors) {
 
     modalBody: { padding: 20, gap: 24 },
     group: { gap: 12 },
-    groupLabel: {
-      fontFamily: F.uiBold,
-      fontSize: 12,
-      color: T.textDim,
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-    },
+    groupLabel: { ...TYPE.fieldLabel, fontFamily: F.uiBold, color: T.textDim },
     chipWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     chip: {
       paddingHorizontal: 14,

@@ -22,6 +22,12 @@ export type TypeRole =
   | 'sectionLabel'
   /** A list's own section divider (SectionList headers) — larger, not uppercase. */
   | 'listSectionTitle'
+  /**
+   * The uppercase label above a form field, filter group or summary key. Same
+   * size as the eyebrow but lighter and tracked tighter — it labels an input,
+   * it does not head a section.
+   */
+  | 'fieldLabel'
   /** Name of a card/row's subject. */
   | 'cardTitle'
   /** Default reading size for row content. */
@@ -44,6 +50,7 @@ export const TYPE: Record<TypeRole, TextStyle> = {
   screenTitle:      { fontFamily: F.uiBold, fontSize: 22, letterSpacing: -0.3 },
   sectionLabel:     { fontFamily: F.uiBold, fontSize: 12, textTransform: 'uppercase', letterSpacing: 1 },
   listSectionTitle: { fontFamily: F.uiBold, fontSize: 16, letterSpacing: -0.2 },
+  fieldLabel:       { fontFamily: F.uiMed,  fontSize: 12, textTransform: 'uppercase', letterSpacing: 0.5 },
   cardTitle:        { fontFamily: F.uiSemi, fontSize: 15 },
   body:             { fontFamily: F.uiMed,  fontSize: 14 },
   meta:             { fontFamily: F.uiMed,  fontSize: 12 },

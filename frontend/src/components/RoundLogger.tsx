@@ -34,6 +34,7 @@ import { Chip } from './ui/Chip';
 import { Stepper } from './ui/Stepper';
 import { useTheme } from '../theme/ThemeContext';
 import { Touchable } from './ui';
+import { TYPE } from '../theme/type';
 import { F, R, ThemeColors } from '../theme/colors';
 import { withAlpha } from '../lib/color';
 
@@ -990,10 +991,11 @@ function makeStyles(T: ThemeColors) {
     addChip: { borderStyle: 'dashed', borderColor: T.borderStrong, backgroundColor: T.surface },
     roundCard: {
       gap: 10, paddingVertical: 12,
+      // eslint-disable-next-line no-restricted-syntax -- A round row inside a scrolling logger, not a page section.
       borderTopWidth: 1, borderTopColor: T.borderStrong,
     },
     roundHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-    roundTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
+    roundTitle: { ...TYPE.sectionLabel, color: T.textDim },
     inlineRow: { flexDirection: 'row', gap: 12 },
     minuteRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
     stampBtn: {

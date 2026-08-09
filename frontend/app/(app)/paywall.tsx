@@ -11,7 +11,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useSubscription } from '../../src/context/SubscriptionContext';
-import { Touchable } from '../../src/components/ui';
+import { Section, Touchable } from '../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { withAlpha } from '../../src/lib/color';
@@ -114,7 +114,7 @@ export default function PaywallScreen() {
         </View>
 
         {/* Feature list */}
-        <View style={styles.featureCard}>
+        <Section style={styles.featureCard}>
           {PRO_FEATURES.map(({ icon, text }, i) => (
             <View key={i} style={[styles.featureRow, i < PRO_FEATURES.length - 1 && styles.featureRowBorder]}>
               <View style={styles.featureIcon}>
@@ -123,7 +123,7 @@ export default function PaywallScreen() {
               <Text style={styles.featureText}>{text}</Text>
             </View>
           ))}
-        </View>
+        </Section>
 
         {/* Both plan buttons are disabled without prices, so the only way
             forward is a retry. */}
@@ -246,10 +246,7 @@ function makeStyles(T: ThemeColors) {
       lineHeight: 21,
     },
 
-    featureCard: {
-      borderTopWidth: 1,
-      borderTopColor: T.borderStrong,
-    },
+    featureCard: {},
     featureRow: {
       flexDirection: 'row',
       alignItems: 'center',

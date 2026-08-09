@@ -28,7 +28,8 @@ import { Sparkline } from '../../../src/components/Sparkline';
 import { InlineError } from '../../../src/components/InlineError';
 import { CalendarPicker } from '../../../src/components/CalendarPicker';
 import { localTodayISO, parseLocalDate } from '../../../src/lib/calendar';
-import { Touchable } from '../../../src/components/ui';
+import { Section, Touchable } from '../../../src/components/ui';
+import { TYPE } from '../../../src/theme/type';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 
@@ -96,7 +97,7 @@ export default function WeightScreen() {
           />
         }
         ListHeaderComponent={
-          <View style={styles.summaryCard}>
+          <Section style={styles.summaryCard}>
             <View style={styles.summaryTop}>
               <View style={styles.summaryLeft}>
                 <Text style={styles.summaryValue}>
@@ -125,7 +126,7 @@ export default function WeightScreen() {
                 <Sparkline values={sparkValues} height={56} />
               )}
             </View>
-          </View>
+          </Section>
         }
         renderItem={({ item }) => (
           <View style={styles.row}>
@@ -289,13 +290,12 @@ function makeStyles(T: ThemeColors) {
     headerTitle: { flex: 1, fontFamily: F.uiBold, fontSize: 19, color: T.text, letterSpacing: -0.2 },
 
     summaryCard: {
-      borderTopWidth: 1, borderTopColor: T.borderStrong,
       paddingVertical: 16, marginTop: D.pad,
     },
     summaryTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     summaryLeft: { gap: 4 },
     summaryValue: { fontFamily: F.monoBold, fontSize: 34, color: T.text },
-    summaryKey: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.5 },
+    summaryKey: { ...TYPE.fieldLabel, color: T.textDim },
     deltaRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
     deltaText: { fontFamily: F.uiSemi, fontSize: 13 },
     avgText: { fontFamily: F.uiMed, fontSize: 12, color: T.muted, marginTop: 4 },
@@ -320,7 +320,7 @@ function makeStyles(T: ThemeColors) {
     },
     handle: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: T.borderStrong, marginBottom: 12 },
     sheetTitle: { fontFamily: F.uiBold, fontSize: 19, color: T.text, marginBottom: 14 },
-    sheetLabel: { fontFamily: F.uiMed, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 0.4, marginTop: 14, marginBottom: 6 },
+    sheetLabel: { ...TYPE.fieldLabel, color: T.textDim, marginTop: 14, marginBottom: 6 },
     sheetInput: {
       fontFamily: F.uiMed, fontSize: 15, color: T.text,
       backgroundColor: T.surface2, borderRadius: R.sm, borderWidth: 1, borderColor: T.border,

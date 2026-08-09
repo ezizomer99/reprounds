@@ -20,7 +20,8 @@ import { InlineError } from '../../../src/components/InlineError';
 import { useUnit } from '../../../src/units/UnitContext';
 import { kgToUnit } from '../../../src/units/units';
 import { parseLocalDate } from '../../../src/lib/calendar';
-import { ScreenHeader, StatTile, Touchable } from '../../../src/components/ui';
+import { Section, ScreenHeader, StatTile, Touchable } from '../../../src/components/ui';
+import { TYPE } from '../../../src/theme/type';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -214,7 +215,7 @@ export default function ProfileTab() {
         )}
 
         {/* Workouts card */}
-        <View style={styles.card}>
+        <Section style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.cardHeaderLeft}>
               <Ionicons name="pulse-outline" size={16} color={T.primary} />
@@ -281,7 +282,7 @@ export default function ProfileTab() {
               </View>
             </>
           )}
-        </View>
+        </Section>
 
         {/* Training links */}
         <View style={styles.sectionLabel}>
@@ -399,8 +400,6 @@ function makeStyles(T: ThemeColors) {
 
     // Broadsheet: flat rule-separated section.
     card: {
-      borderTopWidth: 1,
-      borderTopColor: T.borderStrong,
       paddingTop: 14,
       paddingBottom: 4,
     },
@@ -411,7 +410,7 @@ function makeStyles(T: ThemeColors) {
       marginBottom: 14,
     },
     cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 7 },
-    cardTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
+    cardTitle: { ...TYPE.sectionLabel, color: T.textDim },
 
     workoutStatRow: {
       flexDirection: 'row',
@@ -458,6 +457,7 @@ function makeStyles(T: ThemeColors) {
     // Broadsheet: nav groups are flat rows under a rule, no card shell.
     listCard: {
       borderTopWidth: 1,
+      // eslint-disable-next-line no-restricted-syntax -- Rule-only divider above a nav list, with no section padding.
       borderTopColor: T.borderStrong,
     },
     navRow: {
