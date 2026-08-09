@@ -1,6 +1,7 @@
 import {
   ActivityIndicator,
   Alert,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -35,8 +36,19 @@ function NavRow({ icon, label, onPress, last, iconColor, iconBg }: NavRowProps) 
   const styles = useMemo(() => makeStyles(T), [T]);
   return (
     <>
-      <TouchableOpacity style={styles.navRow} onPress={onPress} activeOpacity={0.7}>
-        <View style={[styles.navRowIcon, iconBg ? { backgroundColor: iconBg } : undefined]}>
+      <TouchableOpacity
+        style={styles.navRow}
+        onPress={onPress}
+        activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={label}
+      >
+        {/* Decorative — the row already announces its label, and without this
+            a screen reader reads the icon glyph name alongside it. */}
+        <View
+          style={[styles.navRowIcon, iconBg ? { backgroundColor: iconBg } : undefined]}
+          importantForAccessibility="no"
+        >
           <Ionicons name={icon} size={18} color={iconColor ?? T.textDim} />
         </View>
         <Text style={styles.navRowLabel}>{label}</Text>
@@ -63,6 +75,7 @@ export default function ProfileTab() {
     data: totals,
     isLoading: totalsLoading,
     isError: totalsError,
+    isFetching: totalsFetching,
     refetch: refetchTotals,
   } = useTrainingTotals(todayISO);
   const { signInWithGoogle } = useSignIn();
@@ -73,8 +86,16 @@ export default function ProfileTab() {
   // as "you have never trained".
   const completedCount =
     totals !== undefined ? String(totals.sessions) : totalsLoading || totalsError ? '—' : '0';
-  const displayName = user?.name ?? user?.email ?? 'Athlete';
-  const firstName = isGuest ? 'Guest' : displayName.split(' ')[0];
+  // `name` can be an empty string, and falling through to `email` produced
+     // "Hi, sam@example.com!" — so take the first word of a real name, else the
+     // local part of an email, else a neutral fallback.
+  const firstName = useMemo(() => {
+    if (isGuest) return 'Guest';
+    const named = user?.name?.trim().split(/\s+/)[0];
+    if (named) return named;
+    const local = user?.email?.split('@')[0]?.trim();
+    return local || 'Athlete';
+  }, [isGuest, user?.name, user?.email]);
 
   async function handleLinkGoogle() {
     setGoogleLinking(true);
@@ -99,6 +120,8 @@ export default function ProfileTab() {
           style={styles.gearBtn}
           onPress={() => router.push('/settings' as never)}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel="Settings"
         >
           <Ionicons name="settings-outline" size={20} color={T.textDim} />
         </TouchableOpacity>
@@ -108,6 +131,14 @@ export default function ProfileTab() {
         style={styles.scroll}
         contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={totalsFetching}
+            onRefresh={() => { void refetchTotals(); }}
+            tintColor={T.primary}
+            colors={[T.primary]}
+          />
+        }
       >
         {/* User card */}
         <View style={styles.userCard}>
@@ -135,12 +166,28 @@ export default function ProfileTab() {
               onPress={handleLinkGoogle}
               disabled={googleLinking}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityLabel="Sign in with Google to save your data"
+              accessibilityState={{ busy: googleLinking, disabled: googleLinking }}
             >
               {googleLinking ? (
                 <ActivityIndicator color={T.onPrimary} size="small" />
               ) : (
                 <Text style={styles.guestBannerBtnText}>Sign in with Google</Text>
               )}
+            </TouchableOpacity>
+            {/* Registering and signing in with email both migrate guest data
+                too (they send the same guestToken), but this banner offered
+                Google alone — so a guest who didn't want a Google account had
+                no way from here to save their history. */}
+            <TouchableOpacity
+              onPress={() => router.push('/(auth)/sign-in' as never)}
+              disabled={googleLinking}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Use email instead to save your data"
+            >
+              <Text style={styles.guestBannerAlt}>Use email instead</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -155,6 +202,8 @@ export default function ProfileTab() {
             <TouchableOpacity
               onPress={() => router.push('/history' as never)}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Workout history"
             >
               <Ionicons name="time-outline" size={18} color={T.textDim} />
             </TouchableOpacity>
@@ -165,8 +214,12 @@ export default function ProfileTab() {
               onRetry={() => { void refetchTotals(); }}
             />
           ) : (
-            <View style={styles.workoutStatRow}>
-              <View style={styles.workoutStatIcon}>
+            <View
+              style={styles.workoutStatRow}
+              accessible
+              accessibilityLabel={`${completedCount} workouts completed`}
+            >
+              <View style={styles.workoutStatIcon} importantForAccessibility="no">
                 <Ionicons name="ribbon-outline" size={18} color={T.textDim} />
               </View>
               <Text style={styles.workoutStatNum}>{completedCount}</Text>
@@ -292,6 +345,13 @@ function makeStyles(T: ThemeColors) {
       marginTop: 2,
     },
     guestBannerBtnText: { fontFamily: F.uiBold, fontSize: 14, color: T.onPrimary },
+    guestBannerAlt: {
+      fontFamily: F.uiMed,
+      fontSize: 13,
+      color: T.primary,
+      textAlign: 'center',
+      paddingVertical: 6,
+    },
 
     // Broadsheet: flat rule-separated section.
     card: {

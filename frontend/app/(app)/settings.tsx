@@ -212,6 +212,9 @@ export default function SettingsScreen() {
                   style={[styles.segment, active && styles.segmentActive]}
                   onPress={() => setMode(value)}
                   activeOpacity={0.75}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={label}
                 >
                   <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
                     {label}
@@ -235,6 +238,9 @@ export default function SettingsScreen() {
                   style={[styles.segment, active && styles.segmentActive]}
                   onPress={() => setUnit(value)}
                   activeOpacity={0.75}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={label}
                 >
                   <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
                     {label}
@@ -258,6 +264,9 @@ export default function SettingsScreen() {
                   style={[styles.segment, active && styles.segmentActive]}
                   onPress={() => setMetric(value)}
                   activeOpacity={0.75}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: active }}
+                  accessibilityLabel={label}
                 >
                   <Text style={[styles.segmentText, active && styles.segmentTextActive]}>
                     {label}
@@ -298,10 +307,15 @@ export default function SettingsScreen() {
         </View>
 
         {/* Destructive actions */}
+        {/* Both destructive and both previously unlabelled — and the delete
+            button's busy state swaps its text for a bare spinner, which
+            announces nothing at all without an explicit label. */}
         <TouchableOpacity
           style={styles.signOutBtn}
           onPress={handleSignOut}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={isGuest ? 'Exit guest mode' : 'Sign out'}
         >
           <Ionicons name="log-out-outline" size={16} color={T.danger} />
           <Text style={styles.signOutText}>{isGuest ? 'Exit Guest Mode' : 'Sign Out'}</Text>
@@ -312,6 +326,9 @@ export default function SettingsScreen() {
           onPress={handleDeleteAccount}
           disabled={deleting}
           activeOpacity={0.7}
+          accessibilityRole="button"
+          accessibilityLabel={deleting ? 'Deleting your account' : 'Delete account'}
+          accessibilityState={{ busy: deleting, disabled: deleting }}
         >
           {deleting ? (
             <ActivityIndicator size="small" color={T.danger} />
