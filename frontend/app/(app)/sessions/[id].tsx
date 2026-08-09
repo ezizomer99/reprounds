@@ -1,6 +1,7 @@
 import {
   ActivityIndicator,
   Alert,
+  type AlertButton,
   AppState,
   FlatList,
   Modal,
@@ -1213,7 +1214,7 @@ function Chevron({ collapsed }: { collapsed: boolean }) {
 
 // ─── Martial arts entry card ──────────────────────────────────────────────────
 
-function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, sessionActive, collapsed = false, onToggleCollapse, onDrag }: {
+function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, sessionActive, collapsed = false, onToggleCollapse, onDrag, onRegisterFlush }: {
   entry: SessionEntryWithSets;
   sessionId: string;
   disciplines: Discipline[];
@@ -1223,6 +1224,12 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
   onToggleCollapse?: () => void;
   /** Provided only while collapsed — long-pressing the header starts a drag. */
   onDrag?: () => void;
+  /**
+   * Publishes a "save my unsaved edits" callback to the screen while this card
+   * is dirty, so finishing or leaving the session can flush it. Passing null
+   * withdraws it.
+   */
+  onRegisterFlush?: (entryId: string, flush: (() => Promise<void>) | null) => void;
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
@@ -1230,6 +1237,12 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
   const discipline = disciplines.find((d) => d.id === entry.disciplineId);
   const [details, setDetails] = useState<Record<string, unknown>>((entry.details as Record<string, unknown>) ?? {});
   const [justSaved, setJustSaved] = useState(false);
+  // Everything typed here lives in local state until Save, so the card has to
+  // track whether that state has run ahead of the server. Set by every edit,
+  // cleared by a successful save — a flag rather than a deep compare of
+  // `details`, which would be wrong the moment a value round-trips to an
+  // equal-but-differently-ordered object.
+  const [dirty, setDirty] = useState(false);
   // Raw text for numeric detail fields while they're being typed.
   const [numberText, setNumberText] = useState<Record<string, string>>({});
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1241,25 +1254,68 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
     [],
   );
 
+  // Pull server state in whenever the card has nothing of its own to lose. This
+  // used to never happen at all: `details` was seeded once at mount, so a
+  // refetch — which any sibling mutation triggers — could not reach this form.
+  useEffect(() => {
+    if (dirty) return;
+    setDetails((entry.details as Record<string, unknown>) ?? {});
+  }, [entry.details, dirty]);
+
   const handleSave = useCallback(async () => {
     try {
       await updateEntry.mutateAsync({ sessionId, entryId: entry.id, details });
+      setDirty(false);
       setJustSaved(true);
       savedTimerRef.current = setTimeout(() => setJustSaved(false), 1500);
     } catch (err) {
       Alert.alert('Error', (err as Error).message ?? 'Failed to save.');
+      throw err;
     }
   }, [sessionId, entry.id, details, updateEntry]);
 
+  // A just-added entry still carries a client id, so a PATCH against it would
+  // 404 — the same reason the Save button is disabled. Registering it would
+  // only make Finish fail on a save that cannot succeed; the id swap re-runs
+  // this effect moments later and registers it properly.
+  const savable = dirty && !entry.id.startsWith('optimistic-');
+
+  // While dirty, hand the screen a way to flush this card. Without it, Finish
+  // and Back both completed while the rounds were still only in local state.
+  useEffect(() => {
+    if (!onRegisterFlush) return;
+    onRegisterFlush(entry.id, savable ? handleSave : null);
+    return () => onRegisterFlush(entry.id, null);
+  }, [onRegisterFlush, entry.id, savable, handleSave]);
+
+  // Collapsing hides the Save button, so collapsing has to save. Fires on the
+  // transition only, not on every render while collapsed.
+  const wasCollapsed = useRef(collapsed);
+  useEffect(() => {
+    const justCollapsed = collapsed && !wasCollapsed.current;
+    wasCollapsed.current = collapsed;
+    if (justCollapsed && savable) {
+      handleSave().catch(() => {
+        // handleSave already alerted; the card stays dirty so the flush on
+        // finish/back gets another go.
+      });
+    }
+  }, [collapsed, savable, handleSave]);
+
   function setField(key: string, value: unknown) {
     setDetails((prev) => ({ ...prev, [key]: value }));
+    setDirty(true);
   }
 
-  // Collapsed summary: how much has been logged so far.
+  // Collapsed summary: how much has been logged so far. The unsaved marker is
+  // appended to this same line rather than added as its own element — a badge
+  // that appears and disappears would change the cell's height, which is what
+  // wedges DraggableFlatList mid-drag (see CLAUDE.md).
   const roundCount = isRoundsSession(details) ? details.rounds.length : 0;
-  const summary = roundCount > 0
-    ? `${roundCount} round${roundCount !== 1 ? 's' : ''} logged`
-    : 'Nothing logged yet';
+  const summary =
+    (roundCount > 0
+      ? `${roundCount} round${roundCount !== 1 ? 's' : ''} logged`
+      : 'Nothing logged yet') + (dirty ? ' · Unsaved' : '');
 
   const head = (name: string) => (
     <View style={styles.entryHead}>
@@ -1279,7 +1335,7 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
         </View>
       </TouchableOpacity>
       {collapsed ? (
-        <View style={[styles.gymDotBadge, { backgroundColor: T.grappling }]} />
+        <View style={[styles.gymDotBadge, { backgroundColor: dirty ? T.gold : T.grappling }]} />
       ) : (
         <View style={[styles.gymBadge, { backgroundColor: withAlpha(T.grappling, 0.15), borderColor: withAlpha(T.grappling, 0.3) }]}>
           <Text style={[styles.gymBadgeText, { color: T.grappling }]}>Martial Arts</Text>
@@ -1316,7 +1372,10 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
         <RoundLogger
           category={discipline.category}
           value={isRoundsSession(details) ? details : null}
-          onChange={(next) => setDetails(next as unknown as Record<string, unknown>)}
+          onChange={(next) => {
+            setDetails(next as unknown as Record<string, unknown>);
+            setDirty(true);
+          }}
           strikeWeapons={strikeWeapons}
           elapsedSeconds={elapsedSeconds}
           sessionActive={sessionActive}
@@ -1426,13 +1485,20 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
       })}
 
       <TouchableOpacity
-        style={[styles.maSaveBtn, (updateEntry.isPending || justSaved) && { opacity: 0.6 }]}
-        onPress={handleSave}
-        disabled={updateEntry.isPending || entry.id.startsWith('optimistic-')}
+        style={[
+          styles.maSaveBtn,
+          (updateEntry.isPending || justSaved || !dirty) && { opacity: 0.6 },
+        ]}
+        // handleSave rethrows so the flush registry can see a failure; a direct
+        // onPress={handleSave} would surface that as an unhandled rejection.
+        onPress={() => { handleSave().catch(() => {}); }}
+        disabled={updateEntry.isPending || !dirty || entry.id.startsWith('optimistic-')}
+        accessibilityRole="button"
+        accessibilityLabel={dirty ? 'Save logged rounds' : 'Rounds saved'}
       >
         {updateEntry.isPending
           ? <ActivityIndicator size="small" color={T.onPrimary} />
-          : <Text style={styles.maSaveBtnText}>{justSaved ? 'Saved ✓' : 'Save'}</Text>}
+          : <Text style={styles.maSaveBtnText}>{justSaved || !dirty ? 'Saved ✓' : 'Save'}</Text>}
       </TouchableOpacity>
       </Animated.View>
       )}
@@ -1806,6 +1872,27 @@ export default function SessionScreen() {
   // A ref, not state, so setting it doesn't itself cause the render it prevents.
   const draggingRef = useRef(false);
 
+  // Cards holding edits that haven't reached the server, keyed by entry id.
+  // Martial-arts rounds live in their card's local state until Save, so
+  // finishing or backing out used to drop a whole session's worth of rounds
+  // without a word. A ref rather than state: registering a flush must not
+  // re-render the list on every keystroke.
+  const pendingFlushes = useRef(new Map<string, () => Promise<void>>());
+  const registerFlush = useCallback(
+    (entryId: string, flush: (() => Promise<void>) | null) => {
+      if (flush) pendingFlushes.current.set(entryId, flush);
+      else pendingFlushes.current.delete(entryId);
+    },
+    [],
+  );
+  /** Save every dirty card. Returns false if any of them failed. */
+  const flushPendingEntries = useCallback(async () => {
+    const flushes = [...pendingFlushes.current.values()];
+    if (flushes.length === 0) return true;
+    const results = await Promise.allSettled(flushes.map((f) => f()));
+    return results.every((r) => r.status === 'fulfilled');
+  }, []);
+
   // Derive the visible rest countdown from the absolute end time. The interval
   // only recomputes from Date.now(), so on return from background it snaps to
   // the true remaining time instead of resuming from where JS froze.
@@ -1983,25 +2070,51 @@ export default function SessionScreen() {
     prTimerRef.current = setTimeout(() => setPrBanner(null), 3000);
   }
 
+  async function saveThenLeave() {
+    if (await flushPendingEntries()) {
+      router.back();
+      return;
+    }
+    Alert.alert(
+      'Error',
+      "Couldn't save your logged rounds. Check your connection — they're still here if you stay.",
+    );
+  }
+
   function handleBack() {
-    // Leaving a scheduled, skipped or finished session is normal navigation —
-    // the leave-warning only applies to a live in-progress session.
-    if (
+    // Unsaved round data is worth warning about whatever the session's status
+    // is — a completed session can still be edited, and those edits are just as
+    // local until they're saved.
+    const unsaved = pendingFlushes.current.size > 0;
+    // Leaving a scheduled, skipped or finished session is otherwise normal
+    // navigation — the in-progress warning only applies to a live session.
+    const isLive =
       session?.status !== 'completed' &&
       session?.status !== 'planned' &&
-      session?.status !== 'skipped'
-    ) {
-      Alert.alert(
-        'Leave Session?',
-        'Your session will still be in progress. Use the Resume button to return.',
-        [
-          { text: 'Stay', style: 'cancel' },
-          { text: 'Leave', style: 'destructive', onPress: () => router.back() },
-        ],
-      );
-    } else {
+      session?.status !== 'skipped';
+
+    if (!unsaved && !isLive) {
       router.back();
+      return;
     }
+
+    const buttons: AlertButton[] = [{ text: 'Stay', style: 'cancel' }];
+    if (unsaved) {
+      buttons.push({ text: 'Save & Leave', onPress: () => { void saveThenLeave(); } });
+    }
+    buttons.push({
+      text: unsaved ? 'Discard & Leave' : 'Leave',
+      style: 'destructive',
+      onPress: () => router.back(),
+    });
+
+    Alert.alert(
+      unsaved ? 'Unsaved Rounds' : 'Leave Session?',
+      unsaved
+        ? "You've logged rounds that haven't been saved yet. Leaving now discards them."
+        : 'Your session will still be in progress. Use the Resume button to return.',
+      buttons,
+    );
   }
 
   async function handleStartPlanned() {
@@ -2063,6 +2176,16 @@ export default function SessionScreen() {
 
   async function doFinish(name: string, notes: string, date: string, durationMinutes: number) {
     if (!id) return;
+    // Rounds typed into a martial-arts card are local until that card saves.
+    // Completing first meant the session closed without them, and the user had
+    // no way to tell.
+    if (!(await flushPendingEntries())) {
+      Alert.alert(
+        'Unsaved Rounds',
+        "Couldn't save your logged rounds, so the session wasn't finished. Check your connection and try again.",
+      );
+      return;
+    }
     try {
       await completeSession.mutateAsync({
         id,
@@ -2462,6 +2585,7 @@ export default function SessionScreen() {
                       collapsed={isCollapsed}
                       onToggleCollapse={() => toggleCollapsed(entry.id)}
                       onDrag={dragHandler}
+                      onRegisterFlush={registerFlush}
                     />
                   )}
                 </View>
