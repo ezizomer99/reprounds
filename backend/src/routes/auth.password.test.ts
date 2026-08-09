@@ -111,16 +111,63 @@ describe('PATCH /auth/password', () => {
     expect(mock.update).not.toHaveBeenCalled();
   });
 
-  it('returns 400 for an account with no password (Google/guest)', async () => {
+  it('returns 400 for an account with no email to sign in with', async () => {
+    // A guest row has no email, and login looks accounts up by email — so a
+    // password here could never actually be used.
     mock.findFirstResults = [
       { id: USER_ID }, // authMiddleware
-      { id: USER_ID, passwordHash: null }, // handler lookup
+      { id: USER_ID, passwordHash: null, email: null }, // handler lookup
     ];
     const res = await patch('/auth/password', {
       currentPassword: 'whatever1',
       newPassword: 'newPassword1',
     });
     expect(res.status).toBe(400);
+    expect(mock.update).not.toHaveBeenCalled();
+  });
+
+  it('sets a first password on a Google account without asking for a current one', async () => {
+    // A Google user had no credential fallback if they lost access to that
+    // Google account. There is no current password to verify, so the session
+    // itself is the proof.
+    mock.findFirstResults = [
+      { id: USER_ID },
+      { id: USER_ID, passwordHash: null, email: 'sam@example.com' },
+    ];
+    const res = await patch('/auth/password', { newPassword: 'newPassword1' });
+    expect(res.status).toBe(200);
+    expect(mock.update).toHaveBeenCalled();
+    await expect(
+      verifyPassword('newPassword1', (mock.updatedSet as { passwordHash: string }).passwordHash),
+    ).resolves.toBe(true);
+  });
+
+  it('409s when setting a password collides with an existing credential account', async () => {
+    // The email uniqueness index is partial (WHERE password_hash IS NOT NULL),
+    // so a Google account only enters it at the moment it gains a password.
+    mock.findFirstResults = [
+      { id: USER_ID },
+      { id: USER_ID, passwordHash: null, email: 'taken@example.com' },
+    ];
+    mock.update.mockImplementation(() => ({
+      set: () => ({
+        where: async () => {
+          throw new Error('duplicate key value violates unique constraint');
+        },
+      }),
+    }));
+    const res = await patch('/auth/password', { newPassword: 'newPassword1' });
+    expect(res.status).toBe(409);
+  });
+
+  it('still requires the current password when one already exists', async () => {
+    const storedHash = await hashPassword('theRealPassword1');
+    mock.findFirstResults = [
+      { id: USER_ID },
+      { id: USER_ID, passwordHash: storedHash, email: 'sam@example.com' },
+    ];
+    const res = await patch('/auth/password', { newPassword: 'newPassword1' });
+    expect(res.status).toBe(401);
     expect(mock.update).not.toHaveBeenCalled();
   });
 

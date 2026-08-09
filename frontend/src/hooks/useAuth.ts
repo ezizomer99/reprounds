@@ -182,8 +182,33 @@ export function useDeleteAccount() {
   return { deleteAccount };
 }
 
+/**
+ * Sets a password as well as changes one. `currentPassword` is omitted when the
+ * account doesn't have one yet — a Google account gaining a credential
+ * fallback, where the session itself is the proof.
+ */
 export function useChangePassword() {
-  return useMutation<void, Error, { currentPassword: string; newPassword: string }>({
+  const queryClient = useQueryClient();
+  return useMutation<void, Error, { currentPassword?: string; newPassword: string }>({
     mutationFn: (body) => apiPatch<void>('/auth/password', body),
+    // `hasPassword` flips on the first set, and it's what decides whether the
+    // settings row says "Change password" or "Set a password".
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+    },
+  });
+}
+
+/** Update the profile fields the user owns. Currently just the display name. */
+export function useUpdateProfile() {
+  const queryClient = useQueryClient();
+  return useMutation<User, Error, { name: string | null }>({
+    mutationFn: async (body) => {
+      const data = await apiPatch<MeResponse>('/auth/me', body);
+      return data.user;
+    },
+    onSuccess: (user) => {
+      queryClient.setQueryData<User>(['auth', 'me'], user);
+    },
   });
 }

@@ -21,6 +21,8 @@ import { isCompedEmail } from '../lib/entitlements';
 import { authMiddleware } from '../middleware/auth';
 import type { AuthEnv } from '../env';
 import type { User } from '@app/shared';
+import { NAME_MAX_LENGTH } from '@app/shared';
+import { isWithinLength } from '../lib/validate';
 
 type Env = AuthEnv;
 
@@ -431,6 +433,54 @@ authRoutes.get('/me', authMiddleware, async (c) => {
 });
 
 
+// ── Update profile ─────────────────────────────────────────────────────────
+// The display name was whatever Google or the registration form supplied and
+// could never be changed — there was no route to change it with.
+authRoutes.patch('/me', authMiddleware, async (c) => {
+  const userId = c.get('userId');
+
+  let body: { name?: unknown };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'Invalid request body' }, 400);
+  }
+
+  const updates: { name?: string | null } = {};
+
+  if ('name' in body) {
+    if (body.name === null) {
+      updates.name = null;
+    } else if (typeof body.name === 'string') {
+      const trimmed = body.name.trim();
+      if (!isWithinLength(trimmed, NAME_MAX_LENGTH)) {
+        return c.json({ error: `name must be ${NAME_MAX_LENGTH} characters or fewer` }, 400);
+      }
+      // Empty clears it, so the client doesn't have to send an explicit null to
+      // go back to the default greeting.
+      updates.name = trimmed || null;
+    } else {
+      return c.json({ error: 'name must be a string or null' }, 400);
+    }
+  }
+
+  try {
+    const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
+
+    if (Object.keys(updates).length > 0) {
+      await db.update(users).set(updates).where(eq(users.id, userId));
+    }
+
+    const dbUser = await db.query.users.findFirst({ where: eq(users.id, userId) });
+    if (!dbUser) return c.json({ error: 'User not found' }, 404);
+
+    return c.json({ user: toUserShape(dbUser) });
+  } catch (e) {
+    console.error('[auth/me PATCH]', e);
+    return c.json({ error: 'Internal error' }, 500);
+  }
+});
+
 // ── Change password (credential accounts) ──────────────────────────────────
 // Authenticated change for email/password accounts: verify the current password,
 // then store a fresh PBKDF2 hash. Distinct from a *reset* flow (still blocked on
@@ -463,18 +513,40 @@ authRoutes.patch('/password', authMiddleware, async (c) => {
     const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
     const dbUser = await db.query.users.findFirst({ where: eq(users.id, userId) });
-    if (!dbUser?.passwordHash) {
-      // Google/guest accounts, or a deleted user — no credential to change.
-      return c.json({ error: 'This account has no password to change' }, 400);
+    if (!dbUser) {
+      return c.json({ error: 'User not found' }, 404);
     }
 
-    const ok = await verifyPassword(currentPassword, dbUser.passwordHash);
-    if (!ok) {
-      return c.json({ error: 'Current password is incorrect' }, 401);
+    if (dbUser.passwordHash) {
+      // Changing an existing credential: prove you hold the current one.
+      const ok = await verifyPassword(currentPassword, dbUser.passwordHash);
+      if (!ok) {
+        return c.json({ error: 'Current password is incorrect' }, 401);
+      }
+    } else {
+      // Setting a first password on a Google account, so there is no current
+      // one to verify — the session itself is the proof. Without this a Google
+      // user had no credential fallback at all if they lost access to that
+      // Google account.
+      //
+      // A guest has no email, and the login lookup is by email, so a password
+      // on a guest row could never actually be used to sign in.
+      if (!dbUser.email) {
+        return c.json({ error: 'Add an email to this account before setting a password' }, 400);
+      }
     }
 
     const newHash = await hashPassword(newPassword);
-    await db.update(users).set({ passwordHash: newHash }).where(eq(users.id, userId));
+    try {
+      await db.update(users).set({ passwordHash: newHash }).where(eq(users.id, userId));
+    } catch (e) {
+      // The email uniqueness index is partial — `WHERE password_hash IS NOT
+      // NULL` — so a Google account only enters it at the moment it gains a
+      // password. If a credential account already holds this email, that's
+      // where the collision surfaces.
+      console.error('[auth/password] update failed', e);
+      return c.json({ error: 'An account with this email already exists' }, 409);
+    }
 
     return c.json({ success: true });
   } catch (e) {

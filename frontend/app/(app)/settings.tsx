@@ -17,7 +17,14 @@ import { useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useCurrentUser, useSignOut, useDeleteAccount, useChangePassword } from '../../src/hooks/useAuth';
+import {
+  useCurrentUser,
+  useSignOut,
+  useDeleteAccount,
+  useChangePassword,
+  useUpdateProfile,
+} from '../../src/hooks/useAuth';
+import { NAME_MAX_LENGTH } from '@app/shared';
 import { F, R, D, ThemeColors } from '../../src/theme/colors';
 import { useTheme } from '../../src/theme/ThemeContext';
 import { useUnit } from '../../src/units/UnitContext';
@@ -60,6 +67,7 @@ export default function SettingsScreen() {
   const { deleteAccount } = useDeleteAccount();
   const [deleting, setDeleting] = useState(false);
   const [showChangePw, setShowChangePw] = useState(false);
+  const [showEditName, setShowEditName] = useState(false);
 
   const isGuest = user?.isGuest ?? false;
   const displayName = isGuest
@@ -184,16 +192,35 @@ export default function SettingsScreen() {
               )}
             </View>
           </View>
-          {user?.hasPassword && (
+          {/* A guest has no account to edit yet; everyone else can rename. */}
+          {!isGuest && (
+            <TouchableOpacity
+              style={styles.accountActionRow}
+              onPress={() => setShowEditName(true)}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel="Edit display name"
+            >
+              <Ionicons name="person-outline" size={17} color={T.textDim} />
+              <Text style={styles.rowLabel}>Display name</Text>
+              <Ionicons name="chevron-forward" size={16} color={T.muted} style={{ marginLeft: 'auto' }} />
+            </TouchableOpacity>
+          )}
+          {/* Offered to any non-guest, not just accounts that already have a
+              password: a Google user otherwise had no credential fallback if
+              they lost access to that Google account. */}
+          {!isGuest && (
             <TouchableOpacity
               style={styles.accountActionRow}
               onPress={() => setShowChangePw(true)}
               activeOpacity={0.7}
               accessibilityRole="button"
-              accessibilityLabel="Change password"
+              accessibilityLabel={user?.hasPassword ? 'Change password' : 'Set a password'}
             >
               <Ionicons name="key-outline" size={17} color={T.textDim} />
-              <Text style={styles.rowLabel}>Change password</Text>
+              <Text style={styles.rowLabel}>
+                {user?.hasPassword ? 'Change password' : 'Set a password'}
+              </Text>
               <Ionicons name="chevron-forward" size={16} color={T.muted} style={{ marginLeft: 'auto' }} />
             </TouchableOpacity>
           )}
@@ -338,12 +365,30 @@ export default function SettingsScreen() {
         </TouchableOpacity>
       </ScrollView>
 
-      {showChangePw && <ChangePasswordModal onClose={() => setShowChangePw(false)} />}
+      {showChangePw && (
+        <ChangePasswordModal
+          hasPassword={!!user?.hasPassword}
+          onClose={() => setShowChangePw(false)}
+        />
+      )}
+      {showEditName && (
+        <EditNameModal
+          initialName={user?.name ?? ''}
+          onClose={() => setShowEditName(false)}
+        />
+      )}
     </View>
   );
 }
 
-function ChangePasswordModal({ onClose }: { onClose: () => void }) {
+function ChangePasswordModal({
+  hasPassword,
+  onClose,
+}: {
+  /** False when this is a first password on a Google account. */
+  hasPassword: boolean;
+  onClose: () => void;
+}) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const changePassword = useChangePassword();
@@ -363,8 +408,9 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
   async function handleSave() {
     // The current field wasn't checked at all, so an empty one was posted and
     // came back a 401 reading "Current password is incorrect" — which is true
-    // but unhelpful when the field was simply blank.
-    if (!current) {
+    // but unhelpful when the field was simply blank. Skipped entirely when
+    // there is no existing password to prove.
+    if (hasPassword && !current) {
       Alert.alert('Current password required', 'Enter your current password to change it.');
       return;
     }
@@ -376,13 +422,23 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
       Alert.alert('Passwords do not match', 'The new password and confirmation must match.');
       return;
     }
-    if (next === current) {
+    if (hasPassword && next === current) {
       Alert.alert('Choose a different password', 'Your new password must differ from the current one.');
       return;
     }
     try {
-      await changePassword.mutateAsync({ currentPassword: current, newPassword: next });
-      Alert.alert('Password changed', 'Your password has been updated.');
+      await changePassword.mutateAsync({
+        // Omitted entirely when setting a first password — the server doesn't
+        // ask for one it can't verify.
+        ...(hasPassword ? { currentPassword: current } : {}),
+        newPassword: next,
+      });
+      Alert.alert(
+        hasPassword ? 'Password changed' : 'Password set',
+        hasPassword
+          ? 'Your password has been updated.'
+          : 'You can now sign in with your email and password as well as with Google.',
+      );
       handleClose();
     } catch (err) {
       const msg = (err as Error & { body?: { error?: string } })?.body?.error
@@ -397,17 +453,25 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
       <Pressable style={styles.pwBackdrop} onPress={handleClose} />
       <View style={styles.pwSheet}>
         <View style={styles.pwHandle} />
-        <Text style={styles.pwTitle}>Change password</Text>
+        <Text style={styles.pwTitle}>{hasPassword ? 'Change password' : 'Set a password'}</Text>
+        {!hasPassword && (
+          <Text style={styles.pwHint}>
+            Adds email and password sign-in to this account. You can still sign in with Google.
+          </Text>
+        )}
 
-        <TextInput
-          style={styles.pwInput}
-          value={current}
-          onChangeText={setCurrent}
-          placeholder="Current password"
-          placeholderTextColor={T.muted}
-          secureTextEntry
-          autoCapitalize="none"
-        />
+        {hasPassword && (
+          <TextInput
+            style={styles.pwInput}
+            value={current}
+            onChangeText={setCurrent}
+            placeholder="Current password"
+            placeholderTextColor={T.muted}
+            secureTextEntry
+            autoCapitalize="none"
+            accessibilityLabel="Current password"
+          />
+        )}
         <TextInput
           style={styles.pwInput}
           value={next}
@@ -416,6 +480,7 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
           placeholderTextColor={T.muted}
           secureTextEntry
           autoCapitalize="none"
+          accessibilityLabel="New password"
         />
         <TextInput
           style={styles.pwInput}
@@ -425,6 +490,7 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
           placeholderTextColor={T.muted}
           secureTextEntry
           autoCapitalize="none"
+          accessibilityLabel="Confirm new password"
         />
 
         <TouchableOpacity
@@ -432,12 +498,81 @@ function ChangePasswordModal({ onClose }: { onClose: () => void }) {
           onPress={handleSave}
           disabled={changePassword.isPending}
           accessibilityRole="button"
-          accessibilityLabel="Save new password"
+          accessibilityLabel={hasPassword ? 'Save new password' : 'Set password'}
         >
           {changePassword.isPending ? (
             <ActivityIndicator size="small" color={T.onPrimary} />
           ) : (
-            <Text style={styles.pwSaveText}>Update password</Text>
+            <Text style={styles.pwSaveText}>
+              {hasPassword ? 'Update password' : 'Set password'}
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    </Modal>
+  );
+}
+
+/**
+ * The display name came from Google or the registration form and could never be
+ * changed — there was no UI and no route behind it.
+ */
+function EditNameModal({ initialName, onClose }: { initialName: string; onClose: () => void }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  const updateProfile = useUpdateProfile();
+  const [name, setName] = useState(initialName);
+
+  const trimmed = name.trim();
+  const unchanged = trimmed === initialName.trim();
+
+  async function handleSave() {
+    if (trimmed.length > NAME_MAX_LENGTH) {
+      Alert.alert('Name too long', `Keep it to ${NAME_MAX_LENGTH} characters or fewer.`);
+      return;
+    }
+    try {
+      // Empty clears it, and the greeting falls back to the email's local part.
+      await updateProfile.mutateAsync({ name: trimmed || null });
+      onClose();
+    } catch (err) {
+      Alert.alert('Error', (err as Error).message || 'Could not update your name.');
+    }
+  }
+
+  return (
+    <Modal visible animationType="slide" transparent onRequestClose={onClose}>
+      <Pressable style={styles.pwBackdrop} onPress={onClose} />
+      <View style={styles.pwSheet}>
+        <View style={styles.pwHandle} />
+        <Text style={styles.pwTitle}>Display name</Text>
+        <Text style={styles.pwHint}>Used to greet you. Leave it empty to go back to the default.</Text>
+
+        <TextInput
+          style={styles.pwInput}
+          value={name}
+          onChangeText={setName}
+          placeholder="Your name"
+          placeholderTextColor={T.muted}
+          maxLength={NAME_MAX_LENGTH}
+          autoCapitalize="words"
+          returnKeyType="done"
+          onSubmitEditing={handleSave}
+          accessibilityLabel="Display name"
+          autoFocus
+        />
+
+        <TouchableOpacity
+          style={[styles.pwSaveBtn, (updateProfile.isPending || unchanged) && { opacity: 0.6 }]}
+          onPress={handleSave}
+          disabled={updateProfile.isPending || unchanged}
+          accessibilityRole="button"
+          accessibilityLabel="Save display name"
+        >
+          {updateProfile.isPending ? (
+            <ActivityIndicator size="small" color={T.onPrimary} />
+          ) : (
+            <Text style={styles.pwSaveText}>Save</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -532,6 +667,7 @@ function makeStyles(T: ThemeColors) {
       backgroundColor: T.border, marginBottom: 6,
     },
     pwTitle: { fontFamily: F.uiBold, fontSize: 18, color: T.text, marginBottom: 4 },
+    pwHint: { fontFamily: F.uiMed, fontSize: 13, color: T.textDim, marginBottom: 8, lineHeight: 18 },
     pwInput: {
       fontFamily: F.uiMed, fontSize: 15, color: T.text,
       borderWidth: 1, borderColor: T.border, borderRadius: R.sm,

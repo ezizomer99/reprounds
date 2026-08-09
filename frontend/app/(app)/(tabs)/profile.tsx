@@ -18,6 +18,9 @@ import { useCurrentUser, useSignIn } from '../../../src/hooks/useAuth';
 import { useTrainingTotals } from '../../../src/hooks/useStats';
 import { useTodayISO } from '../../../src/hooks/useTodayISO';
 import { InlineError } from '../../../src/components/InlineError';
+import { useUnit } from '../../../src/units/UnitContext';
+import { kgToUnit } from '../../../src/units/units';
+import { parseLocalDate } from '../../../src/lib/calendar';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -59,6 +62,18 @@ function NavRow({ icon, label, onPress, last, iconColor, iconBg }: NavRowProps) 
   );
 }
 
+/** One figure in the profile summary grid. */
+function SummaryCell({ value, label }: { value: string; label: string }) {
+  const { T } = useTheme();
+  const styles = useMemo(() => makeStyles(T), [T]);
+  return (
+    <View style={styles.summaryCell} accessible accessibilityLabel={`${value} ${label}`}>
+      <Text style={styles.summaryValue} numberOfLines={1}>{value}</Text>
+      <Text style={styles.summaryLabel}>{label}</Text>
+    </View>
+  );
+}
+
 export default function ProfileTab() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
@@ -78,6 +93,7 @@ export default function ProfileTab() {
     isFetching: totalsFetching,
     refetch: refetchTotals,
   } = useTrainingTotals(todayISO);
+  const { unit } = useUnit();
   const { signInWithGoogle } = useSignIn();
   const [googleLinking, setGoogleLinking] = useState(false);
 
@@ -87,8 +103,8 @@ export default function ProfileTab() {
   const completedCount =
     totals !== undefined ? String(totals.sessions) : totalsLoading || totalsError ? '—' : '0';
   // `name` can be an empty string, and falling through to `email` produced
-     // "Hi, sam@example.com!" — so take the first word of a real name, else the
-     // local part of an email, else a neutral fallback.
+  // "Hi, sam@example.com!" — so take the first word of a real name, else the
+  // local part of an email, else a neutral fallback.
   const firstName = useMemo(() => {
     if (isGuest) return 'Guest';
     const named = user?.name?.trim().split(/\s+/)[0];
@@ -214,17 +230,52 @@ export default function ProfileTab() {
               onRetry={() => { void refetchTotals(); }}
             />
           ) : (
-            <View
-              style={styles.workoutStatRow}
-              accessible
-              accessibilityLabel={`${completedCount} workouts completed`}
-            >
-              <View style={styles.workoutStatIcon} importantForAccessibility="no">
-                <Ionicons name="ribbon-outline" size={18} color={T.textDim} />
+            <>
+              <View
+                style={styles.workoutStatRow}
+                accessible
+                accessibilityLabel={`${completedCount} workouts completed`}
+              >
+                <View style={styles.workoutStatIcon} importantForAccessibility="no">
+                  <Ionicons name="ribbon-outline" size={18} color={T.textDim} />
+                </View>
+                <Text style={styles.workoutStatNum}>{completedCount}</Text>
+                <Text style={styles.workoutStatLabel}>Workouts Completed</Text>
               </View>
-              <Text style={styles.workoutStatNum}>{completedCount}</Text>
-              <Text style={styles.workoutStatLabel}>Workouts Completed</Text>
-            </View>
+
+              {/* The card rendered a single integer. The totals aggregate
+                  already returns the rest for the same round-trip, so there's
+                  no reason for it to stay that thin. */}
+              <View style={styles.summaryGrid}>
+                <SummaryCell
+                  value={totals ? totals.gymSessions.toLocaleString() : '—'}
+                  label="gym"
+                />
+                <SummaryCell
+                  value={totals ? totals.matSessions.toLocaleString() : '—'}
+                  label="mat"
+                />
+                <SummaryCell
+                  value={
+                    totals
+                      ? Math.round(kgToUnit(totals.volumeKg, unit)).toLocaleString()
+                      : '—'
+                  }
+                  label={`${unit} lifted`}
+                />
+                <SummaryCell
+                  value={
+                    totals?.firstSessionDate
+                      ? parseLocalDate(totals.firstSessionDate).toLocaleDateString('en-US', {
+                          month: 'short',
+                          year: 'numeric',
+                        })
+                      : '—'
+                  }
+                  label="training since"
+                />
+              </View>
+            </>
           )}
         </View>
 
@@ -384,6 +435,22 @@ function makeStyles(T: ThemeColors) {
     },
     workoutStatNum: { fontFamily: F.monoBold, fontSize: 17, color: T.text },
     workoutStatLabel: { fontFamily: F.uiMed, fontSize: 14, color: T.textDim },
+
+    summaryGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      marginTop: 16,
+      rowGap: 14,
+    },
+    summaryCell: { width: '50%', gap: 2 },
+    summaryValue: { fontFamily: F.monoBold, fontSize: 16, color: T.text },
+    summaryLabel: {
+      fontFamily: F.uiMed,
+      fontSize: 11,
+      color: T.textDim,
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+    },
 
     // Section label
     sectionLabel: { marginBottom: -4 },
