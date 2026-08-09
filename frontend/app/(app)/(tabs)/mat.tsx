@@ -25,7 +25,7 @@ import type { FightRecord } from '@app/shared';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { CutCornerView } from '../../../src/components/CutCornerView';
-import { MyWeek } from '../../../src/components/MyWeek';
+import { WeekSection } from '../../../src/components/WeekSection';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
@@ -335,7 +335,7 @@ export default function MatTab() {
                 </View>
 
                 {/* My Week */}
-                <MyWeek />
+                <WeekSection />
               </View>
               <TouchableOpacity
                 style={[styles.quickCard, styles.quickCardFirst]}

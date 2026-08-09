@@ -25,7 +25,7 @@ import { useTodayISO } from '../../../src/hooks/useTodayISO';
 import { parseLocalDate } from '../../../src/lib/calendar';
 import { cardState, weekRangeOf } from '../../../src/lib/statsHelpers';
 import { InlineError } from '../../../src/components/InlineError';
-import { MyWeek } from '../../../src/components/MyWeek';
+import { WeekSection } from '../../../src/components/WeekSection';
 import { Skeleton } from '../../../src/components/Skeleton';
 import {
   Button,
@@ -153,7 +153,7 @@ export default function WorkoutTab() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { data: user } = useCurrentUser();
-  // Same arguments MyWeek passes, so this is the *same* React Query entry
+  // Same arguments WeekSection passes, so this is the *same* React Query entry
   // rather than a second fetch of the same rows. It used to omit the limit,
   // which put it under a different cache key: the tab issued two overlapping
   // /sessions requests and threw the rows from this one away, keeping only
@@ -195,7 +195,7 @@ export default function WorkoutTab() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const headerGreeting = useMemo(() => greeting(user?.name ?? null), [user?.name, todayISO]);
 
-  // Same range MyWeek asks for, via the shared helper, so the two share one
+  // Same range WeekSection asks for, via the shared helper, so the two share one
   // cache entry instead of fetching this week twice.
   const weekRange = useMemo(() => weekRangeOf(todayISO), [todayISO]);
   const { data: weekSessions, refetch: refetchWeek } = useSessionsInRange(
@@ -286,7 +286,7 @@ export default function WorkoutTab() {
         )}
 
         {/* Today's plan — a session scheduled from the calendar showed up here
-            only as a ring dot in MyWeek, so starting it meant navigating to the
+            only as a ring dot in the week strip, so starting it meant navigating to the
             calendar and finding the day. */}
         {todaysPlanned.length > 0 && (
           <Section>
@@ -332,7 +332,7 @@ export default function WorkoutTab() {
         </Section>
 
         {/* My Week */}
-        <MyWeek />
+        <WeekSection />
 
         {/* Routines — this was the one section without a rule above it, so it
             didn't line up with anything else on the screen. */}
