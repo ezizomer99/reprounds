@@ -60,6 +60,7 @@ import {
   useUpdateStrengthSet,
   useDeleteStrengthSet,
   useExerciseHistory,
+  useExercisePRs,
 } from '../../../src/hooks/useSession';
 import { useRoutines } from '../../../src/hooks/useRoutines';
 import { useFocuses, useSetSessionFocuses } from '../../../src/hooks/useFocuses';
@@ -92,6 +93,14 @@ import {
   parseNumberInRangeResult,
 } from '../../../src/lib/parseNumber';
 import { suggestOverload } from '../../../src/lib/overload';
+import {
+  bestOfSet,
+  checkPR,
+  mergeBest,
+  priorBestFromPRs,
+  type PRKind,
+  type PriorBest,
+} from '../../../src/lib/prCheck';
 import { isOptimisticId, reorderPayload } from '../../../src/lib/reorder';
 import { generateWarmupRamp } from '../../../src/lib/warmup';
 import { cancelScheduled, cancelScheduledByKind, scheduleInSeconds } from '../../../src/lib/notifications';
@@ -355,7 +364,12 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   sessionId: string;
   entryId: string;
   displayNumber: number | null; // null = warm-up
-  onCompleted?: (weightKg: number | null) => void;
+  /**
+   * Fired once a set is successfully marked complete, with what it actually
+   * holds — weight in kg and reps — so the card can check it for a record.
+   * Null on both counts for a warm-up, which is never a PR.
+   */
+  onCompleted?: (result: { weightKg: number | null; reps: number | null }) => void;
   onOpenMenu: () => void;
   exerciseType?: 'strength' | 'conditioning';
 }) {
@@ -464,10 +478,22 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
     const next = !isDone;
     const parsedWeight = parseNumberInRange(weight, weightInputRange(unit));
     const wKg = isTime || parsedWeight === null ? null : unitToKg(parsedWeight, unit);
+    // Read from the on-screen text rather than the cached row: the blur that
+    // would have saved it hasn't necessarily landed when the circle is tapped.
+    const parsedReps = isTime ? null : parseIntInRangeResult(reps, REPS_RANGE).value;
     if (next) void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     updateSet.mutate(
       { sessionId, entryId, setId: set.id, completed: next },
-      { onSuccess: () => { if (next) onCompleted?.(set.setType !== 'warmup' ? wKg : null); } },
+      {
+        onSuccess: () => {
+          if (!next) return;
+          const isWorking = set.setType !== 'warmup';
+          onCompleted?.({
+            weightKg: isWorking ? wKg : null,
+            reps: isWorking ? parsedReps : null,
+          });
+        },
+      },
     );
   }
 
@@ -815,7 +841,7 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
   onStartRest: (restSecs: number) => void;
   onStopRest: () => void;
   restingActive: boolean;
-  onPR?: (exerciseName: string) => void;
+  onPR?: (exerciseName: string, kind: PRKind) => void;
   exerciseType?: 'strength' | 'conditioning';
   exerciseMeta?: { equipment: string | null; bodyPart: string | null };
   sessionActive?: boolean;
@@ -863,19 +889,25 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
     [isTime, lastSessionWorking, exerciseMeta, unit],
   );
 
-  // Max weight ever logged for this exercise (across all history).
-  const maxHistoryWeight = useMemo(() => {
-    if (!history?.history?.length) return null;
-    let max = 0;
-    for (const h of history.history) {
-      for (const s of h.entry.sets) {
-        if (s.completed && s.weight != null && s.setType !== 'warmup' && s.weight > max) {
-          max = s.weight;
-        }
-      }
-    }
-    return max > 0 ? max : null;
-  }, [history]);
+  // What this lift has to beat. Read from the PRs endpoint, which ranks all
+  // completed history by Epley e1RM — the same definition the Stats tab and the
+  // PR feed use. This used to be the max weight across `history`, which the API
+  // caps at the last five sessions, so the banner both fired on sets that were
+  // not records and stayed silent on ones that were.
+  const { data: prs } = useExercisePRs(isTime ? null : entry.exerciseId);
+  const priorBest = useMemo(() => priorBestFromPRs(prs), [prs]);
+  // Records set during this session. The endpoint only sees completed sessions,
+  // so without folding these in every heavier set after the first record would
+  // fire the banner again.
+  const sessionBest = useRef<PriorBest>({ e1rmKg: null, weightKg: null });
+
+  function handleSetCompleted(result: { weightKg: number | null; reps: number | null }) {
+    const baseline = mergeBest(priorBest, sessionBest.current);
+    const hit = checkPR(result, baseline);
+    if (!hit) return;
+    sessionBest.current = mergeBest(sessionBest.current, bestOfSet(result));
+    onPR?.(entry.exerciseName ?? 'Exercise', hit.kind);
+  }
 
   function handleAddWarmup() {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -1127,11 +1159,7 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
           sessionId={sessionId}
           entryId={entry.id}
           displayNumber={i + 1}
-          onCompleted={(wKg) => {
-            if (wKg !== null && maxHistoryWeight !== null && wKg > maxHistoryWeight) {
-              onPR?.(entry.exerciseName ?? 'Exercise');
-            }
-          }}
+          onCompleted={handleSetCompleted}
           onOpenMenu={() => setMenuSet(set)}
           exerciseType={exerciseType}
         />
@@ -1859,7 +1887,7 @@ export default function SessionScreen() {
   // is backgrounded (JS timers freeze while the notification fires on time).
   const [restEndsAt, setRestEndsAt] = useState<number | null>(restoredRest?.endsAt ?? null);
   const [elapsed, setElapsed] = useState(0);
-  const [prBanner, setPrBanner] = useState<string | null>(null);
+  const [prBanner, setPrBanner] = useState<{ name: string; kind: PRKind } | null>(null);
   const prTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const finishTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
@@ -2063,10 +2091,10 @@ export default function SessionScreen() {
     armRestNotification(remaining);
   }
 
-  function handlePR(exerciseName: string) {
+  function handlePR(exerciseName: string, kind: PRKind) {
     if (prTimerRef.current) clearTimeout(prTimerRef.current);
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setPrBanner(exerciseName);
+    setPrBanner({ name: exerciseName, kind });
     prTimerRef.current = setTimeout(() => setPrBanner(null), 3000);
   }
 
@@ -2637,7 +2665,11 @@ export default function SessionScreen() {
         >
           <View style={styles.prBannerRow}>
             <Ionicons name="trophy" size={15} color="#1A1200" style={{ marginRight: 6 }} />
-            <Text style={styles.prBannerText}>New PR — {prBanner}</Text>
+            {/* An over-cap set has no 1RM estimate, so it can only ever be the
+                heaviest — saying "New PR" for it would claim more than we know. */}
+            <Text style={styles.prBannerText}>
+              {prBanner.kind === 'e1rm' ? 'New PR' : 'Heaviest yet'} — {prBanner.name}
+            </Text>
           </View>
         </CutCornerView>
       )}
