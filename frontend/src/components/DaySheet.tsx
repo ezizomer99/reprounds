@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import { ActivityIndicator, Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { RoutineWithItems, Session } from '@app/shared';
+import { Touchable } from './ui';
 import { F, R, D, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../lib/color';
@@ -93,9 +94,9 @@ export function DaySheet({
               <Text style={styles.totals}>{totalParts.join(' · ')}</Text>
             )}
           </View>
-          <TouchableOpacity onPress={onClose} accessibilityRole="button">
+          <Touchable onPress={onClose} hasTextChild>
             <Text style={styles.close}>Close</Text>
-          </TouchableOpacity>
+          </Touchable>
         </View>
 
         {isLoading && (
@@ -105,9 +106,9 @@ export function DaySheet({
         )}
 
         {isError && !isLoading && (
-          <TouchableOpacity style={styles.centered} onPress={() => void refetch()}>
+          <Touchable style={styles.centered} onPress={() => void refetch()} hasTextChild>
             <Text style={styles.errorText}>Couldn&apos;t load this day — tap to retry</Text>
-          </TouchableOpacity>
+          </Touchable>
         )}
 
         {!isLoading && !isError && daySessions.length === 0 && (
@@ -137,7 +138,7 @@ export function DaySheet({
 
         {iso !== null && (
           <View style={styles.footer}>
-            <TouchableOpacity onPress={() => onAddWorkout(iso)} activeOpacity={0.8}>
+            <Touchable onPress={() => onAddWorkout(iso)} feedback="card" hasTextChild>
               <CutCornerView fill={T.primary} style={styles.cta}>
                 <Ionicons
                   name={isPast ? 'create-outline' : 'add'}
@@ -148,7 +149,7 @@ export function DaySheet({
                   {isPast ? 'Log a workout for this day' : 'Schedule a workout'}
                 </Text>
               </CutCornerView>
-            </TouchableOpacity>
+            </Touchable>
           </View>
         )}
       </View>
@@ -183,7 +184,7 @@ function SessionRowCompact({
   ].filter(Boolean);
 
   return (
-    <TouchableOpacity style={styles.sessionRow} onPress={onPress} activeOpacity={0.7}>
+    <Touchable style={styles.sessionRow} onPress={onPress} feedback="row" hasTextChild>
       <View style={[styles.kindBadge, isMat && styles.kindBadgeMat]}>
         {isMat ? (
           <Ionicons name="flash" size={14} color={T.grappling} />
@@ -198,7 +199,7 @@ function SessionRowCompact({
         </Text>
       </View>
       <Ionicons name="chevron-forward" size={18} color={T.muted} />
-    </TouchableOpacity>
+    </Touchable>
   );
 }
 

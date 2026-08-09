@@ -1,10 +1,11 @@
-import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoutines } from '../../../src/hooks/useRoutines';
 import { useCreateSession } from '../../../src/hooks/useSession';
+import { Touchable } from '../../../src/components/ui';
 import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { CutCornerView } from '../../../src/components/CutCornerView';
@@ -158,14 +159,13 @@ export default function NewSessionScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <Touchable
           style={styles.backBtn}
           onPress={() => router.back()}
-          accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <Ionicons name="chevron-back" size={22} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
         <Text style={styles.headerTitle}>
           {isScheduling
             ? 'Schedule Session'
@@ -191,7 +191,7 @@ export default function NewSessionScreen() {
           keyExtractor={(item) => item.id}
           ListHeaderComponent={
             <View style={styles.body}>
-              <TouchableOpacity onPress={handleEmptySession} activeOpacity={0.8}>
+              <Touchable onPress={handleEmptySession} feedback="card" hasTextChild>
                 <CutCornerView fill={T.primary} style={styles.heroCta}>
                   <Ionicons name="add" size={20} color={T.onPrimary} />
                   <View>
@@ -209,7 +209,7 @@ export default function NewSessionScreen() {
                     </Text>
                   </View>
                 </CutCornerView>
-              </TouchableOpacity>
+              </Touchable>
 
               <Text style={styles.eyebrow}>
                 {isMatFlow ? 'From mat routine' : 'From routine'}
@@ -221,10 +221,11 @@ export default function NewSessionScreen() {
             const hasMat = item.items.some((i) => i.kind === 'martial_arts');
             const isMixed = hasGym && hasMat;
             return (
-            <TouchableOpacity
+            <Touchable
               style={styles.routineRow}
               onPress={() => handleStartFromRoutine(item)}
-              activeOpacity={0.7}
+              feedback="row"
+              hasTextChild
             >
               <View style={styles.routineIcon}>
                 {isMixed ? (
@@ -244,7 +245,7 @@ export default function NewSessionScreen() {
                 </Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={T.muted} />
-            </TouchableOpacity>
+            </Touchable>
             );
           }}
           ItemSeparatorComponent={() => <View style={styles.rowSep} />}

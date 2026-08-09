@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../theme/ThemeContext';
+import { Touchable } from './Touchable';
 import { F, R, ThemeColors } from '../../theme/colors';
 
 /**
@@ -24,34 +24,31 @@ export function Stepper({
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
 
-  const step = (n: number) => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    onChange(n);
-  };
+  // No haptic here — Touchable fires the light impact, and doing it in both
+  // places buzzed twice per press.
+  const step = (n: number) => onChange(n);
 
   return (
     <View style={styles.stepperRow}>
       <Text style={styles.stepperLabel}>{label}</Text>
       <View style={styles.stepper}>
-        <TouchableOpacity
+        <Touchable
           style={styles.stepBtn}
           onPress={() => step(Math.max(min, value - 1))}
-          accessibilityRole="button"
           accessibilityLabel={`Decrease ${label}`}
         >
           <Ionicons name="remove" size={18} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
         <Text style={styles.stepValue} accessibilityLabel={`${label}: ${value}`}>
           {value}
         </Text>
-        <TouchableOpacity
+        <Touchable
           style={styles.stepBtn}
           onPress={() => step(value + 1)}
-          accessibilityRole="button"
           accessibilityLabel={`Increase ${label}`}
         >
           <Ionicons name="add" size={18} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
       </View>
     </View>
   );

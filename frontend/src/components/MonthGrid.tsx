@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Session } from '@app/shared';
+import { Touchable } from './ui';
 import { F, ThemeColors } from '../theme/colors';
 import { useTheme } from '../theme/ThemeContext';
 import { useSessionsInRange } from '../hooks/useSession';
@@ -96,30 +97,28 @@ export function MonthGrid({
           more than a truncation, which matters more than the paywall hint. */}
       <View style={styles.noticeRow}>
         {isError ? (
-          <TouchableOpacity
+          <Touchable
             style={styles.noticeInner}
             onPress={() => void refetch()}
-            accessibilityRole="button"
             accessibilityLabel="Retry loading this month"
           >
             <Ionicons name="alert-circle-outline" size={12} color={T.danger} />
             <Text style={styles.errorText}>Couldn&apos;t load — tap to retry</Text>
-          </TouchableOpacity>
+          </Touchable>
         ) : isTruncated ? (
           <View style={styles.noticeInner}>
             <Ionicons name="information-circle-outline" size={12} color={T.textDim} />
             <Text style={styles.truncatedText}>Too many sessions — some not shown</Text>
           </View>
         ) : monthPartlyLocked ? (
-          <TouchableOpacity
+          <Touchable
             style={styles.noticeInner}
             onPress={onUpgradePress}
-            accessibilityRole="button"
             accessibilityLabel="Upgrade to see older history"
           >
             <Ionicons name="lock-closed" size={12} color={T.gold} />
             <Text style={styles.lockText}>Upgrade to see older history</Text>
-          </TouchableOpacity>
+          </Touchable>
         ) : null}
       </View>
 
@@ -136,11 +135,13 @@ export function MonthGrid({
             const markers = dayData?.markers ?? [];
             const label = `${MONTH_NAMES[month0]} ${day}, ${year}`;
             return (
-              <TouchableOpacity
+              <Touchable
                 key={col}
                 style={styles.cell}
                 onPress={() => onDayPress(iso)}
-                accessibilityRole="button"
+                // The haptic is fired by handleDayPress on the calendar screen,
+                // which also decides whether this opens the day or the paywall.
+                haptic={false}
                 // Tapping a locked day opens the paywall, not the day — say so,
                 // rather than announcing a date that won't open.
                 accessibilityLabel={dayLocked ? `${label}, locked — upgrade to view` : label}
@@ -157,7 +158,7 @@ export function MonthGrid({
                   </Text>
                 </View>
                 <DayDots markers={markers} overflow={dayData?.overflow} />
-              </TouchableOpacity>
+              </Touchable>
             );
           })}
         </View>

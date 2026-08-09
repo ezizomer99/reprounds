@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +15,7 @@ import { useCreatePartner, usePartners } from '../hooks/usePartners';
 import { NAME_MAX_LENGTH } from '@app/shared';
 import { InlineError } from './InlineError';
 import { useTheme } from '../theme/ThemeContext';
+import { Touchable } from './ui';
 import { F, R, ThemeColors } from '../theme/colors';
 
 /**
@@ -73,19 +73,24 @@ export function PartnerPicker({
 
   return (
     <>
-      <TouchableOpacity style={styles.field} onPress={() => setOpen(true)} activeOpacity={0.7}>
+      <Touchable style={styles.field} onPress={() => setOpen(true)} feedback="row" hasTextChild>
         <Ionicons name="person-outline" size={15} color={T.textDim} />
         <Text style={[styles.fieldText, !selected && { color: T.muted }]} numberOfLines={1}>
           {selected ? selected.name : `Add ${label.toLowerCase()}`}
         </Text>
         {selected ? (
-          <TouchableOpacity hitSlop={8} onPress={() => onChange(null)}>
+          <Touchable
+            hitSlop={8}
+            onPress={() => onChange(null)}
+            haptic={false}
+            accessibilityLabel={`Clear ${label.toLowerCase()}`}
+          >
             <Ionicons name="close-circle" size={16} color={T.muted} />
-          </TouchableOpacity>
+          </Touchable>
         ) : (
           <Ionicons name="chevron-forward" size={15} color={T.muted} />
         )}
-      </TouchableOpacity>
+      </Touchable>
 
       <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)} />
@@ -109,10 +114,11 @@ export function PartnerPicker({
           </View>
 
           {canCreate && (
-            <TouchableOpacity
+            <Touchable
               style={styles.createRow}
               onPress={handleCreate}
               disabled={createPartner.isPending}
+              hasTextChild
             >
               {createPartner.isPending ? (
                 <ActivityIndicator size="small" color={T.primary} />
@@ -120,7 +126,7 @@ export function PartnerPicker({
                 <Ionicons name="add-circle" size={18} color={T.primary} />
               )}
               <Text style={styles.createText}>Add “{query.trim()}”</Text>
-            </TouchableOpacity>
+            </Touchable>
           )}
 
           {isLoading ? (
@@ -136,10 +142,10 @@ export function PartnerPicker({
               keyboardShouldPersistTaps="handled"
               style={{ maxHeight: 320 }}
               renderItem={({ item }) => (
-                <TouchableOpacity style={styles.row} onPress={() => handleSelect(item.id)}>
+                <Touchable style={styles.row} onPress={() => handleSelect(item.id)} hasTextChild>
                   <Text style={styles.rowText}>{item.name}</Text>
                   {item.id === value && <Ionicons name="checkmark" size={18} color={T.primary} />}
-                </TouchableOpacity>
+                </Touchable>
               )}
               ListEmptyComponent={
                 !canCreate ? (

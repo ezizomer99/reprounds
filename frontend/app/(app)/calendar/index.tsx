@@ -1,4 +1,4 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import * as Haptics from 'expo-haptics';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -9,6 +9,7 @@ import { addDaysISO } from '@app/shared';
 import { useRoutines } from '../../../src/hooks/useRoutines';
 import { useProGate } from '../../../src/hooks/useProGate';
 import { useTodayISO } from '../../../src/hooks/useTodayISO';
+import { Touchable } from '../../../src/components/ui';
 import { F, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import {
@@ -167,14 +168,13 @@ export default function CalendarScreen() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <TouchableOpacity
+        <Touchable
           style={styles.backBtn}
           onPress={() => router.back()}
-          accessibilityRole="button"
           accessibilityLabel="Go back"
         >
           <Ionicons name="chevron-back" size={22} color={T.text} />
-        </TouchableOpacity>
+        </Touchable>
         <Text style={styles.headerTitle}>Calendar</Text>
         <View style={{ width: 40 }} />
       </View>
@@ -206,15 +206,14 @@ export default function CalendarScreen() {
         ListHeaderComponent={
           <View style={styles.earlierSlot}>
             {canLoadEarlier && (
-              <TouchableOpacity
+              <Touchable
                 style={styles.earlierBtn}
                 onPress={loadEarlierMonths}
-                accessibilityRole="button"
                 accessibilityLabel="Show earlier months"
               >
                 <Ionicons name="chevron-up" size={14} color={T.textDim} />
                 <Text style={styles.earlierText}>Show earlier months</Text>
-              </TouchableOpacity>
+              </Touchable>
             )}
           </View>
         }

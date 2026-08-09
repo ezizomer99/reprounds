@@ -4,13 +4,12 @@ import {
   StyleSheet,
   Text,
   TextStyle,
-  TouchableOpacity,
   View,
   ViewStyle,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import { useTheme } from '../../theme/ThemeContext';
+import { Touchable } from './Touchable';
 import { F, R, ThemeColors } from '../../theme/colors';
 import { withAlpha } from '../../lib/color';
 
@@ -53,13 +52,11 @@ export function Chip({
     : T.textDim;
 
   return (
-    <TouchableOpacity
+    <Touchable
       style={[styles.chip, selected && activeChip, style]}
-      onPress={() => {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        onPress();
-      }}
-      accessibilityRole="button"
+      // The light impact comes from Touchable now — firing one here too
+      // buzzed twice per press.
+      onPress={onPress}
       accessibilityState={{ selected }}
       accessibilityLabel={accessibilityLabel ?? label}
     >
@@ -67,7 +64,7 @@ export function Chip({
         {leftIcon ? <Ionicons name={leftIcon} size={13} color={iconColor} /> : null}
         <Text style={[styles.chipText, selected && activeText, textStyle]}>{label}</Text>
       </View>
-    </TouchableOpacity>
+    </Touchable>
   );
 }
 

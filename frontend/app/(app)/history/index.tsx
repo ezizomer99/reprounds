@@ -1,7 +1,6 @@
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeOutLeft, LinearTransition } from 'react-native-reanimated';
 import { FlashList } from '@shopify/flash-list';
-import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -107,7 +106,7 @@ export default function HistoryScreen() {
             <Touchable
               key={key}
               style={[styles.filterChip, active && styles.filterChipActive]}
-              onPress={() => { void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); setFilter(key); }}
+              onPress={() => setFilter(key)}
               feedback="row"
               hasTextChild
             >
