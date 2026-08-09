@@ -1,5 +1,6 @@
 import {
   FlatList,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -8,13 +9,15 @@ import {
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type { RoutineWithItems } from '@app/shared';
 import { useCurrentUser } from '../../../src/hooks/useAuth';
-import { useSessions } from '../../../src/hooks/useSession';
+import { MAX_SESSIONS_PAGE, useSessions } from '../../../src/hooks/useSession';
 import { useRoutines } from '../../../src/hooks/useRoutines';
+import { useTodayISO } from '../../../src/hooks/useTodayISO';
+import { parseLocalDate } from '../../../src/lib/calendar';
 import { InlineError } from '../../../src/components/InlineError';
 import { CutCornerView } from '../../../src/components/CutCornerView';
 import { MyWeek } from '../../../src/components/MyWeek';
@@ -30,8 +33,8 @@ function greeting(name: string | null): string {
   return `Good ${time}, ${first}`;
 }
 
-function todayLabel(): string {
-  return new Date().toLocaleDateString('en-US', {
+function todayLabel(todayISO: string): string {
+  return parseLocalDate(todayISO).toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'short',
     day: 'numeric',
@@ -68,26 +71,62 @@ export default function WorkoutTab() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { data: user } = useCurrentUser();
-  const { isError: sessionsError, refetch: refetchSessions } = useSessions('completed');
+  // Same arguments MyWeek passes, so this is the *same* React Query entry
+  // rather than a second fetch of the same rows. It used to omit the limit,
+  // which put it under a different cache key: the tab issued two overlapping
+  // /sessions requests and threw the rows from this one away, keeping only
+  // `isError`.
+  const {
+    isError: sessionsError,
+    isFetching: sessionsFetching,
+    refetch: refetchSessions,
+  } = useSessions('completed', MAX_SESSIONS_PAGE);
   const {
     data: routines,
     isLoading: routinesLoading,
     isError: routinesError,
+    isFetching: routinesFetching,
     refetch: refetchRoutines,
   } = useRoutines();
   const hasError = sessionsError || routinesError;
 
+  // Refreshed at local midnight and on every foreground resume. Read straight
+  // into the render, the date was whatever it had been when the tab first
+  // mounted — an app resumed the next morning showed yesterday under a
+  // "Good evening".
+  const todayISO = useTodayISO();
+  // `todayISO` isn't read by greeting() — it's the trigger. The greeting is a
+  // function of the wall clock, which nothing else in this render depends on,
+  // so this memo piggybacks on the hook's midnight/resume resync to recompute
+  // "morning/afternoon/evening" at the only moments a user would notice.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const headerGreeting = useMemo(() => greeting(user?.name ?? null), [user?.name, todayISO]);
+
+  const refreshing = sessionsFetching || routinesFetching;
+  const onRefresh = useCallback(() => {
+    void refetchSessions();
+    void refetchRoutines();
+  }, [refetchSessions, refetchRoutines]);
+
   return (
     <View style={styles.screen}>
       <View style={styles.header}>
-        <Text style={styles.greeting}>{greeting(user?.name ?? null)}</Text>
-        <Text style={styles.todayLabel}>{todayLabel()}</Text>
+        <Text style={styles.greeting}>{headerGreeting}</Text>
+        <Text style={styles.todayLabel}>{todayLabel(todayISO)}</Text>
       </View>
 
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 20 }]}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={T.primary}
+            colors={[T.primary]}
+          />
+        }
       >
         {hasError && (
           <InlineError

@@ -3,13 +3,14 @@ import {
   Alert,
   FlatList,
   Modal,
+  RefreshControl,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useState, useMemo } from 'react';
+import { useCallback, useState, useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -238,8 +239,12 @@ export default function MatTab() {
   const { isPro, showPaywall } = useProGate();
   const [showAdd, setShowAdd] = useState(false);
 
-  const { data: disciplines, isLoading, isError, error } = useDisciplines();
+  const { data: disciplines, isLoading, isError, error, isFetching, refetch } = useDisciplines();
   const { data: fightRecords } = useFightRecords();
+
+  // Parity with the Stats, Journal and Workout tabs — this was the last list
+  // screen you couldn't pull to refresh.
+  const onRefresh = useCallback(() => { void refetch(); }, [refetch]);
   const deleteDiscipline = useDeleteDiscipline();
 
   function handleDelete(id: string) {
@@ -386,6 +391,14 @@ export default function MatTab() {
             { paddingBottom: insets.bottom + 32 },
           ]}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isFetching}
+              onRefresh={onRefresh}
+              tintColor={T.primary}
+              colors={[T.primary]}
+            />
+          }
         />
       )}
 
