@@ -111,6 +111,22 @@ export function WeekSection() {
   );
   const streak = streakData?.weeks ?? localStreak;
 
+  // All three numbers, one source. These used to be computed here over the
+  // 200-row session list while the headline came from the server, so the row
+  // showed two horizons side by side.
+  //
+  // No local fallback for these two: there isn't an honest one. The old local
+  // computation is exactly what was wrong, and a dash says "not known yet",
+  // which is true while the request is in flight and true against a Worker that
+  // predates the fields.
+  const gymStreak = streakData?.gymWeeks;
+  const matStreak = streakData?.matWeeks;
+  const wk = (n: number | undefined) => (n === undefined ? '—' : `${n} wk`);
+  const wkLabel = (n: number | undefined, kind: string) =>
+    n === undefined
+      ? `${kind} streak unavailable`
+      : `${n} week ${kind} streak`;
+
   // Gate on the week query, since that is what the strip draws. Cold-loading
   // used to render a real "0 weeks" and "log a session to start your streak" to
   // someone mid-streak; cardState keeps cached data on screen through a failed
@@ -181,17 +197,17 @@ export function WeekSection() {
               layout="inline"
               icon="barbell-outline"
               tone="primary"
-              value={counts.gym}
+              value={wk(gymStreak)}
               label="gym"
-              accessibilityLabel={`${counts.gym} gym session${counts.gym !== 1 ? 's' : ''} this week`}
+              accessibilityLabel={wkLabel(gymStreak, 'gym')}
             />
             <StatTile
               layout="inline"
               icon="body-outline"
               tone="grappling"
-              value={counts.mat}
+              value={wk(matStreak)}
               label="mat"
-              accessibilityLabel={`${counts.mat} mat session${counts.mat !== 1 ? 's' : ''} this week`}
+              accessibilityLabel={wkLabel(matStreak, 'mat')}
             />
           </View>
         </>
