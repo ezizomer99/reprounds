@@ -5,6 +5,7 @@ import {
   weekKey,
   computeWeekStreak,
   weeksAgoMonday,
+  weekRangeOf,
   avgPerWeekFromBuckets,
   weeklyBarLabel,
   statsRange,
@@ -96,6 +97,34 @@ describe('mondayISO / weekKey', () => {
     );
     expect(keys.size).toBe(1);
     expect([...keys][0]).toBe(mondayISO());
+  });
+});
+
+// The bounds MyWeek and the Workout tab both pass to useSessionsInRange. They
+// key the query cache, so a drift between the two callers is a duplicate
+// request for the same rows rather than a visible bug — hence pinning them.
+describe('weekRangeOf', () => {
+  it('spans Monday to Sunday of the week containing the date', () => {
+    // 2026-08-05 is a Wednesday.
+    expect(weekRangeOf('2026-08-05')).toEqual({ from: '2026-08-03', to: '2026-08-09' });
+  });
+
+  it('treats Monday itself as the start of its own week', () => {
+    expect(weekRangeOf('2026-08-03')).toEqual({ from: '2026-08-03', to: '2026-08-09' });
+  });
+
+  it('keeps Sunday in the week that precedes it, not the one that follows', () => {
+    expect(weekRangeOf('2026-08-09')).toEqual({ from: '2026-08-03', to: '2026-08-09' });
+  });
+
+  it('spans a month boundary', () => {
+    // 2026-09-01 is a Tuesday, so its Monday is in August.
+    expect(weekRangeOf('2026-09-01')).toEqual({ from: '2026-08-31', to: '2026-09-06' });
+  });
+
+  it('agrees with mondayISO, which MyWeek derives its day strip from', () => {
+    const today = isoDate(new Date());
+    expect(weekRangeOf(today).from).toBe(mondayISO());
   });
 });
 

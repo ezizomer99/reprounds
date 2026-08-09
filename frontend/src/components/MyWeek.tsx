@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { addDaysISO } from '@app/shared';
 import { MAX_SESSIONS_PAGE, useSessions, useSessionsInRange } from '../hooks/useSession';
-import { mondayISO, weekKey, computeWeekStreak } from '../lib/statsHelpers';
+import { mondayISO, weekKey, weekRangeOf, computeWeekStreak } from '../lib/statsHelpers';
 import { DAY_LABELS_LONG } from '../lib/calendar';
 import { useTodayISO } from '../hooks/useTodayISO';
 import { F, R, ThemeColors } from '../theme/colors';
@@ -25,7 +25,7 @@ interface WeekDay {
  * `weekKey` — which they only did by accident.
  */
 function weekDaysOf(todayISO: string): WeekDay[] {
-  const monday = mondayISO(new Date(`${todayISO}T12:00:00`));
+  const { from: monday } = weekRangeOf(todayISO);
   return Array.from({ length: 7 }, (_, i) => {
     const isoDate = addDaysISO(monday, i);
     return {
