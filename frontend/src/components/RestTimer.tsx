@@ -21,7 +21,10 @@ export function RestTimer({ seconds, total, onSkip, onAdd, style }: RestTimerPro
   // The pill lingers briefly at 0:00 before auto-dismissing; label it "Done"
   // so the pause reads as intentional.
   const done = seconds <= 0;
-  const frac = Math.max(0, Math.min(1, seconds / total));
+  // `total` comes from a restored ActiveRest as well as from a fresh start, so
+  // a zero would reach the style as width: "NaN%" rather than being caught at
+  // the call site.
+  const frac = total > 0 ? Math.max(0, Math.min(1, seconds / total)) : 0;
   const mm = String(Math.floor(seconds / 60));
   const ss = String(seconds % 60).padStart(2, '0');
 

@@ -146,6 +146,9 @@ const SET_TYPE_SHORT: Record<SetType, string> = {
  */
 const MA_NUMBER_RANGE = { min: 0, max: 100_000 };
 
+/** Fallback rest duration, and what `restTotal` resets to between rests. */
+const DEFAULT_REST_SECONDS = 120;
+
 function nextSetNumber(sets: readonly StrengthSet[]): number {
   return sets.reduce((max, s) => Math.max(max, s.setNumber), 0) + 1;
 }
@@ -1878,7 +1881,7 @@ export default function SessionScreen() {
   const [restSeconds, setRestSeconds] = useState<number | null>(
     restoredRest ? Math.max(0, Math.ceil((restoredRest.endsAt - Date.now()) / 1000)) : null,
   );
-  const [restTotal, setRestTotal] = useState(restoredRest?.total ?? 120);
+  const [restTotal, setRestTotal] = useState(restoredRest?.total ?? DEFAULT_REST_SECONDS);
   // Which entry's rest timer is running, so its card can show a stop control.
   const [restEntryId, setRestEntryId] = useState<string | null>(restoredRest?.entryId ?? null);
   // Absolute wall-clock time (epoch ms) the rest period ends. The visible
@@ -2039,6 +2042,24 @@ export default function SessionScreen() {
     void armChain.current;
   }
 
+  /**
+   * Cancel on the same queue that arms.
+   *
+   * Skipping used to cancel `restNotifId.current` directly, but arming nulls
+   * that ref *before* awaiting the schedule call. Skip inside that window and
+   * the cancel hit null while the in-flight arm went on to store a live id — so
+   * "Rest complete" fired for a rest the user had already skipped, and
+   * `updateActiveRestNotifId` no-oped because the store had been cleared.
+   */
+  function cancelRestNotification() {
+    armChain.current = armChain.current.then(async () => {
+      const previous = restNotifId.current;
+      restNotifId.current = null;
+      await cancelScheduled(previous);
+    });
+    void armChain.current;
+  }
+
   function handleStartRest(entryId: string, secs: number) {
     if (secs <= 0) return;
     if (restDismissRef.current) {
@@ -2056,8 +2077,7 @@ export default function SessionScreen() {
   }
 
   function handleStopRest() {
-    void cancelScheduled(restNotifId.current);
-    restNotifId.current = null;
+    cancelRestNotification();
     clearActiveRest();
     if (restDismissRef.current) {
       clearTimeout(restDismissRef.current);
@@ -2067,6 +2087,9 @@ export default function SessionScreen() {
     setRestEndsAt(null);
     setRestSeconds(null);
     setRestEntryId(null);
+    // Left at the previous rest's duration, the next countdown rendered its
+    // progress bar against the wrong denominator until the first tick.
+    setRestTotal(DEFAULT_REST_SECONDS);
   }
 
   function handleRestAdd() {
