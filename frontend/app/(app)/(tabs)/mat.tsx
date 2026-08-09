@@ -324,7 +324,9 @@ export default function MatTab() {
                     </View>
                   </View>
                   <TouchableOpacity
-                    onPress={() => router.push('/sessions/new' as never)}
+                    onPress={() =>
+                      router.push('/sessions/new?kind=martial_arts' as never)
+                    }
                     activeOpacity={0.85}
                   >
                     <CutCornerView fill={T.primary} style={styles.startBtn}>

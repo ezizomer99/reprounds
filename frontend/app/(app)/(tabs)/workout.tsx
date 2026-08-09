@@ -329,6 +329,19 @@ export default function WorkoutTab() {
             variant="hero"
             onPress={() => router.push('/sessions/new' as never)}
           />
+          {/* Reps and rounds are the same product, but this tab only ever
+              offered reps. One hero and one soft rather than two heroes: two
+              CutCornerViews side by side mean two frames of blank on a cold
+              paint, and two equal CTAs mean neither is the primary one. */}
+          <Button
+            label="Mat session"
+            icon="body-outline"
+            variant="soft"
+            tone="grappling"
+            fullWidth
+            style={styles.matBtn}
+            onPress={() => router.push('/sessions/new?kind=martial_arts' as never)}
+          />
         </Section>
 
         {/* My Week */}
@@ -404,6 +417,8 @@ function makeStyles(T: ThemeColors) {
 
     scroll: { flex: 1 },
     body: { padding: D.pad, gap: D.stack },
+
+    matBtn: { marginTop: 8 },
 
     // One style for the real list and the skeleton row, so the two cannot drift
     // apart on gap the way they did on card width.
