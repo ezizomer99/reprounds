@@ -65,7 +65,14 @@ export const exercises = pgTable('exercises', {
   secondaryMuscles:   text('secondary_muscles').array(),
   target:             text('target'),
   createdAt:          timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  // `GET /exercises` runs `WHERE user_id IS NULL OR user_id = $1` and
+  // `ORDER BY name` on every keystroke in the in-session picker, over a
+  // ~800-row seeded catalogue, and `POST /exercises` counts a user's customs
+  // to enforce the per-user cap — all of it unindexed until now.
+  userIdIdx: index('exercises_user_id_idx').on(t.userId),
+  nameIdx: index('exercises_name_idx').on(t.name),
+}));
 
 export const disciplines = pgTable('disciplines', {
   id:          uuid('id').primaryKey().defaultRandom(),
