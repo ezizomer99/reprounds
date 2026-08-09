@@ -141,7 +141,7 @@ export default function StatsTab() {
     data: streakData,
     isError: streakError,
     refetch: refetchStreak,
-  } = useWeekStreak(todayISO, proContentEnabled);
+  } = useWeekStreak(todayISO);
 
   const weeks = useMemo(() => weeklyData?.weeks ?? [], [weeklyData]);
   // The newest bucket is the current week by construction — rangeStart is the
@@ -380,42 +380,33 @@ export default function StatsTab() {
                   integer, and the streak could only reach as far back as those
                   rows — ~40 weeks for someone training five times a week. It
                   degrades to "—" on its own rather than taking the row with it. */}
+              {/* Free, like the week block on the Workout tab. It was locked
+                  here and open there — the same number, behind a padlock on one
+                  screen and printed on another. Of the two, the padlock was the
+                  one that had to go: taking a number away from users who can
+                  already see it is worse than giving up a lock nobody was
+                  paying for. */}
               <TouchableOpacity
                 style={[styles.statCard, { backgroundColor: withAlpha(T.gold, 0.12) }]}
                 onPress={
-                  !isPro
-                    ? showPaywall
-                    : streakError && !streakData
-                      ? () => void refetchStreak()
-                      : () => router.push('/history' as never)
+                  streakError && !streakData
+                    ? () => void refetchStreak()
+                    : () => router.push('/history' as never)
                 }
                 activeOpacity={0.7}
                 accessibilityRole="button"
                 accessibilityLabel={
-                  !isPro
-                    ? 'Week streak, locked — upgrade to Pro'
-                    : streakData
-                      ? `${streakData.weeks} week streak`
-                      : 'Week streak unavailable, tap to retry'
+                  streakData
+                    ? `${streakData.weeks} week streak`
+                    : 'Week streak unavailable, tap to retry'
                 }
               >
-                {isPro ? (
-                  <>
-                    <Text style={[styles.statCardNum, { color: T.gold }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
-                      {streakData ? streakData.weeks : '—'}
-                    </Text>
-                    <Text style={[styles.statCardLabel, { color: T.gold }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
-                      Week Streak
-                    </Text>
-                  </>
-                ) : (
-                  <>
-                    <Ionicons name="lock-closed" size={18} color={T.gold} />
-                    <Text style={[styles.statCardLabel, { color: T.gold }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
-                      Streak
-                    </Text>
-                  </>
-                )}
+                <Text style={[styles.statCardNum, { color: T.gold }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
+                  {streakData ? streakData.weeks : '—'}
+                </Text>
+                <Text style={[styles.statCardLabel, { color: T.gold }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
+                  Week Streak
+                </Text>
               </TouchableOpacity>
             </View>
           )}

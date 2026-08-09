@@ -22,7 +22,10 @@ const PRO_FEATURES = [
   { icon: 'list-outline' as const, text: 'Unlimited routines' },
   { icon: 'time-outline' as const, text: 'Full session history (all time)' },
   { icon: 'trophy-outline' as const, text: 'PR tracking & estimated 1RM' },
-  { icon: 'trending-up-outline' as const, text: 'Advanced analytics & streaks' },
+  // Not "& streaks" any more — the week streak is free on both the Workout and
+  // Stats tabs, and selling something the user already has is how a paywall
+  // stops being believed.
+  { icon: 'trending-up-outline' as const, text: 'Advanced analytics & top lifts' },
   { icon: 'options-outline' as const, text: 'Custom discipline fields' },
 ];
 
