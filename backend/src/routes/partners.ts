@@ -4,6 +4,8 @@ import { createDb } from '../db';
 import { partners } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
+import { NAME_MAX_LENGTH } from '@app/shared';
+import { isWithinLength, notUuid } from '../lib/validate';
 import type {
   CreatePartnerRequest,
   Partner,
@@ -55,6 +57,9 @@ partnerRoutes.post('/', async (c) => {
   if (!name) {
     return c.json({ error: 'name is required' }, 400);
   }
+  if (!isWithinLength(name, NAME_MAX_LENGTH)) {
+    return c.json({ error: `name must be ${NAME_MAX_LENGTH} characters or fewer` }, 400);
+  }
 
   const [row] = await db.insert(partners).values({ userId, name }).returning();
 
@@ -64,6 +69,7 @@ partnerRoutes.post('/', async (c) => {
 partnerRoutes.patch('/:id', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
+  if (notUuid(id)) return c.json({ error: 'Not found' }, 404);
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
   let body: UpdatePartnerRequest;
@@ -76,6 +82,9 @@ partnerRoutes.patch('/:id', async (c) => {
   const name = body.name?.trim();
   if (!name) {
     return c.json({ error: 'name is required' }, 400);
+  }
+  if (!isWithinLength(name, NAME_MAX_LENGTH)) {
+    return c.json({ error: `name must be ${NAME_MAX_LENGTH} characters or fewer` }, 400);
   }
 
   const [row] = await db
@@ -94,6 +103,7 @@ partnerRoutes.patch('/:id', async (c) => {
 partnerRoutes.delete('/:id', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
+  if (notUuid(id)) return c.json({ error: 'Not found' }, 404);
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
   const [row] = await db

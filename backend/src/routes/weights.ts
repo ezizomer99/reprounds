@@ -5,7 +5,7 @@ import { weightLogs } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
 import { isNumberInRange, NOTES_MAX_LENGTH, WEIGHT_KG_RANGE } from '@app/shared';
-import { isIsoDate, isWithinLength } from '../lib/validate';
+import { isIsoDate, isWithinLength, notUuid } from '../lib/validate';
 import type {
   CreateWeightLogRequest,
   UpdateWeightLogRequest,
@@ -95,6 +95,7 @@ weightRoutes.post('/', async (c) => {
 weightRoutes.patch('/:id', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
+  if (notUuid(id)) return c.json({ error: 'Not found' }, 404);
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
   let body: UpdateWeightLogRequest;
@@ -139,6 +140,7 @@ weightRoutes.patch('/:id', async (c) => {
 weightRoutes.delete('/:id', async (c) => {
   const userId = c.get('userId');
   const id = c.req.param('id');
+  if (notUuid(id)) return c.json({ error: 'Not found' }, 404);
   const db = createDb(c.env.HYPERDRIVE?.connectionString ?? c.env.DATABASE_URL!);
 
   const [row] = await db
