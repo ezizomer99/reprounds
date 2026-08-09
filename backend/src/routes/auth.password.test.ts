@@ -31,7 +31,7 @@ function makeApp() {
   return app;
 }
 
-async function patch(path: string, body: unknown) {
+async function patch(path: string, body: unknown, overrideEnv: Record<string, unknown> = {}) {
   const token = await signJwt({ sub: USER_ID }, SECRET, 3600);
   return makeApp().request(
     path,
@@ -40,7 +40,7 @@ async function patch(path: string, body: unknown) {
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     },
-    env,
+    { ...env, ...overrideEnv },
   );
 }
 
@@ -56,6 +56,51 @@ beforeEach(() => {
       return { where: async () => {} };
     },
   }));
+});
+
+// This was the one credential-verifying route with no limiter. Being behind
+// authMiddleware bounds *who* can try, not how often, and every attempt costs a
+// 100,000-iteration PBKDF2 verify.
+describe('PATCH /auth/password rate limiting', () => {
+  it('429s before verifying anything when the limiter rejects', async () => {
+    const limit = vi.fn().mockResolvedValue({ success: false });
+    mock.findFirstResults = [{ id: USER_ID }]; // authMiddleware existence check
+    const res = await patch(
+      '/auth/password',
+      { currentPassword: 'whatever1', newPassword: 'newPassword1' },
+      { AUTH_RATE_LIMITER: { limit } },
+    );
+
+    expect(res.status).toBe(429);
+    expect(mock.update).not.toHaveBeenCalled();
+    // Only authMiddleware's lookup ran. The handler's own hash lookup — and the
+    // PBKDF2 verify behind it, which is the expensive part — never happened.
+    expect(mock.findFirst).toHaveBeenCalledTimes(1);
+  });
+
+  it('keys the limiter on its own route so it has its own budget', async () => {
+    const limit = vi.fn().mockResolvedValue({ success: true });
+    mock.findFirstResults = [{ id: USER_ID }];
+    await patch(
+      '/auth/password',
+      { currentPassword: 'whatever1', newPassword: 'short' },
+      { AUTH_RATE_LIMITER: { limit } },
+    );
+
+    expect(limit).toHaveBeenCalledTimes(1);
+    expect((limit.mock.calls[0][0] as { key: string }).key).toMatch(/^password:/);
+  });
+
+  it('proceeds normally when the limiter allows the attempt', async () => {
+    const limit = vi.fn().mockResolvedValue({ success: true });
+    mock.findFirstResults = [{ id: USER_ID }];
+    const res = await patch(
+      '/auth/password',
+      { currentPassword: 'whatever1', newPassword: 'short' },
+      { AUTH_RATE_LIMITER: { limit } },
+    );
+    expect(res.status).toBe(400);
+  });
 });
 
 describe('PATCH /auth/password', () => {

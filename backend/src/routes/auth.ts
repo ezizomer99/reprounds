@@ -436,6 +436,13 @@ authRoutes.get('/me', authMiddleware, async (c) => {
 // then store a fresh PBKDF2 hash. Distinct from a *reset* flow (still blocked on
 // transactional email). Google/guest accounts have no password to change.
 authRoutes.patch('/password', authMiddleware, async (c) => {
+  // The only route that verifies a password and wasn't rate limited. Being
+  // behind authMiddleware bounds who can try, not how often — and every attempt
+  // runs a 100,000-iteration PBKDF2 verify, so an unbounded loop is both
+  // unlimited guessing of the current password and a way to burn Worker CPU.
+  const limited = await rateLimited(c, 'password');
+  if (limited) return limited;
+
   const userId = c.get('userId');
 
   let body: { currentPassword?: string; newPassword?: string };
