@@ -245,7 +245,7 @@ function PickExerciseModal({ visible, onClose, onPick, title = 'Add Exercise' }:
   // the moment a search narrowed it. Same query key as the session screen's
   // own unfiltered call, so this shares its cache rather than refetching.
   const { data: allExercises } = useExercises();
-  const { isPro, showPaywall } = useProGate();
+  const { isPro, isLoading: gateLoading, showPaywall } = useProGate();
 
   const filteredExercises = useMemo(
     () => filterByChips(exercises ?? [], filter),
@@ -261,7 +261,8 @@ function PickExerciseModal({ visible, onClose, onPick, title = 'Add Exercise' }:
 
   function handleCreatePress() {
     const allCustom = (allExercises ?? []).filter((e) => e.userId != null);
-    if (!isPro && allCustom.length >= FREE_CUSTOM_EXERCISE_LIMIT) {
+    // See exercises/index.tsx — don't enforce a limit on an unresolved gate.
+    if (!isPro && !gateLoading && allCustom.length >= FREE_CUSTOM_EXERCISE_LIMIT) {
       Alert.alert(
         'Limit reached',
         `Free accounts can create up to ${FREE_CUSTOM_EXERCISE_LIMIT} custom exercises. Upgrade to RepRounds Pro for unlimited exercises.`,

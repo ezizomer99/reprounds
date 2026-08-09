@@ -57,7 +57,7 @@ export default function DisciplineDetailScreen() {
   const insets = useSafeAreaInsets();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const { isPro, showPaywall } = useProGate();
+  const { isPro, isLoading: gateLoading, showPaywall } = useProGate();
   const { id, name } = useLocalSearchParams<{ id: string; name: string }>();
 
   const { data, isLoading, isError, error } = useDisciplineHistory(id ?? null);
@@ -78,7 +78,12 @@ export default function DisciplineDetailScreen() {
   const promoList = promotions ?? [];
   const currentRank = promoList[0] ?? null; // ordered by date desc
 
-  if (!isPro) {
+  // The gate resolves asynchronously (store entitlement + /me comp status), and
+  // `useProGate` documents that a lock must not be derived while it's loading:
+  // a mid-race `false` is indistinguishable from a genuine free user. Rendering
+  // this wall then flashed "RepRounds Pro Feature" at paying subscribers on
+  // every cold start.
+  if (!isPro && !gateLoading) {
     return (
       <View style={[styles.screen, { paddingTop: insets.top }]}>
         <View style={styles.header}>

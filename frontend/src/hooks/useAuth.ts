@@ -14,6 +14,7 @@ import {
 } from '../lib/auth';
 import { cancelScheduledByKind } from '../lib/notifications';
 import { clearActiveRest } from '../lib/restTimerStore';
+import { clearCachedEntitlement } from '../lib/entitlementCache';
 
 interface MeResponse {
   user: User;
@@ -135,6 +136,11 @@ export function useSignOut() {
   async function signOut(): Promise<void> {
     await clearSessionToken();
     await clearLocalTimers();
+    // The remembered Pro answer is per-account. Detaching the RevenueCat
+    // customer normally overwrites it, but that call is best-effort and
+    // swallows its errors — so a sign-out while offline would leave this
+    // account's entitlement cached for whoever signs in next.
+    await clearCachedEntitlement();
     try { await GoogleSignin.signOut(); } catch { /* ignore if not signed in via Google */ }
     await clearPersistedCache();
   }
@@ -150,6 +156,7 @@ export function useDeleteAccount() {
     await clearSessionToken();
     await clearGuestData();
     await clearLocalTimers();
+    await clearCachedEntitlement();
     try { await GoogleSignin.signOut(); } catch { /* ignore if not signed in via Google */ }
     await clearPersistedCache();
   }

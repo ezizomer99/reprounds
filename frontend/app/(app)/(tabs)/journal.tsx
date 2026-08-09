@@ -29,7 +29,7 @@ export default function JournalTab() {
   const insets = useSafeAreaInsets();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const { isPro, showPaywall } = useProGate();
+  const { isPro, isLoading: gateLoading, showPaywall } = useProGate();
   const { data: sessions, isLoading, isError, error, refetch, isRefetching } = useSessions('completed', MAX_SESSIONS_PAGE);
   const { data: routines } = useRoutines();
   const deleteSession = useDeleteSession();
@@ -39,12 +39,13 @@ export default function JournalTab() {
   const allSessions = sessions ?? [];
 
   const cutoff = useMemo(() => {
-    if (isPro) return null;
+    // See history/index.tsx — don't truncate on an unresolved gate.
+    if (isPro || gateLoading) return null;
     const d = new Date();
     d.setDate(d.getDate() - FREE_HISTORY_DAYS);
     d.setHours(0, 0, 0, 0);
     return d;
-  }, [isPro]);
+  }, [isPro, gateLoading]);
 
   const windowed = cutoff
     ? allSessions.filter((s) => parseLocalDate(s.date) >= cutoff)

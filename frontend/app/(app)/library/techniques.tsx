@@ -199,7 +199,7 @@ export default function TechniquesScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { data: currentUser } = useCurrentUser();
-  const { isPro, showPaywall } = useProGate();
+  const { isPro, isLoading: gateLoading, showPaywall } = useProGate();
   const [showAdd, setShowAdd] = useState(false);
   const [search, setSearch] = useState('');
 
@@ -208,7 +208,8 @@ export default function TechniquesScreen() {
 
   const list = techniques ?? [];
   const customCount = list.filter((t) => t.userId === currentUser?.id).length;
-  const canAdd = isPro || customCount < FREE_CUSTOM_TECHNIQUE_LIMIT;
+  // `gateLoading` counts as allowed — see exercises/index.tsx.
+  const canAdd = isPro || gateLoading || customCount < FREE_CUSTOM_TECHNIQUE_LIMIT;
 
   const sections = useMemo(() => {
     const query = search.trim().toLowerCase();

@@ -169,7 +169,7 @@ export default function ExercisesScreen() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { data: currentUser } = useCurrentUser();
-  const { isPro, showPaywall } = useProGate();
+  const { isPro, isLoading: gateLoading, showPaywall } = useProGate();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<ExerciseChipFilter>(EMPTY_FILTER);
@@ -246,7 +246,9 @@ export default function ExercisesScreen() {
 
   function handleAddPress() {
     const customCount = (exercises ?? []).filter((e) => e.userId === currentUser?.id).length;
-    if (!isPro && customCount >= FREE_CUSTOM_EXERCISE_LIMIT) {
+    // Not while the gate is unresolved — a mid-race `false` told paying
+    // users they'd hit a limit that doesn't apply to them.
+    if (!isPro && !gateLoading && customCount >= FREE_CUSTOM_EXERCISE_LIMIT) {
       Alert.alert(
         'Limit reached',
         `Free accounts can create up to ${FREE_CUSTOM_EXERCISE_LIMIT} custom exercises. Upgrade to RepRounds Pro for unlimited exercises.`,

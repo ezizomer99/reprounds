@@ -31,7 +31,7 @@ export default function HistoryScreen() {
   const insets = useSafeAreaInsets();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const { isPro, showPaywall } = useProGate();
+  const { isPro, isLoading: gateLoading, showPaywall } = useProGate();
   const { data: sessions, isLoading, isError, error, refetch, isRefetching } = useSessions('completed', MAX_SESSIONS_PAGE);
   const { data: routines, refetch: refetchRoutines } = useRoutines();
   const deleteSession = useDeleteSession();
@@ -41,12 +41,15 @@ export default function HistoryScreen() {
   const allSessions = sessions ?? [];
 
   const cutoff = useMemo(() => {
-    if (isPro) return null;
+    // Not while the gate is unresolved: truncating on a mid-race `false`
+    // flashed a shortened list and an "older sessions hidden" upsell at
+    // people who had already paid.
+    if (isPro || gateLoading) return null;
     const d = new Date();
     d.setDate(d.getDate() - FREE_HISTORY_DAYS);
     d.setHours(0, 0, 0, 0);
     return d;
-  }, [isPro]);
+  }, [isPro, gateLoading]);
 
   const windowed = cutoff
     ? allSessions.filter((s) => parseLocalDate(s.date) >= cutoff)

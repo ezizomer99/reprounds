@@ -87,7 +87,7 @@ export default function RoutinesScreen() {
   const insets = useSafeAreaInsets();
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const { isPro, showPaywall } = useProGate();
+  const { isPro, isLoading: gateLoading, showPaywall } = useProGate();
   const { data: routines, isLoading, isError, error } = useRoutines();
   const deleteRoutine = useDeleteRoutine();
   const reorderRoutines = useReorderRoutines();
@@ -114,7 +114,8 @@ export default function RoutinesScreen() {
   const list = routines ?? [];
 
   function handleNewRoutine() {
-    if (!isPro && list.length >= FREE_ROUTINE_LIMIT) {
+    // See exercises/index.tsx — don't enforce a limit on an unresolved gate.
+    if (!isPro && !gateLoading && list.length >= FREE_ROUTINE_LIMIT) {
       Alert.alert(
         'Limit reached',
         `Free accounts can create up to ${FREE_ROUTINE_LIMIT} routines. Upgrade to RepRounds Pro for unlimited routines.`,

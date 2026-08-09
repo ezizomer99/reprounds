@@ -236,7 +236,7 @@ export default function MatTab() {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { data: currentUser } = useCurrentUser();
-  const { isPro, showPaywall } = useProGate();
+  const { isPro, isLoading: gateLoading, showPaywall } = useProGate();
   const [showAdd, setShowAdd] = useState(false);
 
   const { data: disciplines, isLoading, isError, error, isFetching, refetch } = useDisciplines();
@@ -260,7 +260,8 @@ export default function MatTab() {
 
   function handleAddPress() {
     const customCount = (disciplines ?? []).filter((d) => d.userId === currentUser?.id).length;
-    if (!isPro && customCount >= FREE_CUSTOM_DISCIPLINE_LIMIT) {
+    // See exercises/index.tsx — don't enforce a limit on an unresolved gate.
+    if (!isPro && !gateLoading && customCount >= FREE_CUSTOM_DISCIPLINE_LIMIT) {
       Alert.alert(
         'Limit reached',
         `Free accounts can create up to ${FREE_CUSTOM_DISCIPLINE_LIMIT} custom discipline. Upgrade to RepRounds Pro for unlimited disciplines.`,
