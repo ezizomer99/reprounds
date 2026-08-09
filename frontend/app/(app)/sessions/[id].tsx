@@ -67,6 +67,7 @@ import { useFocuses, useSetSessionFocuses } from '../../../src/hooks/useFocuses'
 import { RestTimer } from '../../../src/components/RestTimer';
 import { CutCornerView } from '../../../src/components/CutCornerView';
 import { Skeleton } from '../../../src/components/Skeleton';
+import { InlineError } from '../../../src/components/InlineError';
 import { RoundLogger, BOXING_WEAPONS, MUAY_THAI_WEAPONS } from '../../../src/components/RoundLogger';
 import { PlateCalculator } from '../../../src/components/PlateCalculator';
 import { CalendarPicker } from '../../../src/components/CalendarPicker';
@@ -176,7 +177,17 @@ function PickExerciseModal({ visible, onClose, onPick, title = 'Add Exercise' }:
   const [filter, setFilter] = useState<ExerciseChipFilter>(EMPTY_FILTER);
   const [showCreate, setShowCreate] = useState(false);
   const [createName, setCreateName] = useState('');
-  const { data: exercises, isLoading } = useExercises({ search: search.trim() || undefined });
+  const {
+    data: exercises,
+    isLoading,
+    isError,
+    refetch,
+  } = useExercises({ search: search.trim() || undefined });
+  // The whole catalogue, for counting how many custom exercises the user
+  // already has. Counting from the list above meant the free limit vanished
+  // the moment a search narrowed it. Same query key as the session screen's
+  // own unfiltered call, so this shares its cache rather than refetching.
+  const { data: allExercises } = useExercises();
   const { isPro, showPaywall } = useProGate();
 
   const filteredExercises = useMemo(
@@ -192,9 +203,8 @@ function PickExerciseModal({ visible, onClose, onPick, title = 'Add Exercise' }:
   }
 
   function handleCreatePress() {
-    const allCustom = (exercises ?? []).filter((e) => e.userId != null);
-    const searchActive = search.trim().length > 0;
-    if (!isPro && !searchActive && allCustom.length >= FREE_CUSTOM_EXERCISE_LIMIT) {
+    const allCustom = (allExercises ?? []).filter((e) => e.userId != null);
+    if (!isPro && allCustom.length >= FREE_CUSTOM_EXERCISE_LIMIT) {
       Alert.alert(
         'Limit reached',
         `Free accounts can create up to ${FREE_CUSTOM_EXERCISE_LIMIT} custom exercises. Upgrade to RepRounds Pro for unlimited exercises.`,
@@ -236,6 +246,15 @@ function PickExerciseModal({ visible, onClose, onPick, title = 'Add Exercise' }:
           )}
           {isLoading ? (
             <View style={styles.centered}><ActivityIndicator color={T.primary} /></View>
+          ) : isError ? (
+            // A dropped connection used to fall through to the empty state,
+            // which reads "No exercises found." and offers to create one —
+            // pushing the user into a duplicate of an exercise they already
+            // have, and burning a slot off the free limit to do it.
+            <InlineError
+              message="Couldn't load your exercises."
+              onRetry={() => { void refetch(); }}
+            />
           ) : (
             <FlatList
               data={filteredExercises}
@@ -328,7 +347,7 @@ function PickDisciplineModal({ visible, onClose, onPick }: {
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
-  const { data: disciplines, isLoading } = useDisciplines();
+  const { data: disciplines, isLoading, isError, refetch } = useDisciplines();
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
@@ -341,6 +360,13 @@ function PickDisciplineModal({ visible, onClose, onPick }: {
         </View>
         {isLoading ? (
           <View style={styles.centered}><ActivityIndicator color={T.primary} /></View>
+        ) : isError ? (
+          // Otherwise a failed fetch is indistinguishable from having no
+          // disciplines at all.
+          <InlineError
+            message="Couldn't load your disciplines."
+            onRetry={() => { void refetch(); }}
+          />
         ) : (
           <FlatList
             data={disciplines ?? []}
@@ -417,6 +443,11 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   useEffect(() => {
     if (focusedField.current !== 'rpe') setRpe(set.rpe !== null ? String(set.rpe) : '');
   }, [set.rpe]);
+  // Notes were the one field left out of this, so a note the server rejected
+  // stayed on screen looking saved while the cache had already rolled back.
+  useEffect(() => {
+    if (focusedField.current !== 'notes') setNotes(set.notes ?? '');
+  }, [set.notes]);
 
   const onFieldFocus = (key: string) => () => { focusedField.current = key; };
   const onFieldBlur = (key: string, handler: () => void) => () => {
@@ -627,7 +658,8 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
         style={[styles.maInput, styles.setNoteInput]}
         value={notes}
         onChangeText={setNotes}
-        onBlur={handleBlurNotes}
+        onFocus={onFieldFocus('notes')}
+        onBlur={onFieldBlur('notes', handleBlurNotes)}
         placeholder="Note…"
         placeholderTextColor={T.muted}
         multiline
@@ -1245,10 +1277,13 @@ function Chevron({ collapsed }: { collapsed: boolean }) {
 
 // ─── Martial arts entry card ──────────────────────────────────────────────────
 
-function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, sessionActive, collapsed = false, onToggleCollapse, onDrag, onRegisterFlush }: {
+function MartialArtsEntryCard({ entry, sessionId, disciplines, disciplinesError, onRetryDisciplines, elapsedSeconds, sessionActive, collapsed = false, onToggleCollapse, onDrag, onRegisterFlush }: {
   entry: SessionEntryWithSets;
   sessionId: string;
   disciplines: Discipline[];
+  /** The discipline list failed to load, so the form can't be built at all. */
+  disciplinesError?: boolean;
+  onRetryDisciplines?: () => void;
   elapsedSeconds?: number;
   sessionActive?: boolean;
   collapsed?: boolean;
@@ -1379,7 +1414,19 @@ function MartialArtsEntryCard({ entry, sessionId, disciplines, elapsedSeconds, s
     return (
       <Animated.View style={styles.entryCard}>
         {head(entry.disciplineName ?? 'Discipline')}
-        {!collapsed && <ActivityIndicator style={{ margin: 12 }} color={T.primary} />}
+        {!collapsed && (
+          // The discipline drives the whole form, so there's nothing to render
+          // without it. This used to spin forever on a failed fetch, with no
+          // way to retry short of leaving the session.
+          disciplinesError ? (
+            <InlineError
+              message="Couldn't load this discipline's form."
+              onRetry={onRetryDisciplines}
+            />
+          ) : (
+            <ActivityIndicator style={{ margin: 12 }} color={T.primary} />
+          )
+        )}
       </Animated.View>
     );
   }
@@ -1692,13 +1739,20 @@ function TimeInput({ value, onChange }: {
 
 // ─── Session settings sheet ──────────────────────────────────────────────────
 
-function SessionSettingsSheet({ session, routineName, onSave, onFinish, onDiscard, isPending }: {
+function SessionSettingsSheet({ session, routineName, onSave, onCancel, onFinish, onDiscard, isPending, isDiscarding, isSaving }: {
   session: SessionWithEntries;
   routineName: string | null;
   onSave: (name: string, notes: string) => void;
+  /** Dismiss without writing — used when nothing was edited. */
+  onCancel: () => void;
   onFinish: (name: string, notes: string, date: string, durationMinutes: number) => void;
   onDiscard: () => void;
+  /** The finish request is in flight. */
   isPending: boolean;
+  /** The discard request is in flight. */
+  isDiscarding: boolean;
+  /** The name/notes save is in flight. */
+  isSaving: boolean;
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
@@ -1718,15 +1772,27 @@ function SessionSettingsSheet({ session, routineName, onSave, onFinish, onDiscar
   const [endH, setEndH] = useState(isBackdated ? 19 : now.getHours());
   const [endM, setEndM] = useState(isBackdated ? 0 : now.getMinutes());
 
-  const durationMinutes = useMemo(() => {
-    let mins = (endH * 60 + endM) - (startH * 60 + startM);
-    if (mins < 0) mins += 1440; // crossed midnight
-    return mins;
+  const { durationMinutes, wrappedMidnight } = useMemo(() => {
+    const raw = (endH * 60 + endM) - (startH * 60 + startM);
+    // A session that runs past midnight is real, so a negative difference has
+    // to wrap. But so does a typo'd end time, and wrapping turns "19:00–18:00"
+    // into a 23-hour workout — so say when the wrap happened rather than
+    // quietly banking it.
+    return { durationMinutes: raw < 0 ? raw + 1440 : raw, wrappedMidnight: raw < 0 };
   }, [startH, startM, endH, endM]);
 
 
+  // Closing used to PATCH unconditionally. That cost a write on every peek at
+  // the sheet, and made the failure path incoherent: the screen alerts and
+  // keeps the sheet open, but an iOS pageSheet swipe-dismiss has already torn
+  // it down, so "still open" was a state nobody could see.
+  const savedName = session.name ?? routineName ?? '';
+  const savedNotes = session.notes ?? '';
+  const settingsDirty = name !== savedName || notes !== savedNotes;
+
   function handleClose() {
-    onSave(name, notes);
+    if (settingsDirty) onSave(name, notes);
+    else onCancel();
   }
 
   function handleFinish() {
@@ -1786,8 +1852,9 @@ function SessionSettingsSheet({ session, routineName, onSave, onFinish, onDiscar
               />
             </View>
           </View>
-          <Text style={styles.settingsDurationHint}>
+          <Text style={[styles.settingsDurationHint, wrappedMidnight && { color: T.gold }]}>
             Duration: {fmtMinutes(durationMinutes)}
+            {wrappedMidnight ? ' — ends the next day' : ''}
           </Text>
 
           {/* Notes */}
@@ -1803,25 +1870,35 @@ function SessionSettingsSheet({ session, routineName, onSave, onFinish, onDiscar
             textAlignVertical="top"
           />
 
-          {/* Finish button */}
-          <TouchableOpacity
-            style={[styles.settingsFinishBtn, isPending && { opacity: 0.5 }]}
-            onPress={handleFinish}
-            disabled={isPending}
-          >
-            {isPending
-              ? <ActivityIndicator size="small" color={T.onPrimary} />
-              : <Text style={styles.settingsFinishBtnText}>Finish Workout</Text>}
-          </TouchableOpacity>
+          {/* Finish and Discard both write, and each used to be gated on the
+              *finish* request alone — so Discard stayed live for the whole
+              DELETE and a second tap fired a second one. */}
+          {(() => {
+            const busy = isPending || isDiscarding || isSaving;
+            return (
+              <>
+                <TouchableOpacity
+                  style={[styles.settingsFinishBtn, busy && { opacity: 0.5 }]}
+                  onPress={handleFinish}
+                  disabled={busy}
+                >
+                  {isPending
+                    ? <ActivityIndicator size="small" color={T.onPrimary} />
+                    : <Text style={styles.settingsFinishBtnText}>Finish Workout</Text>}
+                </TouchableOpacity>
 
-          {/* Discard button */}
-          <TouchableOpacity
-            style={[styles.settingsDiscardBtn, isPending && { opacity: 0.5 }]}
-            onPress={onDiscard}
-            disabled={isPending}
-          >
-            <Text style={styles.settingsDiscardBtnText}>Discard Workout</Text>
-          </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.settingsDiscardBtn, busy && { opacity: 0.5 }]}
+                  onPress={onDiscard}
+                  disabled={busy}
+                >
+                  {isDiscarding
+                    ? <ActivityIndicator size="small" color={T.danger} />
+                    : <Text style={styles.settingsDiscardBtnText}>Discard Workout</Text>}
+                </TouchableOpacity>
+              </>
+            );
+          })()}
         </ScrollView>
       </View>
     </Modal>
@@ -1838,7 +1915,7 @@ export default function SessionScreen() {
   const insets = useSafeAreaInsets();
 
   const { unit } = useUnit();
-  const { data: session, isLoading, isError } = useSession(id ?? null);
+  const { data: session, isLoading, isError, refetch: refetchSession } = useSession(id ?? null);
   const completeSession = useCompleteSession();
   const deleteSession = useDeleteSession();
   const updateSession = useUpdateSession();
@@ -1847,7 +1924,11 @@ export default function SessionScreen() {
   const reorderEntries = useReorderSessionEntries();
   const updateEntry = useUpdateSessionEntry();
   const addEntry = useAddSessionEntry();
-  const { data: disciplines } = useDisciplines();
+  const {
+    data: disciplines,
+    isError: disciplinesError,
+    refetch: refetchDisciplines,
+  } = useDisciplines();
   const { data: allExercises } = useExercises();
   const { data: routines } = useRoutines();
 
@@ -2242,7 +2323,9 @@ export default function SessionScreen() {
         id,
         name: name.trim() || null,
         notes: notes.trim() || null,
-        durationMinutes: durationMinutes || null,
+        // `|| null` here discarded a genuine 0 — a session started and finished
+        // in the same minute is short, not unrecorded.
+        durationMinutes,
         date,
       });
       handleStopRest();
@@ -2260,15 +2343,18 @@ export default function SessionScreen() {
 
   async function handleSaveSettings(name: string, notes: string) {
     if (!id) return;
+    // Close first. On iOS a pageSheet swipe-dismiss has already torn the modal
+    // down by the time this runs, so keeping it "open" on failure left the
+    // state and the UI disagreeing — and re-showing it would have stomped
+    // whatever the user did next. The alert carries the failure instead.
+    setShowSettings(false);
     try {
       await updateSession.mutateAsync({ id, name: name.trim() || null, notes: notes.trim() || null });
     } catch (err) {
       // Was swallowed as "non-critical", which meant a failed rename or a lost
       // session note closed the sheet looking like it had saved.
       Alert.alert('Error', (err as Error).message ?? 'Failed to save session details.');
-      return;
     }
-    setShowSettings(false);
   }
 
   function handleDiscard() {
@@ -2336,8 +2422,10 @@ export default function SessionScreen() {
   if (isError || !session) {
     return (
       <View style={styles.loadingScreen}>
-        <Text style={styles.errorText}>Failed to load session.</Text>
-        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 12 }}>
+        {/* A dropped connection is the likeliest cause and it's recoverable, so
+            offer the retry before the exit — this used to be a dead end. */}
+        <InlineError message="Couldn't load this session." onRetry={() => { void refetchSession(); }} />
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 4 }}>
           <Text style={{ fontFamily: F.uiMed, color: T.primary }}>Go back</Text>
         </TouchableOpacity>
       </View>
@@ -2631,6 +2719,8 @@ export default function SessionScreen() {
                       entry={entry}
                       sessionId={session.id}
                       disciplines={disciplines ?? []}
+                      disciplinesError={disciplinesError}
+                      onRetryDisciplines={() => { void refetchDisciplines(); }}
                       elapsedSeconds={elapsed}
                       sessionActive={isActive}
                       collapsed={isCollapsed}
@@ -2725,9 +2815,12 @@ export default function SessionScreen() {
           session={session}
           routineName={routineName}
           onSave={handleSaveSettings}
+          onCancel={() => setShowSettings(false)}
           onFinish={doFinish}
           onDiscard={handleDiscard}
           isPending={completeSession.isPending}
+          isDiscarding={deleteSession.isPending}
+          isSaving={updateSession.isPending}
         />
       )}
 

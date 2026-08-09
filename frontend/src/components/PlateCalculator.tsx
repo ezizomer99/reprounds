@@ -11,7 +11,8 @@ import {
 import { useTheme } from '../theme/ThemeContext';
 import { F, R, ThemeColors } from '../theme/colors';
 import { useUnit } from '../units/UnitContext';
-import { kgToUnit } from '../units/units';
+import { kgToUnit, weightInputRange } from '../units/units';
+import { parseNumberInRange } from '../lib/parseNumber';
 
 // Standard plate denominations per unit, largest first.
 const PLATES_KG = [25, 20, 15, 10, 5, 2.5, 1.25];
@@ -47,8 +48,13 @@ export function PlateCalculator({ weightKg, onClose }: { weightKg: number; onClo
   const [bar, setBar] = useState(String(DEFAULT_BAR[unit]));
   const [target, setTarget] = useState(initialTarget);
 
-  const barN = Number(bar) || 0;
-  const targetN = Number(target) || 0;
+  // The one weight input in the app that wasn't behind the shared parser.
+  // `Number()` reads a comma-decimal '7,5' as NaN, which `|| 0` then turned
+  // into a silent zero — so a Norwegian user got "no plates needed" instead of
+  // a number.
+  const range = weightInputRange(unit);
+  const barN = parseNumberInRange(bar, range) ?? 0;
+  const targetN = parseNumberInRange(target, range) ?? 0;
   const plates = platesPerSide(targetN, barN, plateSet);
   const achieved = barN + plates.reduce((s, p) => s + p.plate * p.count * 2, 0);
   const exact = Math.abs(achieved - targetN) < 0.01;
