@@ -1,4 +1,4 @@
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { useMemo } from 'react';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -10,9 +10,10 @@ import { parseLocalDate } from '../../lib/calendar';
 import { cardState } from '../../lib/statsHelpers';
 import { Skeleton } from '../Skeleton';
 import { InlineError } from '../InlineError';
+import { EmptyState, Section, SectionHeader, Touchable } from '../ui';
 import { F, R, ThemeColors } from '../../theme/colors';
+import { TYPE } from '../../theme/type';
 import { useTheme } from '../../theme/ThemeContext';
-import { withAlpha } from '../../lib/color';
 
 export interface PRFeedCardProps {
   /** Window start (local ISO date) — records are measured against everything before it. */
@@ -51,50 +52,50 @@ export function PRFeedCard({ since, until, rangeLabel }: PRFeedCardProps) {
   const records = data?.records ?? [];
 
   return (
-    <View style={styles.card}>
-      <View style={styles.cardHeader}>
-        <View style={styles.cardHeaderLeft}>
-          <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.gold, 0.15) }]}>
-            <Ionicons name="ribbon-outline" size={16} color={T.gold} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.cardTitle} numberOfLines={1}>New PRs</Text>
-            <Text style={styles.cardSub} numberOfLines={1}>{rangeLabel}</Text>
-          </View>
-        </View>
-        {!isPro && !proLoading && (
-          <TouchableOpacity
-            onPress={showPaywall}
-            activeOpacity={0.7}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="PR tracking is a Pro feature — upgrade to unlock"
-          >
-            <Ionicons name="lock-closed" size={16} color={T.muted} />
-          </TouchableOpacity>
-        )}
-      </View>
+    <Section>
+      <SectionHeader
+        title="New PRs"
+        subtitle={rangeLabel}
+        icon="ribbon-outline"
+        iconTone="gold"
+        right={
+          !isPro && !proLoading ? (
+            <Touchable
+              onPress={showPaywall}
+              feedback="row"
+              haptic={false}
+              hitSlop={8}
+              accessibilityLabel="PR tracking is a Pro feature — upgrade to unlock"
+            >
+              <Ionicons name="lock-closed" size={16} color={T.muted} />
+            </Touchable>
+          ) : undefined
+        }
+      />
 
       {!isPro && !proLoading ? (
-        <TouchableOpacity onPress={showPaywall} activeOpacity={0.85}>
+        <Touchable
+          onPress={showPaywall}
+          feedback="cta"
+          haptic={false}
+          accessibilityLabel="Upgrade to Pro to track your PRs"
+        >
           <View style={styles.proBlur}>
             <Text style={styles.proBlurText}>Upgrade to Pro to track your PRs</Text>
           </View>
-        </TouchableOpacity>
+        </Touchable>
       ) : state === 'error' ? (
         <InlineError message="Couldn't load your PRs." onRetry={() => void refetch()} />
       ) : state === 'loading' || proLoading ? (
         <View style={{ gap: 8, marginTop: 4 }}>
           {Array.from({ length: 2 }).map((_, i) => (
-            <Skeleton key={i} width="100%" height={44} radius={8} />
+            <Skeleton key={i} width="100%" height={44} radius={R.sm} />
           ))}
         </View>
       ) : records.length === 0 ? (
         // Deliberately not phrased as a failure: most weeks contain no PR, and a
         // training log shouldn't scold you for a maintenance block.
-        <Text style={styles.emptyText}>
-          No new records in this range — widen it, or go set one.
-        </Text>
+        <EmptyState title="No new records in this range — widen it, or go set one." />
       ) : (
         <View style={{ marginTop: 4 }}>
           {records.map((pr, i) => {
@@ -106,7 +107,7 @@ export function PRFeedCard({ since, until, rangeLabel }: PRFeedCardProps) {
                 ? pr.estimatedOneRepMax - pr.previousOneRepMax
                 : null;
             return (
-              <TouchableOpacity
+              <Touchable
                 key={`${pr.exerciseId}-${pr.date}`}
                 style={[styles.row, i < records.length - 1 && styles.rowBorder]}
                 onPress={() =>
@@ -115,7 +116,9 @@ export function PRFeedCard({ since, until, rangeLabel }: PRFeedCardProps) {
                     params: { id: pr.exerciseId, name: pr.exerciseName },
                   } as never)
                 }
-                activeOpacity={0.7}
+                feedback="row"
+                haptic={false}
+                hasTextChild
               >
                 <View style={{ flex: 1 }}>
                   <Text style={styles.name} numberOfLines={1}>
@@ -137,55 +140,24 @@ export function PRFeedCard({ since, until, rangeLabel }: PRFeedCardProps) {
                     {gain === null ? 'New lift' : `+${fmtWeight(gain, unit)} ${unit}`}
                   </Text>
                 </View>
-              </TouchableOpacity>
+              </Touchable>
             );
           })}
         </View>
       )}
-    </View>
+    </Section>
   );
 }
 
 function makeStyles(T: ThemeColors) {
   return StyleSheet.create({
-    card: {
-      borderTopWidth: 1,
-      borderTopColor: T.borderStrong,
-      paddingTop: 14,
-      paddingBottom: 4,
-    },
-    cardHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 8,
-    },
-    cardHeaderLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
-    cardIconBox: {
-      width: 28,
-      height: 28,
-      borderRadius: R.sm,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    cardTitle: {
-      fontFamily: F.uiBold,
-      fontSize: 12,
-      color: T.textDim,
-      textTransform: 'uppercase',
-      letterSpacing: 1,
-    },
-    cardSub: { fontFamily: F.ui, fontSize: 11, color: T.muted, marginTop: 2 },
-
     row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10 },
     rowBorder: { borderBottomWidth: 1, borderBottomColor: T.border },
-    name: { fontFamily: F.uiSemi, fontSize: 14, color: T.text },
+    name: { ...TYPE.body, fontFamily: F.uiSemi, color: T.text },
     meta: { fontFamily: F.mono, fontSize: 11, color: T.muted, marginTop: 2 },
     right: { alignItems: 'flex-end' },
-    e1rm: { fontFamily: F.monoBold, fontSize: 14, color: T.text },
-    delta: { fontFamily: F.uiSemi, fontSize: 11, color: T.conditioning, marginTop: 2 },
-
-    emptyText: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, paddingVertical: 12 },
+    e1rm: { ...TYPE.numSm, color: T.text },
+    delta: { ...TYPE.micro, fontFamily: F.uiSemi, color: T.conditioning, marginTop: 2 },
     // Matches the paywall blocks on the sibling cards in stats.tsx.
     proBlur: {
       backgroundColor: T.surface2,

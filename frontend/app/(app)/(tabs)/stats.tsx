@@ -3,7 +3,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TouchableOpacity,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -41,6 +40,8 @@ import { useUnit } from '../../../src/units/UnitContext';
 import { fmtWeight, kgToUnit } from '../../../src/units/units';
 import { Skeleton } from '../../../src/components/Skeleton';
 import { InlineError } from '../../../src/components/InlineError';
+import { ProLock } from '../../../src/components/stats/ProLock';
+import { Section, SectionHeader, StatTile, Touchable } from '../../../src/components/ui';
 import { MatStatsView } from '../../../src/components/stats/MatStatsView';
 import { RecentNotesCard } from '../../../src/components/stats/RecentNotesCard';
 import { PRFeedCard } from '../../../src/components/stats/PRFeedCard';
@@ -48,14 +49,11 @@ import { F, R, D, ThemeColors } from '../../../src/theme/colors';
 import { useTheme } from '../../../src/theme/ThemeContext';
 import { withAlpha } from '../../../src/lib/color';
 
-/**
- * Ceiling on OS text scaling inside the Highlights tiles.
- *
- * Three `flex: 1` tiles in a fixed row, each holding a 24 pt number — at the
- * 3.1× iOS allows they overflow the card. Same value and same reason as
- * CELL_MAX_FONT_SCALE in the session screen's set grid.
- */
-const TILE_MAX_FONT_SCALE = 1.3;
+// The tile font-scaling ceiling that used to live here is FONT_SCALE.tile now,
+// applied inside StatTile — same 1.3 and the same reason (three flex:1 tiles in
+// a fixed row, each holding a 24pt number, overflow at the 3.1x iOS allows),
+// but no longer restated per screen. CELL_MAX_FONT_SCALE in the session screen's
+// set grid is still its own, since that grid is not built from StatTile.
 
 /** Width gifted-charts reserves for the y-axis labels before the bars start. */
 const Y_AXIS_ALLOWANCE = 40;
@@ -260,12 +258,11 @@ export default function StatsTab() {
               { key: 'mat', label: 'Martial Arts', icon: 'body-outline' },
             ] as const
           ).map((seg) => (
-            <TouchableOpacity
+            <Touchable
               key={seg.key}
               style={[styles.segmentBtn, statsView === seg.key && styles.segmentBtnActive]}
               onPress={() => setStatsView(seg.key)}
-              activeOpacity={0.8}
-              accessibilityRole="button"
+              feedback="card"
               accessibilityLabel={`${seg.label} stats`}
               accessibilityState={{ selected: statsView === seg.key }}
             >
@@ -279,26 +276,25 @@ export default function StatsTab() {
               >
                 {seg.label}
               </Text>
-            </TouchableOpacity>
+            </Touchable>
           ))}
         </View>
 
         {/* ── Range ── */}
         <View style={styles.rangeRow}>
           {STATS_RANGES.map((r) => (
-            <TouchableOpacity
+            <Touchable
               key={r.key}
               style={[styles.rangeBtn, rangeKey === r.key && styles.rangeBtnActive]}
               onPress={() => setRangeKey(r.key)}
-              activeOpacity={0.8}
-              accessibilityRole="button"
+              feedback="card"
               accessibilityLabel={r.longLabel}
               accessibilityState={{ selected: rangeKey === r.key }}
             >
               <Text style={[styles.rangeText, rangeKey === r.key && styles.rangeTextActive]}>
                 {r.label}
               </Text>
-            </TouchableOpacity>
+            </Touchable>
           ))}
         </View>
 
@@ -307,11 +303,8 @@ export default function StatsTab() {
         ) : (
           <>
         {/* ── Highlights ── */}
-        <View style={styles.card}>
-          <View style={styles.highlightsLabel}>
-            <Ionicons name="star-outline" size={16} color={T.gold} />
-            <Text style={styles.highlightsTitle}>Highlights</Text>
-          </View>
+        <Section>
+          <SectionHeader title="Highlights" icon="star-outline" iconTone="gold" />
 
           {/* Gated on the weekly query alone. It used to also gate on the 200-row
               session list, which fed nothing here but the Pro-only streak — so a
@@ -332,45 +325,23 @@ export default function StatsTab() {
             </View>
           ) : (
             <View style={styles.statCardsRow}>
-              <View
-                style={[styles.statCard, { backgroundColor: withAlpha(T.primary, 0.12) }]}
-                accessible
+              <StatTile
+                tone="primary"
+                value={thisWeek}
+                label="This Week"
                 accessibilityLabel={`${thisWeek} ${thisWeek === 1 ? 'session' : 'sessions'} this week`}
-              >
-                <Text style={[styles.statCardNum, { color: T.primary }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
-                  {thisWeek}
-                </Text>
-                <Text style={[styles.statCardLabel, { color: T.primary }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
-                  This Week
-                </Text>
-              </View>
-              <TouchableOpacity
-                style={[styles.statCard, { backgroundColor: withAlpha(T.conditioning, 0.12) }]}
+              />
+              <StatTile
+                tone="conditioning"
+                value={isPro ? avg : <Ionicons name="lock-closed" size={18} color={T.conditioning} />}
+                label="Avg/Week"
                 onPress={isPro ? undefined : showPaywall}
-                activeOpacity={isPro ? 1 : 0.7}
-                accessibilityRole={isPro ? undefined : 'button'}
                 accessibilityLabel={
-                  isPro ? `${avg} sessions per week on average` : 'Average sessions per week, locked — upgrade to Pro'
+                  isPro
+                    ? `${avg} sessions per week on average`
+                    : 'Average sessions per week, locked — upgrade to Pro'
                 }
-              >
-                {isPro ? (
-                  <>
-                    <Text style={[styles.statCardNum, { color: T.conditioning }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
-                      {avg}
-                    </Text>
-                    <Text style={[styles.statCardLabel, { color: T.conditioning }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
-                      Avg/Week
-                    </Text>
-                  </>
-                ) : (
-                  <>
-                    <Ionicons name="lock-closed" size={18} color={T.conditioning} />
-                    <Text style={[styles.statCardLabel, { color: T.conditioning }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
-                      Avg/Week
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
+              />
               {/* Was the length of the top-lifts list, which the endpoint caps at
                   10 — so it read "10" forever once you had ten lifts, a page size
                   dressed as a metric.
@@ -386,65 +357,55 @@ export default function StatsTab() {
                   one that had to go: taking a number away from users who can
                   already see it is worse than giving up a lock nobody was
                   paying for. */}
-              <TouchableOpacity
-                style={[styles.statCard, { backgroundColor: withAlpha(T.gold, 0.12) }]}
+              <StatTile
+                tone="gold"
+                value={streakData ? streakData.weeks : '—'}
+                label="Week Streak"
                 onPress={
                   streakError && !streakData
                     ? () => void refetchStreak()
                     : () => router.push('/history' as never)
                 }
-                activeOpacity={0.7}
-                accessibilityRole="button"
                 accessibilityLabel={
                   streakData
                     ? `${streakData.weeks} week streak`
                     : 'Week streak unavailable, tap to retry'
                 }
-              >
-                <Text style={[styles.statCardNum, { color: T.gold }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
-                  {streakData ? streakData.weeks : '—'}
-                </Text>
-                <Text style={[styles.statCardLabel, { color: T.gold }]} maxFontSizeMultiplier={TILE_MAX_FONT_SCALE}>
-                  Week Streak
-                </Text>
-              </TouchableOpacity>
+              />
             </View>
           )}
-        </View>
+        </Section>
 
         {/* ── Muscles over the selected range (FREE) ── */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardHeaderLeft}>
-              <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.performance, 0.15) }]}>
-                <Ionicons name="body-outline" size={16} color={T.performance} />
+        <Section>
+          <SectionHeader
+            title="Muscles Trained"
+            subtitle={range.longLabel}
+            icon="body-outline"
+            iconTone="performance"
+            right={
+              <View style={styles.toggleRow}>
+                {(['front', 'back'] as const).map((side) => {
+                  const label = side.charAt(0).toUpperCase() + side.slice(1);
+                  return (
+                    <Touchable
+                      key={side}
+                      style={[styles.toggleBtn, muscleView === side && styles.toggleBtnActive]}
+                      onPress={() => setMuscleView(side)}
+                      feedback="card"
+                      hitSlop={8}
+                      accessibilityLabel={`${label} of body`}
+                      accessibilityState={{ selected: muscleView === side }}
+                    >
+                      <Text style={[styles.toggleText, muscleView === side && styles.toggleTextActive]}>
+                        {label}
+                      </Text>
+                    </Touchable>
+                  );
+                })}
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle} numberOfLines={1}>Muscles Trained</Text>
-                <Text style={styles.cardSub} numberOfLines={1}>{range.longLabel}</Text>
-              </View>
-            </View>
-            <View style={styles.toggleRow}>
-              {(['front', 'back'] as const).map((side) => {
-                const label = side.charAt(0).toUpperCase() + side.slice(1);
-                return (
-                  <TouchableOpacity
-                    key={side}
-                    style={[styles.toggleBtn, muscleView === side && styles.toggleBtnActive]}
-                    onPress={() => setMuscleView(side)}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel={`${label} of body`}
-                    accessibilityState={{ selected: muscleView === side }}
-                  >
-                    <Text style={[styles.toggleText, muscleView === side && styles.toggleTextActive]}>
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </View>
+            }
+          />
 
           {muscleState === 'error' ? (
             <InlineError
@@ -487,32 +448,17 @@ export default function StatsTab() {
               </Text>
             </View>
           )}
-        </View>
+        </Section>
 
         {/* ── Sessions per Week (PRO) ── */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardHeaderLeft}>
-              <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.conditioning, 0.15) }]}>
-                <Ionicons name="bar-chart-outline" size={16} color={T.conditioning} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle} numberOfLines={1}>Sessions per Week</Text>
-                <Text style={styles.cardSub} numberOfLines={1}>{range.longLabel}</Text>
-              </View>
-            </View>
-            {!isPro && !proLoading && (
-              <TouchableOpacity
-                onPress={showPaywall}
-                activeOpacity={0.7}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="This chart is a Pro feature — upgrade to unlock"
-              >
-                <Ionicons name="lock-closed" size={16} color={T.muted} />
-              </TouchableOpacity>
-            )}
-          </View>
+        <Section>
+          <SectionHeader
+            title="Sessions per Week"
+            subtitle={range.longLabel}
+            icon="bar-chart-outline"
+            iconTone="conditioning"
+            right={!isPro && !proLoading ? <ProLock onPress={showPaywall} color={T.muted} /> : undefined}
+          />
 
           {isPro || proLoading ? (
             // The error branch was missing here and on the volume chart below:
@@ -553,41 +499,26 @@ export default function StatsTab() {
               </View>
             )
           ) : (
-            <TouchableOpacity onPress={showPaywall} activeOpacity={0.85}>
+            <Touchable onPress={showPaywall} feedback="cta" haptic={false} hasTextChild>
               <View style={styles.proBlur}>
                 <Text style={styles.proBlurText}>Upgrade to Pro to see your weekly activity chart</Text>
               </View>
-            </TouchableOpacity>
+            </Touchable>
           )}
-        </View>
+        </Section>
 
         {/* ── Volume per Week (PRO) ──
             Session count says how often you showed up; tonnage says whether the
             work went anywhere. Same buckets as the chart above, so the two read
             against each other. */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardHeaderLeft}>
-              <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.performance, 0.15) }]}>
-                <Ionicons name="trending-up-outline" size={16} color={T.performance} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle} numberOfLines={1}>Volume per Week</Text>
-                <Text style={styles.cardSub} numberOfLines={1}>{range.longLabel} · {unit}</Text>
-              </View>
-            </View>
-            {!isPro && !proLoading && (
-              <TouchableOpacity
-                onPress={showPaywall}
-                activeOpacity={0.7}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="This chart is a Pro feature — upgrade to unlock"
-              >
-                <Ionicons name="lock-closed" size={16} color={T.muted} />
-              </TouchableOpacity>
-            )}
-          </View>
+        <Section>
+          <SectionHeader
+            title="Volume per Week"
+            subtitle={`${range.longLabel} · ${unit}`}
+            icon="trending-up-outline"
+            iconTone="performance"
+            right={!isPro && !proLoading ? <ProLock onPress={showPaywall} color={T.muted} /> : undefined}
+          />
 
           {isPro || proLoading ? (
             weeklyState === 'error' ? (
@@ -627,42 +558,27 @@ export default function StatsTab() {
               </View>
             )
           ) : (
-            <TouchableOpacity onPress={showPaywall} activeOpacity={0.85}>
+            <Touchable onPress={showPaywall} feedback="cta" haptic={false} hasTextChild>
               <View style={styles.proBlur}>
                 <Text style={styles.proBlurText}>Upgrade to Pro to see your weekly volume</Text>
               </View>
-            </TouchableOpacity>
+            </Touchable>
           )}
-        </View>
+        </Section>
 
         {/* ── Top Lifts / PRs (PRO) ── */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <View style={styles.cardHeaderLeft}>
-              <View style={[styles.cardIconBox, { backgroundColor: withAlpha(T.gold, 0.15) }]}>
-                <Ionicons name="trophy-outline" size={16} color={T.gold} />
-              </View>
-              {/* The range sub-label is not decoration: this board is scoped to
-                  the selected window like every other card, so a user's all-time
-                  bench drops off it at 4W. It was the only card that didn't say
-                  which window it was showing. */}
-              <View style={{ flex: 1 }}>
-                <Text style={styles.cardTitle} numberOfLines={1}>Top Lifts</Text>
-                <Text style={styles.cardSub} numberOfLines={1}>{range.longLabel}</Text>
-              </View>
-            </View>
-            {!isPro && !proLoading && (
-              <TouchableOpacity
-                onPress={showPaywall}
-                activeOpacity={0.7}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Top lifts is a Pro feature — upgrade to unlock"
-              >
-                <Ionicons name="lock-closed" size={16} color={T.muted} />
-              </TouchableOpacity>
-            )}
-          </View>
+        <Section>
+          {/* The range sub-label is not decoration: this board is scoped to the
+              selected window like every other card, so a user's all-time bench
+              drops off it at 4W. It was the only card that didn't say which
+              window it was showing. */}
+          <SectionHeader
+            title="Top Lifts"
+            subtitle={range.longLabel}
+            icon="trophy-outline"
+            iconTone="gold"
+            right={!isPro && !proLoading ? <ProLock onPress={showPaywall} color={T.muted} /> : undefined}
+          />
 
           {isPro || proLoading ? (
             topLiftsState === 'error' ? (
@@ -681,11 +597,13 @@ export default function StatsTab() {
             ) : (
               <View style={{ marginTop: 4 }}>
                 {topLiftsData.lifts.map((lift, i) => (
-                  <TouchableOpacity
+                  <Touchable
                     key={lift.exerciseId}
                     style={[styles.liftRow, i < topLiftsData.lifts.length - 1 && styles.liftRowBorder]}
                     onPress={() => router.push({ pathname: '/history/exercise/[id]', params: { id: lift.exerciseId, name: lift.exerciseName } } as never)}
-                    activeOpacity={0.7}
+                    feedback="row"
+                    haptic={false}
+                    hasTextChild
                   >
                     <View style={styles.liftRank}>
                       <Text style={styles.liftRankText}>{i + 1}</Text>
@@ -702,18 +620,18 @@ export default function StatsTab() {
                       </Text>
                       <Text style={styles.liftOneRMLabel}>est. 1RM</Text>
                     </View>
-                  </TouchableOpacity>
+                  </Touchable>
                 ))}
               </View>
             )
           ) : (
-            <TouchableOpacity onPress={showPaywall} activeOpacity={0.85}>
+            <Touchable onPress={showPaywall} feedback="cta" haptic={false} hasTextChild>
               <View style={styles.proBlur}>
                 <Text style={styles.proBlurText}>Upgrade to Pro to unlock PR tracking</Text>
               </View>
-            </TouchableOpacity>
+            </Touchable>
           )}
-        </View>
+        </Section>
 
         {/* ── New PRs (PRO) ──
             Under Top Lifts by design: that board is your best ever, this is what
@@ -726,11 +644,14 @@ export default function StatsTab() {
         <RecentNotesCard />
 
         {/* ── Body weight ── */}
-        <TouchableOpacity
-          style={styles.catCard}
-          onPress={() => router.push('/weight' as never)}
-          activeOpacity={0.75}
-        >
+        <Section density="row">
+          <Touchable
+            style={styles.catCard}
+            onPress={() => router.push('/weight' as never)}
+            feedback="card"
+            haptic={false}
+            hasTextChild
+          >
           <View style={[styles.catIconBox, { backgroundColor: withAlpha(T.primary, 0.18) }]}>
             <Ionicons name="scale-outline" size={22} color={T.primary} />
           </View>
@@ -743,7 +664,8 @@ export default function StatsTab() {
               <Ionicons name="chevron-forward" size={16} color={T.muted} />
             </View>
           </View>
-        </TouchableOpacity>
+          </Touchable>
+        </Section>
       </ScrollView>
     </View>
   );
@@ -802,54 +724,9 @@ function makeStyles(T: ThemeColors) {
     rangeTextActive: { color: T.primary, fontFamily: F.uiSemi },
 
     // Broadsheet: sections are flat, separated by rules — not floating cards.
-    card: {
-      borderTopWidth: 1,
-      borderTopColor: T.borderStrong,
-      paddingTop: 14,
-      paddingBottom: 4,
-    },
 
-    // Highlights card
-    highlightsLabel: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
-    highlightsTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
     statCardsRow: { flexDirection: 'row', gap: 8 },
-    statCard: {
-      flex: 1,
-      borderRadius: R.sm,
-      paddingVertical: 14,
-      alignItems: 'center',
-      gap: 4,
-    },
-    statCardNum: { fontFamily: F.monoBold, fontSize: 24 },
-    statCardLabel: { fontFamily: F.uiMed, fontSize: 11, textAlign: 'center' },
 
-    // Shared card header
-    cardHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 12,
-    },
-    // `flex: 1` is what stops the Front/Back toggle rendering off-screen. The
-    // title block inside carries its own `flex: 1` for ellipsizing — flexBasis 0,
-    // flexGrow 1 — and in an auto-width parent that made this row swell to the
-    // full header width, so `space-between` parked the toggle on the right
-    // padding edge and the chips landed past it. Constraining the parent is what
-    // makes that inner `flex: 1` mean "the leftover space" rather than "all of
-    // it". minWidth is belt-and-braces: Yoga has no `min-width: auto`, so it
-    // changes nothing today, but it states the intent that this may shrink.
-    cardHeaderLeft: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 8 },
-    cardIconBox: {
-      width: 28,
-      height: 28,
-      flexShrink: 0,
-      borderRadius: R.sm,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    cardTitle: { fontFamily: F.uiBold, fontSize: 12, color: T.textDim, textTransform: 'uppercase', letterSpacing: 1 },
-    // Names the window a card is showing, so no title has to claim "this week".
-    cardSub: { fontFamily: F.ui, fontSize: 11, color: T.muted, marginTop: 2 },
 
     // Muscles card
     // Never squeezed: the header shrinks the title before it shrinks the control.
@@ -908,11 +785,9 @@ function makeStyles(T: ThemeColors) {
 
     emptyText: { fontFamily: F.uiMed, fontSize: 13, color: T.muted, paddingVertical: 12 },
 
-    // Body weight category card
+    // Body weight category row. The rule and vertical padding come from the
+    // Section wrapping it — this is only the row layout.
     catCard: {
-      borderTopWidth: 1,
-      borderTopColor: T.borderStrong,
-      paddingVertical: 14,
       flexDirection: 'row',
       gap: 14,
       alignItems: 'flex-start',
