@@ -211,6 +211,32 @@ describe('POST /sessions/:id/entries/:entryId/sets validation', () => {
       expect(mock.insert).not.toHaveBeenCalled();
     }
   });
+
+  it('rejects an out-of-range durationSeconds without a DB write', async () => {
+    ownedSession();
+    ownedEntry();
+    const res = await send(
+      'POST',
+      `/sessions/${SESSION_ID}/entries/${ENTRY_ID}/sets`,
+      { setNumber: 1, durationSeconds: 90_000 },
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('Invalid durationSeconds');
+    expect(mock.insert).not.toHaveBeenCalled();
+  });
+
+  it('rejects an out-of-range distanceMeters without a DB write', async () => {
+    ownedSession();
+    ownedEntry();
+    const res = await send(
+      'POST',
+      `/sessions/${SESSION_ID}/entries/${ENTRY_ID}/sets`,
+      { setNumber: 1, distanceMeters: 200_000 },
+    );
+    expect(res.status).toBe(400);
+    expect((await res.json() as { error: string }).error).toBe('Invalid distanceMeters');
+    expect(mock.insert).not.toHaveBeenCalled();
+  });
 });
 
 describe('PUT /sessions/:id/entries/order validation', () => {

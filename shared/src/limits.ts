@@ -12,8 +12,20 @@ export interface NumericRange {
   readonly max: number;
 }
 
-/** Reps on a strength set. Doubles as seconds for conditioning entries. */
+/** Reps on a strength set. Doubles as seconds for legacy conditioning entries. */
 export const REPS_RANGE: NumericRange = { min: 0, max: 10_000 };
+
+/**
+ * Duration of a conditioning set, in seconds. Capped at 24 hours — well past any
+ * real jump-rope or bag round while still catching a fat-fingered value.
+ */
+export const DURATION_SECONDS_RANGE: NumericRange = { min: 0, max: 86_400 };
+
+/**
+ * Distance of a conditioning set, stored canonically in metres. 100 km covers an
+ * ultra while rejecting a unit mix-up or a stuck key.
+ */
+export const DISTANCE_METERS_RANGE: NumericRange = { min: 0, max: 100_000 };
 
 /** Rate of perceived exertion. */
 export const RPE_RANGE: NumericRange = { min: 0, max: 10 };

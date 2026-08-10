@@ -1,8 +1,10 @@
-import { WEIGHT_KG_RANGE, type NumericRange } from '@app/shared';
+import { DISTANCE_METERS_RANGE, WEIGHT_KG_RANGE, type NumericRange } from '@app/shared';
 
 export type WeightUnit = 'kg' | 'lbs';
 
 const LB_PER_KG = 2.2046226218;
+const METERS_PER_KM = 1000;
+const METERS_PER_MILE = 1609.344;
 
 /**
  * The acceptable range for a weight *typed in the display unit*. Validating
@@ -30,6 +32,43 @@ export function unitToKg(value: number, unit: WeightUnit): number {
 export function fmtWeight(kg: number, unit: WeightUnit): string {
   const v = Math.round(kgToUnit(kg, unit) * 10) / 10;
   return Number.isInteger(v) ? String(v) : v.toFixed(1);
+}
+
+// Distance shares the metric/imperial split with weight: kg → km, lbs → mi.
+// Stored canonically in metres; formatted/parsed in the user's unit.
+const metersPerUnit = (unit: WeightUnit) => (unit === 'lbs' ? METERS_PER_MILE : METERS_PER_KM);
+
+/** The short label for the distance unit that pairs with a weight unit. */
+export function distanceUnitLabel(unit: WeightUnit): string {
+  return unit === 'lbs' ? 'mi' : 'km';
+}
+
+/** The acceptable range for a distance *typed in the display unit*. */
+export function distanceInputRange(unit: WeightUnit): NumericRange {
+  const per = metersPerUnit(unit);
+  return { min: DISTANCE_METERS_RANGE.min / per, max: DISTANCE_METERS_RANGE.max / per };
+}
+
+/** Convert a value entered in the display unit (km/mi) back to metres for storage. */
+export function distanceUnitToMeters(value: number, unit: WeightUnit): number {
+  return value * metersPerUnit(unit);
+}
+
+/** Format a stored metre value in the display unit (up to 2 decimals, trimmed). */
+export function fmtDistance(meters: number, unit: WeightUnit): string {
+  const v = Math.round((meters / metersPerUnit(unit)) * 100) / 100;
+  return Number.isInteger(v) ? String(v) : String(v);
+}
+
+/**
+ * Parse a distance string entered in the display unit (km/mi) to metres.
+ * Returns null for empty or unparseable input.
+ */
+export function parseDistance(val: string, unit: WeightUnit): number | null {
+  const t = val.trim();
+  if (!t) return null;
+  const n = parseFloat(t);
+  return isNaN(n) ? null : distanceUnitToMeters(n, unit);
 }
 
 /**

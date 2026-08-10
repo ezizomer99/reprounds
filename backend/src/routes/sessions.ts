@@ -18,7 +18,9 @@ import type { AppEnv } from '../env';
 import { disciplineVisible, exerciseVisible } from '../lib/ownership';
 import {
   DETAILS_MAX_BYTES,
+  DISTANCE_METERS_RANGE,
   DURATION_MINUTES_RANGE,
+  DURATION_SECONDS_RANGE,
   isEntryKind,
   isGiType,
   isNumberInRange,
@@ -274,6 +276,8 @@ function mapSet(row: typeof strengthSets.$inferSelect): StrengthSet {
     setType: row.setType,
     reps: row.reps,
     weight: row.weight !== null ? Number(row.weight) : null,
+    durationSeconds: row.durationSeconds,
+    distanceMeters: row.distanceMeters !== null ? Number(row.distanceMeters) : null,
     rpe: row.rpe !== null ? Number(row.rpe) : null,
     rir: row.rir,
     completed: row.completed,
@@ -413,6 +417,8 @@ function validateSetFields(body: {
   setNumber?: unknown;
   reps?: unknown;
   weight?: unknown;
+  durationSeconds?: unknown;
+  distanceMeters?: unknown;
   rpe?: unknown;
   rir?: unknown;
   notes?: unknown;
@@ -423,6 +429,18 @@ function validateSetFields(body: {
   }
   if (body.reps != null && !isNumberInRange(body.reps, REPS_RANGE.min, REPS_RANGE.max)) {
     return 'Invalid reps';
+  }
+  if (
+    body.durationSeconds != null &&
+    !isNumberInRange(body.durationSeconds, DURATION_SECONDS_RANGE.min, DURATION_SECONDS_RANGE.max)
+  ) {
+    return 'Invalid durationSeconds';
+  }
+  if (
+    body.distanceMeters != null &&
+    !isNumberInRange(body.distanceMeters, DISTANCE_METERS_RANGE.min, DISTANCE_METERS_RANGE.max)
+  ) {
+    return 'Invalid distanceMeters';
   }
   if (!isWithinLength(body.notes, NOTES_MAX_LENGTH)) {
     return `notes must be ${NOTES_MAX_LENGTH} characters or fewer`;
@@ -734,7 +752,8 @@ sessionRoutes.post('/', async (c) => {
                   sessionEntryId: entry.id,
                   setNumber: i + 1,
                   setType: p.setType ?? 'normal',
-                  reps: p.durationSeconds != null ? p.durationSeconds : (p.reps ?? null),
+                  reps: p.reps ?? null,
+                  durationSeconds: p.durationSeconds ?? null,
                   weight: p.weight != null ? String(p.weight) : null,
                   completed: false,
                 })),
@@ -1350,6 +1369,11 @@ sessionRoutes.post('/:id/entries/:entryId/sets', async (c) => {
       setType: body.setType ?? 'normal',
       reps: body.reps ?? null,
       weight: body.weight !== undefined && body.weight !== null ? String(body.weight) : null,
+      durationSeconds: body.durationSeconds ?? null,
+      distanceMeters:
+        body.distanceMeters !== undefined && body.distanceMeters !== null
+          ? String(body.distanceMeters)
+          : null,
       rpe: body.rpe !== undefined && body.rpe !== null ? String(body.rpe) : null,
       rir: body.rir ?? null,
       completed: body.completed ?? false,
@@ -1408,6 +1432,13 @@ sessionRoutes.patch('/:id/entries/:entryId/sets/:setId', async (c) => {
   if ('reps' in body) updates.reps = body.reps ?? null;
   if ('weight' in body) {
     updates.weight = body.weight !== undefined && body.weight !== null ? String(body.weight) : null;
+  }
+  if ('durationSeconds' in body) updates.durationSeconds = body.durationSeconds ?? null;
+  if ('distanceMeters' in body) {
+    updates.distanceMeters =
+      body.distanceMeters !== undefined && body.distanceMeters !== null
+        ? String(body.distanceMeters)
+        : null;
   }
   if ('rpe' in body) {
     updates.rpe = body.rpe !== undefined && body.rpe !== null ? String(body.rpe) : null;

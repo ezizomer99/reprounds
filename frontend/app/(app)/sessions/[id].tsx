@@ -24,6 +24,7 @@ import Animated, { FadeIn, useAnimatedStyle, withTiming } from 'react-native-rea
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import type {
+  ConditioningMetric,
   Discipline,
   EnumFieldDef,
   Exercise,
@@ -84,6 +85,9 @@ import {
   fmtMinutes,
   parseDuration,
   weightInputRange,
+  fmtDistance,
+  parseDistance,
+  distanceUnitLabel,
 } from '../../../src/units/units';
 import {
   clearActiveRest,
@@ -447,7 +451,7 @@ function PickDisciplineModal({ visible, onClose, onPick }: {
 
 // ─── Set row ─────────────────────────────────────────────────────────────────
 
-function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMenu, exerciseType }: {
+function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMenu, exerciseType, metrics }: {
   set: StrengthSet;
   sessionId: string;
   entryId: string;
@@ -460,11 +464,16 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   onCompleted?: (result: { weightKg: number | null; reps: number | null }) => void;
   onOpenMenu: () => void;
   exerciseType?: 'strength' | 'conditioning';
+  metrics?: ConditioningMetric[] | null;
 }) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const SET_TYPE_COLOR = useMemo(() => setTypeColors(T), [T]);
   const isTime = exerciseType === 'conditioning';
+  // A conditioning exercise logs the fields listed in `metrics`; default to
+  // duration-only for exercises seeded before the metrics column existed.
+  const showDuration = isTime && (metrics ? metrics.includes('duration') : true);
+  const showDistance = isTime && (metrics?.includes('distance') ?? false);
   const isWarm = set.setType === 'warmup';
   // A just-added set carries a temporary client id until the list refetches;
   // any PATCH/DELETE against that id would 404, and the id swap remounts the
@@ -474,7 +483,13 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   const { unit } = useUnit();
   const [reps, setReps] = useState(set.reps !== null ? String(set.reps) : '');
   const [weight, setWeight] = useState(set.weight !== null ? fmtWeight(set.weight, unit) : '');
-  const [duration, setDuration] = useState(set.reps !== null ? fmtDuration(set.reps) : '');
+  // Duration reads the dedicated column, falling back to the legacy reps-as-seconds
+  // overload for sets logged before the migration.
+  const durationSecs = set.durationSeconds ?? set.reps;
+  const [duration, setDuration] = useState(durationSecs !== null ? fmtDuration(durationSecs) : '');
+  const [distance, setDistance] = useState(
+    set.distanceMeters !== null ? fmtDistance(set.distanceMeters, unit) : '',
+  );
   // One intensity cell, showing whichever of RPE / RIR the user records in.
   // Both columns have existed in the schema since the first migration and both
   // are validated by the API; only RPE ever had an input, so `rir` was dead
@@ -500,8 +515,16 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   const focusedField = useRef<string | null>(null);
   useEffect(() => {
     if (focusedField.current !== 'reps') setReps(set.reps !== null ? String(set.reps) : '');
-    if (focusedField.current !== 'duration') setDuration(set.reps !== null ? fmtDuration(set.reps) : '');
-  }, [set.reps]);
+    if (focusedField.current !== 'duration') {
+      const secs = set.durationSeconds ?? set.reps;
+      setDuration(secs !== null ? fmtDuration(secs) : '');
+    }
+  }, [set.reps, set.durationSeconds]);
+  useEffect(() => {
+    if (focusedField.current !== 'distance') {
+      setDistance(set.distanceMeters !== null ? fmtDistance(set.distanceMeters, unit) : '');
+    }
+  }, [set.distanceMeters, unit]);
   useEffect(() => {
     if (focusedField.current !== 'weight') {
       setWeight(set.weight !== null ? fmtWeight(set.weight, unit) : '');
@@ -556,7 +579,17 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
     markField('duration', duration.trim() !== '' && secs === null);
     if (duration.trim() !== '' && secs === null) return;
     setDuration(secs !== null ? fmtDuration(secs) : '');
-    updateSet.mutate({ sessionId, entryId, setId: set.id, reps: secs });
+    updateSet.mutate({ sessionId, entryId, setId: set.id, durationSeconds: secs });
+  }
+
+  function handleBlurDistance() {
+    if (isOptimistic) return;
+    const meters = parseDistance(distance, unit);
+    // Empty clears the value; unparseable text is flagged and not sent.
+    markField('distance', distance.trim() !== '' && meters === null);
+    if (distance.trim() !== '' && meters === null) return;
+    setDistance(meters !== null ? fmtDistance(meters, unit) : '');
+    updateSet.mutate({ sessionId, entryId, setId: set.id, distanceMeters: meters });
   }
 
   function handleBlurEffort() {
@@ -636,23 +669,46 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
       </View>
 
       {isTime ? (
-        <View style={[styles.cell, { flex: 2 }, isDone && styles.cellDone, badFields.duration && styles.cellInvalid]}>
-          <TextInput
-            style={styles.cellValue}
-            value={duration}
-            onChangeText={setDuration}
-            onFocus={onFieldFocus('duration')}
-            onBlur={onFieldBlur('duration', handleBlurDuration)}
-            placeholder="0:00"
-            placeholderTextColor={T.muted}
-            keyboardType="default"
-            returnKeyType="done"
-            editable={!isDone && !isOptimistic}
-            textAlign="center"
-            maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}
-          />
-          <Text style={styles.cellUnit} maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}>min</Text>
-        </View>
+        <>
+          {showDuration && (
+            <View style={[styles.cell, { flex: showDistance ? 1 : 2 }, isDone && styles.cellDone, badFields.duration && styles.cellInvalid]}>
+              <TextInput
+                style={styles.cellValue}
+                value={duration}
+                onChangeText={setDuration}
+                onFocus={onFieldFocus('duration')}
+                onBlur={onFieldBlur('duration', handleBlurDuration)}
+                placeholder="0:00"
+                placeholderTextColor={T.muted}
+                keyboardType="default"
+                returnKeyType="done"
+                editable={!isDone && !isOptimistic}
+                textAlign="center"
+                maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}
+              />
+              <Text style={styles.cellUnit} maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}>min</Text>
+            </View>
+          )}
+          {showDistance && (
+            <View style={[styles.cell, { flex: showDuration ? 1 : 2 }, isDone && styles.cellDone, badFields.distance && styles.cellInvalid]}>
+              <TextInput
+                style={styles.cellValue}
+                value={distance}
+                onChangeText={setDistance}
+                onFocus={onFieldFocus('distance')}
+                onBlur={onFieldBlur('distance', handleBlurDistance)}
+                placeholder="—"
+                placeholderTextColor={T.muted}
+                keyboardType="decimal-pad"
+                returnKeyType="done"
+                editable={!isDone && !isOptimistic}
+                textAlign="center"
+                maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}
+              />
+              <Text style={styles.cellUnit} maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}>{distanceUnitLabel(unit)}</Text>
+            </View>
+          )}
+        </>
       ) : (
         <>
           <View style={[styles.cell, isDone && styles.cellDone, badFields.weight && styles.cellInvalid]}>
@@ -917,18 +973,33 @@ function EntryContextMenu({ onSwap, onGenerateWarmups, warmupsDisabled, onRemove
 
 // ─── Last time ghost rows ─────────────────────────────────────────────────────
 
-function LastTime({ exerciseId }: { exerciseId: string }) {
+function LastTime({ exerciseId, exerciseType, metrics }: {
+  exerciseId: string;
+  exerciseType?: 'strength' | 'conditioning';
+  metrics?: ConditioningMetric[] | null;
+}) {
   const { T } = useTheme();
   const styles = useMemo(() => makeStyles(T), [T]);
   const { unit } = useUnit();
   const { data } = useExerciseHistory(exerciseId);
 
+  const isTime = exerciseType === 'conditioning';
+  const showDuration = isTime && (metrics ? metrics.includes('duration') : true);
+  const showDistance = isTime && (metrics?.includes('distance') ?? false);
+
+  // A conditioning set's duration lives in `durationSeconds` (or legacy `reps`);
+  // a strength set needs `reps`. Keep only completed working sets that have
+  // something to show.
   const priorSets = useMemo(() => {
     if (!data?.history.length) return [];
-    return data.history[0].entry.sets.filter(
-      (s) => s.completed && s.setType !== 'warmup' && s.reps !== null,
-    );
-  }, [data]);
+    return data.history[0].entry.sets.filter((s) => {
+      if (!s.completed || s.setType === 'warmup') return false;
+      if (isTime) {
+        return s.durationSeconds !== null || s.reps !== null || s.distanceMeters !== null;
+      }
+      return s.reps !== null;
+    });
+  }, [data, isTime]);
 
   if (!priorSets.length) return null;
 
@@ -936,13 +1007,24 @@ function LastTime({ exerciseId }: { exerciseId: string }) {
     <View style={styles.ghostContainer}>
       <Text style={styles.ghostHeader}>Last session</Text>
       {priorSets.map((s, i) => {
-        const weightStr = s.weight !== null
-          ? `${fmtWeight(s.weight, unit)} ${unit}`
-          : 'bw';
+        let label: string;
+        if (isTime) {
+          const parts: string[] = [];
+          const secs = s.durationSeconds ?? s.reps;
+          if (showDuration && secs !== null) parts.push(fmtDuration(secs));
+          if (showDistance && s.distanceMeters !== null) {
+            parts.push(`${fmtDistance(s.distanceMeters, unit)} ${distanceUnitLabel(unit)}`);
+          }
+          // Fall back to whatever duration we have if metrics didn't match.
+          label = parts.length ? parts.join(' · ') : (secs !== null ? fmtDuration(secs) : '—');
+        } else {
+          const weightStr = s.weight !== null ? `${fmtWeight(s.weight, unit)} ${unit}` : 'bw';
+          label = `${weightStr} × ${s.reps}`;
+        }
         return (
           <View key={i} style={styles.ghostRow}>
             <Text style={styles.ghostNum}>{i + 1}</Text>
-            <Text style={styles.ghostLabel}>{weightStr} × {s.reps}</Text>
+            <Text style={styles.ghostLabel}>{label}</Text>
           </View>
         );
       })}
@@ -952,7 +1034,7 @@ function LastTime({ exerciseId }: { exerciseId: string }) {
 
 // ─── Strength entry card ──────────────────────────────────────────────────────
 
-function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingActive, onPR, exerciseType, exerciseMeta, sessionActive, collapsed = false, onToggleCollapse, onDrag }: {
+function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingActive, onPR, exerciseType, metrics, exerciseMeta, sessionActive, collapsed = false, onToggleCollapse, onDrag }: {
   entry: SessionEntryWithSets;
   sessionId: string;
   onStartRest: (restSecs: number) => void;
@@ -960,6 +1042,7 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
   restingActive: boolean;
   onPR?: (exerciseName: string, kind: PRKind) => void;
   exerciseType?: 'strength' | 'conditioning';
+  metrics?: ConditioningMetric[] | null;
   exerciseMeta?: { equipment: string | null; bodyPart: string | null };
   sessionActive?: boolean;
   collapsed?: boolean;
@@ -972,6 +1055,10 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
   const { unit } = useUnit();
   const { metric: effortMetric } = useEffortMetric();
   const isTime = exerciseType === 'conditioning';
+  // Which conditioning fields to show; default to duration-only for exercises
+  // that predate the metrics column.
+  const showDuration = isTime && (metrics ? metrics.includes('duration') : true);
+  const showDistance = isTime && (metrics?.includes('distance') ?? false);
   const addSet = useAddStrengthSet();
   const updateSet = useUpdateStrengthSet();
   const deleteSet = useDeleteStrengthSet();
@@ -1201,7 +1288,7 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
 
       {!collapsed && (
       <Animated.View style={styles.entryBody} entering={FadeIn.duration(140)}>
-      {entry.exerciseId && <LastTime exerciseId={entry.exerciseId} />}
+      {entry.exerciseId && <LastTime exerciseId={entry.exerciseId} exerciseType={exerciseType} metrics={metrics} />}
 
       {sessionActive && overload && !overloadDismissed && (
         <View style={styles.overloadChip}>
@@ -1244,6 +1331,7 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
           displayNumber={null}
           onOpenMenu={() => setMenuSet(set)}
           exerciseType={exerciseType}
+          metrics={metrics}
         />
       ))}
 
@@ -1252,7 +1340,14 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
       <View style={styles.colHeaders}>
         <View style={styles.setCirclePlaceholder} />
         {isTime ? (
-          <Text style={[styles.colHeader, { flex: 2 }]}>Duration</Text>
+          <>
+            {showDuration && (
+              <Text style={[styles.colHeader, { flex: showDistance ? 1 : 2 }]}>Duration</Text>
+            )}
+            {showDistance && (
+              <Text style={[styles.colHeader, { flex: showDuration ? 1 : 2 }]}>Distance</Text>
+            )}
+          </>
         ) : (
           <>
             <Text style={styles.colHeader}>Weight</Text>
@@ -1275,6 +1370,7 @@ function StrengthEntryCard({ entry, sessionId, onStartRest, onStopRest, restingA
           onCompleted={handleSetCompleted}
           onOpenMenu={() => setMenuSet(set)}
           exerciseType={exerciseType}
+          metrics={metrics}
         />
       ))}
 
@@ -2035,6 +2131,12 @@ export default function SessionScreen() {
   const exerciseMetaMap = useMemo(() => {
     const m = new Map<string, { equipment: string | null; bodyPart: string | null }>();
     allExercises?.forEach((e) => m.set(e.id, { equipment: e.equipment, bodyPart: e.bodyPart }));
+    return m;
+  }, [allExercises]);
+
+  const exerciseMetricsMap = useMemo(() => {
+    const m = new Map<string, ConditioningMetric[] | null>();
+    allExercises?.forEach((e) => m.set(e.id, e.metrics));
     return m;
   }, [allExercises]);
 
@@ -2811,6 +2913,7 @@ export default function SessionScreen() {
                       restingActive={restEntryId === entry.id && restSeconds !== null}
                       onPR={handlePR}
                       exerciseType={entry.exerciseId ? exerciseTypeMap.get(entry.exerciseId) : undefined}
+                      metrics={entry.exerciseId ? exerciseMetricsMap.get(entry.exerciseId) : undefined}
                       exerciseMeta={entry.exerciseId ? exerciseMetaMap.get(entry.exerciseId) : undefined}
                       sessionActive={isActive}
                       collapsed={isCollapsed}

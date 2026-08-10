@@ -398,6 +398,8 @@ export function useAddStrengthSet() {
           setType: body.setType ?? 'normal',
           reps: body.reps ?? null,
           weight: body.weight ?? null,
+          durationSeconds: body.durationSeconds ?? null,
+          distanceMeters: body.distanceMeters ?? null,
           rpe: body.rpe ?? null,
           rir: body.rir ?? null,
           completed: body.completed ?? false,

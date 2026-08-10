@@ -11,7 +11,7 @@ import {
 } from '../db/schema';
 import { authMiddleware } from '../middleware/auth';
 import type { AppEnv } from '../env';
-import { estimatedOneRepMax, MAX_CUSTOM_EXERCISES_PER_USER, NAME_MAX_LENGTH } from '@app/shared';
+import { estimatedOneRepMax, isConditioningMetric, MAX_CUSTOM_EXERCISES_PER_USER, NAME_MAX_LENGTH } from '@app/shared';
 import { epleyE1rmSql } from '../lib/e1rm';
 import { parseMuscleSelection } from '../lib/muscles';
 import { isIsoDate, isWithinLength, notUuid } from '../lib/validate';
@@ -47,6 +47,7 @@ function mapExercise(r: ExerciseRow, override?: OverrideRow): Exercise {
     name: r.name,
     type: r.type as Exercise['type'],
     createdAt: r.createdAt.toISOString(),
+    metrics: r.metrics as Exercise['metrics'],
     category: r.category,
     bodyPart: r.bodyPart,
     equipment: r.equipment,
@@ -173,6 +174,22 @@ exerciseRoutes.post('/', async (c) => {
   const muscles = parseMuscleSelection(body);
   if ('error' in muscles) return c.json({ error: muscles.error }, 400);
 
+  // Conditioning exercises log duration and/or distance; strength ones don't use
+  // metrics at all. An explicit list must be valid; a conditioning exercise that
+  // omits it defaults to duration-only (jump rope / bag work).
+  let metrics: string[] | null = null;
+  if (body.type === 'conditioning') {
+    if (body.metrics !== undefined) {
+      if (!Array.isArray(body.metrics) || !body.metrics.every(isConditioningMetric)) {
+        return c.json({ error: 'Invalid metrics' }, 400);
+      }
+      // Always track duration; distance is the optional add-on.
+      metrics = body.metrics.includes('distance') ? ['duration', 'distance'] : ['duration'];
+    } else {
+      metrics = ['duration'];
+    }
+  }
+
   // Abuse ceiling, not the paywall — see the note on FREE_CUSTOM_EXERCISE_LIMIT
   // in @app/shared. The Worker can't distinguish a paying Pro user from a free
   // one, so this sits far above any real usage and only bounds a scripted
@@ -195,6 +212,7 @@ exerciseRoutes.post('/', async (c) => {
       userId,
       name: body.name,
       type: body.type,
+      metrics,
       target: body.target ?? null,
       muscleGroup: muscles.value.muscleGroup,
       secondaryMuscles: muscles.value.secondaryMuscles,
@@ -398,6 +416,8 @@ function mapSet(row: typeof strengthSets.$inferSelect): StrengthSet {
     setType: row.setType,
     reps: row.reps,
     weight: row.weight !== null ? Number(row.weight) : null,
+    durationSeconds: row.durationSeconds,
+    distanceMeters: row.distanceMeters !== null ? Number(row.distanceMeters) : null,
     rpe: row.rpe !== null ? Number(row.rpe) : null,
     rir: row.rir,
     completed: row.completed,
@@ -513,6 +533,8 @@ exerciseRoutes.get('/:id/prs', async (c) => {
         setType: strengthSets.setType,
         reps: strengthSets.reps,
         weight: strengthSets.weight,
+        durationSeconds: strengthSets.durationSeconds,
+        distanceMeters: strengthSets.distanceMeters,
         rpe: strengthSets.rpe,
         rir: strengthSets.rir,
         completed: strengthSets.completed,

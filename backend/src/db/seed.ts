@@ -16,6 +16,10 @@ interface RawExercise {
   id: string;
   name: string;
   type?: string;
+  // Which fields a conditioning exercise logs. Tag running/rowing entries with
+  // ["duration","distance"]; any conditioning exercise that omits it defaults to
+  // duration-only. Ignored for strength.
+  metrics?: string[];
   category?: string;
   body_part?: string;
   equipment?: string;
@@ -36,10 +40,14 @@ async function seed() {
     console.log(`Seeding ${raw.length} exercises...`);
 
     const rows = raw.map((ex) => {
+      const type = (ex.type ?? 'strength') as 'strength' | 'conditioning' | 'martial_arts';
       return {
         sourceId:         ex.id,
         name:             ex.name,
-        type:             (ex.type ?? 'strength') as 'strength' | 'conditioning' | 'martial_arts',
+        type,
+        // Conditioning exercises log duration and/or distance; default to
+        // duration-only when the JSON doesn't say. Strength exercises get null.
+        metrics:          type === 'conditioning' ? (ex.metrics ?? ['duration']) : null,
         category:         ex.category ?? null,
         bodyPart:         ex.body_part ?? null,
         equipment:        ex.equipment ?? null,
@@ -60,6 +68,7 @@ async function seed() {
           set: {
             name:             sql`excluded.name`,
             type:             sql`excluded.type`,
+            metrics:          sql`excluded.metrics`,
             category:         sql`excluded.category`,
             bodyPart:         sql`excluded.body_part`,
             equipment:        sql`excluded.equipment`,
