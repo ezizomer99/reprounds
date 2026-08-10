@@ -11,6 +11,9 @@ import {
   parseDistance,
   distanceUnitLabel,
   distanceUnitToMeters,
+  fmtHMS,
+  parseHMS,
+  splitHMS,
 } from './units';
 
 describe('kgToUnit / unitToKg', () => {
@@ -168,6 +171,60 @@ describe('distance helpers', () => {
   it('round-trips representative metric distances through fmt/parse', () => {
     for (const meters of [0, 1000, 5000, 10500]) {
       expect(parseDistance(fmtDistance(meters, 'kg'), 'kg')).toBeCloseTo(meters, 6);
+    }
+  });
+});
+
+describe('splitHMS', () => {
+  it('decomposes seconds into h/m/s', () => {
+    expect(splitHMS(0)).toEqual({ h: 0, m: 0, s: 0 });
+    expect(splitHMS(65)).toEqual({ h: 0, m: 1, s: 5 });
+    expect(splitHMS(3661)).toEqual({ h: 1, m: 1, s: 1 });
+    expect(splitHMS(5400)).toEqual({ h: 1, m: 30, s: 0 });
+  });
+
+  it('floors and clamps negatives to zero', () => {
+    expect(splitHMS(-10)).toEqual({ h: 0, m: 0, s: 0 });
+    expect(splitHMS(90.9)).toEqual({ h: 0, m: 1, s: 30 });
+  });
+});
+
+describe('fmtHMS', () => {
+  it('formats sub-hour durations as m:ss', () => {
+    expect(fmtHMS(0)).toBe('0:00');
+    expect(fmtHMS(65)).toBe('1:05');
+    expect(fmtHMS(3599)).toBe('59:59');
+  });
+
+  it('promotes to h:mm:ss at and above an hour', () => {
+    expect(fmtHMS(3600)).toBe('1:00:00');
+    expect(fmtHMS(3661)).toBe('1:01:01');
+    expect(fmtHMS(5400)).toBe('1:30:00');
+  });
+});
+
+describe('parseHMS', () => {
+  it('returns null for empty or unparseable input', () => {
+    expect(parseHMS('')).toBeNull();
+    expect(parseHMS('  ')).toBeNull();
+    expect(parseHMS('abc')).toBeNull();
+    expect(parseHMS('a:b:c')).toBeNull();
+  });
+
+  it('parses m:ss and h:mm:ss and plain seconds', () => {
+    expect(parseHMS('1:05')).toBe(65);
+    expect(parseHMS('1:30:00')).toBe(5400);
+    expect(parseHMS('90')).toBe(90);
+  });
+
+  it('clamps minutes and seconds components to 59', () => {
+    expect(parseHMS('1:99')).toBe(60 + 59);
+    expect(parseHMS('1:99:99')).toBe(3600 + 59 * 60 + 59);
+  });
+
+  it('round-trips with fmtHMS across the hour boundary', () => {
+    for (const secs of [0, 65, 3599, 3600, 3661, 5400]) {
+      expect(parseHMS(fmtHMS(secs))).toBe(secs);
     }
   });
 });

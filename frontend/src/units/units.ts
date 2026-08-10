@@ -109,3 +109,48 @@ export function parseDuration(val: string): number | null {
   const n = parseInt(t, 10);
   return isNaN(n) ? null : n;
 }
+
+// ─── Hour-aware duration (conditioning duration cell + wheel picker) ──────────
+// Kept separate from fmtDuration/parseDuration above, which the rest timer and
+// the "Last session" ghost row rely on for their exact "m:ss" behaviour.
+
+/** Split a duration in seconds into whole hours, minutes and seconds. */
+export function splitHMS(secs: number): { h: number; m: number; s: number } {
+  const total = Math.max(0, Math.floor(secs));
+  return {
+    h: Math.floor(total / 3600),
+    m: Math.floor((total % 3600) / 60),
+    s: total % 60,
+  };
+}
+
+/** Format seconds as "m:ss", promoting to "h:mm:ss" once it reaches an hour. */
+export function fmtHMS(secs: number): string {
+  const { h, m, s } = splitHMS(secs);
+  const ss = s.toString().padStart(2, '0');
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${ss}`;
+  return `${m}:${ss}`;
+}
+
+/**
+ * Parse "h:mm:ss", "m:ss", or a plain integer of seconds into total seconds.
+ * The minutes/seconds components are clamped to 59. Returns null for empty or
+ * unparseable input.
+ */
+export function parseHMS(val: string): number | null {
+  const t = val.trim();
+  if (!t) return null;
+  if (t.includes(':')) {
+    const parts = t.split(':').map((p) => parseInt(p || '0', 10));
+    if (parts.some((n) => isNaN(n))) return null;
+    let h = 0;
+    let m = 0;
+    let s = 0;
+    if (parts.length === 3) [h, m, s] = parts;
+    else if (parts.length === 2) [m, s] = parts;
+    else return null;
+    return h * 3600 + Math.min(m, 59) * 60 + Math.min(s, 59);
+  }
+  const n = parseInt(t, 10);
+  return isNaN(n) ? null : n;
+}

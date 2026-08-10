@@ -74,6 +74,7 @@ import { InlineError } from '../../../src/components/InlineError';
 import { RoundLogger, BOXING_WEAPONS, MUAY_THAI_WEAPONS } from '../../../src/components/RoundLogger';
 import { PlateCalculator } from '../../../src/components/PlateCalculator';
 import { CalendarPicker } from '../../../src/components/CalendarPicker';
+import { DurationWheelSheet } from '../../../src/components/DurationWheelSheet';
 import { formatDayTitle, localTodayISO } from '../../../src/lib/calendar';
 import { useUnit } from '../../../src/units/UnitContext';
 import { useEffortMetric } from '../../../src/units/EffortContext';
@@ -82,8 +83,8 @@ import {
   kgToUnit,
   unitToKg,
   fmtDuration,
+  fmtHMS,
   fmtMinutes,
-  parseDuration,
   weightInputRange,
   fmtDistance,
   parseDistance,
@@ -484,9 +485,10 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   const [reps, setReps] = useState(set.reps !== null ? String(set.reps) : '');
   const [weight, setWeight] = useState(set.weight !== null ? fmtWeight(set.weight, unit) : '');
   // Duration reads the dedicated column, falling back to the legacy reps-as-seconds
-  // overload for sets logged before the migration.
+  // overload for sets logged before the migration. Entered via the wheel sheet, so
+  // there's no text-state to hold — the value is derived straight from the set.
   const durationSecs = set.durationSeconds ?? set.reps;
-  const [duration, setDuration] = useState(durationSecs !== null ? fmtDuration(durationSecs) : '');
+  const [showDurationWheel, setShowDurationWheel] = useState(false);
   const [distance, setDistance] = useState(
     set.distanceMeters !== null ? fmtDistance(set.distanceMeters, unit) : '',
   );
@@ -515,11 +517,7 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
   const focusedField = useRef<string | null>(null);
   useEffect(() => {
     if (focusedField.current !== 'reps') setReps(set.reps !== null ? String(set.reps) : '');
-    if (focusedField.current !== 'duration') {
-      const secs = set.durationSeconds ?? set.reps;
-      setDuration(secs !== null ? fmtDuration(secs) : '');
-    }
-  }, [set.reps, set.durationSeconds]);
+  }, [set.reps]);
   useEffect(() => {
     if (focusedField.current !== 'distance') {
       setDistance(set.distanceMeters !== null ? fmtDistance(set.distanceMeters, unit) : '');
@@ -573,12 +571,8 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
     });
   }
 
-  function handleBlurDuration() {
+  function handlePickDuration(secs: number) {
     if (isOptimistic) return;
-    const secs = parseDuration(duration);
-    markField('duration', duration.trim() !== '' && secs === null);
-    if (duration.trim() !== '' && secs === null) return;
-    setDuration(secs !== null ? fmtDuration(secs) : '');
     updateSet.mutate({ sessionId, entryId, setId: set.id, durationSeconds: secs });
   }
 
@@ -671,23 +665,21 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
       {isTime ? (
         <>
           {showDuration && (
-            <View style={[styles.cell, { flex: showDistance ? 1 : 2 }, isDone && styles.cellDone, badFields.duration && styles.cellInvalid]}>
-              <TextInput
-                style={styles.cellValue}
-                value={duration}
-                onChangeText={setDuration}
-                onFocus={onFieldFocus('duration')}
-                onBlur={onFieldBlur('duration', handleBlurDuration)}
-                placeholder="0:00"
-                placeholderTextColor={T.muted}
-                keyboardType="default"
-                returnKeyType="done"
-                editable={!isDone && !isOptimistic}
-                textAlign="center"
+            <Touchable
+              style={[styles.cell, { flex: showDistance ? 1 : 2 }, isDone && styles.cellDone]}
+              onPress={() => setShowDurationWheel(true)}
+              disabled={isDone || isOptimistic}
+              feedback="row"
+              accessibilityLabel={durationSecs !== null ? `Duration ${fmtHMS(durationSecs)}, tap to change` : 'Set duration'}
+            >
+              <Text
+                style={[styles.cellValue, durationSecs === null && { color: T.muted }]}
                 maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}
-              />
-              <Text style={styles.cellUnit} maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}>min</Text>
-            </View>
+              >
+                {durationSecs !== null ? fmtHMS(durationSecs) : '0:00'}
+              </Text>
+              <Text style={styles.cellUnit} maxFontSizeMultiplier={CELL_MAX_FONT_SCALE}>time</Text>
+            </Touchable>
           )}
           {showDistance && (
             <View style={[styles.cell, { flex: showDuration ? 1 : 2 }, isDone && styles.cellDone, badFields.distance && styles.cellInvalid]}>
@@ -807,6 +799,14 @@ function SetRow({ set, sessionId, entryId, displayNumber, onCompleted, onOpenMen
         maxLength={NOTES_MAX_LENGTH}
         textAlignVertical="top"
         /* Notes stay editable even after the set is completed */
+      />
+    )}
+
+    {showDurationWheel && (
+      <DurationWheelSheet
+        current={durationSecs}
+        onSelect={handlePickDuration}
+        onClose={() => setShowDurationWheel(false)}
       />
     )}
     </View>
