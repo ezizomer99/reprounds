@@ -64,6 +64,10 @@ export const exercises = pgTable('exercises', {
   muscleGroup:        text('muscle_group'),
   secondaryMuscles:   text('secondary_muscles').array(),
   target:             text('target'),
+  // Which fields a conditioning exercise logs ('duration' and/or 'distance').
+  // Null for strength exercises. Read by the session screen to render the right
+  // inputs and to format the last-session summary.
+  metrics:            text('metrics').array(),
   createdAt:          timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   // `GET /exercises` runs `WHERE user_id IS NULL OR user_id = $1` and
@@ -215,6 +219,10 @@ export const strengthSets = pgTable('strength_sets', {
   setType:         setTypeEnum('set_type').notNull().default('normal'),
   reps:            integer('reps'),
   weight:          numeric('weight'),
+  // Conditioning metrics. `durationSeconds` supersedes the legacy reps-as-seconds
+  // overload; `distanceMeters` is canonical metres. Both null on a strength set.
+  durationSeconds: integer('duration_seconds'),
+  distanceMeters:  numeric('distance_meters'),
   rpe:             numeric('rpe'),
   rir:             integer('rir'),
   completed:       boolean('completed').notNull().default(false),

@@ -1,4 +1,4 @@
-import type { ActivityType, DisciplineCat, EntryKind, FightMethod, FightResult, FocusStatus, GiType, SessionStatus, SetType, TechniqueKind } from './enums';
+import type { ActivityType, ConditioningMetric, DisciplineCat, EntryKind, FightMethod, FightResult, FocusStatus, GiType, SessionStatus, SetType, TechniqueKind } from './enums';
 import type { FieldConfig } from './fieldConfig';
 import type { StrikeCounts, StrikingRoundType } from './rounds';
 
@@ -58,6 +58,9 @@ export interface Exercise {
   name: string;
   type: Exclude<ActivityType, 'martial_arts'>;
   createdAt: string;
+  // Which fields a conditioning exercise logs (duration and/or distance). Null
+  // for strength exercises, which always log weight/reps.
+  metrics: ConditioningMetric[] | null;
   // Metadata — null on user-created custom exercises
   category: string | null;
   bodyPart: string | null;
@@ -272,6 +275,11 @@ export interface StrengthSet {
   setType: SetType;
   reps: number | null;
   weight: number | null;
+  // Conditioning metrics. `durationSeconds` supersedes the legacy `reps`-as-seconds
+  // overload; `distanceMeters` is stored canonically in metres. Both null on a
+  // strength set.
+  durationSeconds: number | null;
+  distanceMeters: number | null;
   rpe: number | null;
   rir: number | null;
   completed: boolean;
@@ -378,6 +386,9 @@ export interface UpdateRankPromotionRequest {
 export interface CreateExerciseRequest {
   name: string;
   type: Exclude<ActivityType, 'martial_arts'>;
+  // Which fields a conditioning exercise logs. Ignored for strength. Defaults to
+  // ['duration'] when a conditioning exercise omits it.
+  metrics?: ConditioningMetric[];
   target?: string | null;
   muscleGroup?: string | null;
   secondaryMuscles?: string[];
@@ -543,6 +554,8 @@ export interface CreateStrengthSetRequest {
   setType?: SetType;
   reps?: number | null;
   weight?: number | null;
+  durationSeconds?: number | null;
+  distanceMeters?: number | null;
   rpe?: number | null;
   rir?: number | null;
   completed?: boolean;
@@ -553,6 +566,8 @@ export interface UpdateStrengthSetRequest {
   setType?: SetType;
   reps?: number | null;
   weight?: number | null;
+  durationSeconds?: number | null;
+  distanceMeters?: number | null;
   rpe?: number | null;
   rir?: number | null;
   completed?: boolean;

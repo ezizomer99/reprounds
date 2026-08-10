@@ -9,6 +9,8 @@ function set(overrides: Partial<StrengthSet>): StrengthSet {
     setType: 'normal',
     reps: OVERLOAD_REP_GOAL,
     weight: 60,
+    durationSeconds: null,
+    distanceMeters: null,
     rpe: null,
     rir: null,
     completed: true,

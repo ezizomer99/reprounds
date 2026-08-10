@@ -5,6 +5,7 @@
 // Keep the arrays in lockstep with the unions in types/enums.ts.
 import type {
   ActivityType,
+  ConditioningMetric,
   DisciplineCat,
   EntryKind,
   FightMethod,
@@ -39,6 +40,8 @@ export const FIGHT_METHODS: readonly FightMethod[] = [
 ];
 export const FOCUS_STATUSES: readonly FocusStatus[] = ['active', 'achieved', 'archived'];
 export const TECHNIQUE_KINDS: readonly TechniqueKind[] = ['position', 'submission'];
+/** Order matters — duration is always shown first when both are present. */
+export const CONDITIONING_METRICS: readonly ConditioningMetric[] = ['duration', 'distance'];
 /** Order matters — this is the order the pick-list renders in. */
 export const MUSCLE_GROUPS: readonly MuscleGroup[] = [
   'chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms',
@@ -58,6 +61,8 @@ export const isFightResult = (v: unknown): v is FightResult => isMember(FIGHT_RE
 export const isFightMethod = (v: unknown): v is FightMethod => isMember(FIGHT_METHODS, v);
 export const isFocusStatus = (v: unknown): v is FocusStatus => isMember(FOCUS_STATUSES, v);
 export const isTechniqueKind = (v: unknown): v is TechniqueKind => isMember(TECHNIQUE_KINDS, v);
+export const isConditioningMetric = (v: unknown): v is ConditioningMetric =>
+  isMember(CONDITIONING_METRICS, v);
 export const isMuscleGroup = (v: unknown): v is MuscleGroup => isMember(MUSCLE_GROUPS, v);
 
 // A finite number within an optional inclusive range. Used for reps/rpe/rir/round/

@@ -11,6 +11,13 @@ export type FocusStatus    = 'active' | 'achieved' | 'archived';
 export type TechniqueKind  = 'position' | 'submission';
 
 /**
+ * Which fields a conditioning exercise tracks. Jump rope / bag work are
+ * duration-only; running / rowing add distance. Strength exercises don't use
+ * this — `Exercise.metrics` is null for them.
+ */
+export type ConditioningMetric = 'duration' | 'distance';
+
+/**
  * The muscles a user can tag an exercise with. Deliberately gym shorthand rather
  * than anatomy — it is the pick-list, not a description of the body.
  *

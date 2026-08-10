@@ -7,6 +7,10 @@ import {
   fmtMinutes,
   parseDuration,
   weightInputRange,
+  fmtDistance,
+  parseDistance,
+  distanceUnitLabel,
+  distanceUnitToMeters,
 } from './units';
 
 describe('kgToUnit / unitToKg', () => {
@@ -122,6 +126,48 @@ describe('parseDuration', () => {
   it('round-trips with fmtDuration for representative values', () => {
     for (const secs of [0, 65, 120, 3600]) {
       expect(parseDuration(fmtDuration(secs))).toBe(secs);
+    }
+  });
+});
+
+describe('distance helpers', () => {
+  it('labels distance km for kg and mi for lbs', () => {
+    expect(distanceUnitLabel('kg')).toBe('km');
+    expect(distanceUnitLabel('lbs')).toBe('mi');
+  });
+
+  it('formats metres as whole km without a trailing decimal', () => {
+    expect(fmtDistance(5000, 'kg')).toBe('5');
+    expect(fmtDistance(0, 'kg')).toBe('0');
+  });
+
+  it('formats metres with up to two trimmed decimals', () => {
+    expect(fmtDistance(5200, 'kg')).toBe('5.2');
+    expect(fmtDistance(5250, 'kg')).toBe('5.25');
+  });
+
+  it('converts a mile to ~1609 metres', () => {
+    expect(distanceUnitToMeters(1, 'lbs')).toBeCloseTo(1609.344, 3);
+  });
+
+  it('parses a km value entered in metric to metres', () => {
+    expect(parseDistance('5', 'kg')).toBeCloseTo(5000, 6);
+    expect(parseDistance('5.2', 'kg')).toBeCloseTo(5200, 6);
+  });
+
+  it('parses a mile value entered in imperial to metres', () => {
+    expect(parseDistance('1', 'lbs')).toBeCloseTo(1609.344, 3);
+  });
+
+  it('returns null for empty or unparseable distance input', () => {
+    expect(parseDistance('', 'kg')).toBeNull();
+    expect(parseDistance('   ', 'kg')).toBeNull();
+    expect(parseDistance('abc', 'kg')).toBeNull();
+  });
+
+  it('round-trips representative metric distances through fmt/parse', () => {
+    for (const meters of [0, 1000, 5000, 10500]) {
+      expect(parseDistance(fmtDistance(meters, 'kg'), 'kg')).toBeCloseTo(meters, 6);
     }
   });
 });
