@@ -19,6 +19,12 @@ const config: ExpoConfig = {
       foregroundImage: './assets/images/icon-fg.png',
       backgroundColor: '#C8F031',
     },
+    // Android 16 (targetSdkVersion 36) enforces edge-to-edge and removes the
+    // opt-out, so the app draws behind the system bars regardless. Enable Expo's
+    // integration so that's handled correctly (transparent bars + inset shims)
+    // instead of the OS forcing it with no support. The app already consumes
+    // safe-area insets throughout (SafeAreaProvider in app/_layout.tsx).
+    edgeToEdgeEnabled: true,
     package: 'com.reprounds.app',
     // EAS builds ignore this (appVersionSource: remote); self-hosted Gradle
     // builds inject a strictly increasing code via ANDROID_VERSION_CODE.
@@ -26,6 +32,21 @@ const config: ExpoConfig = {
     permissions: ['com.android.vending.BILLING'],
   },
   plugins: [
+    // Google Play requires the target API level to stay within one year of the
+    // latest Android release. Expo SDK 53 (RN 0.79) defaults to compile/target
+    // SDK 35 (Android 15); Android 16 (API 36) is the current floor, so override
+    // it here. Bumping the SDK itself would be the "blessed" path but drags in
+    // RN 0.81 — this keeps the change surgical. `expo prebuild` reads these.
+    [
+      'expo-build-properties',
+      {
+        android: {
+          compileSdkVersion: 36,
+          targetSdkVersion: 36,
+          buildToolsVersion: '36.0.0',
+        },
+      },
+    ],
     'expo-router',
     'expo-secure-store',
     'expo-notifications',
